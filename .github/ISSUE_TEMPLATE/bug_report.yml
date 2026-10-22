@@ -1,0 +1,110 @@
+name: Bug report
+description: Conversion output is wrong, dropped, or invalid, a stream fails, or routing or failover misbehaves.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Conversion bugs are easiest to fix with bytes, not prose.
+
+        **Do not paste API keys, account identifiers, or private model output.** Redact samples first.
+        Security issues (leaked credentials in errors or stream output) belong in
+        [private vulnerability reporting](https://github.com/dillonzq/apix/security/advisories/new), not here.
+  - type: input
+    id: version
+    attributes:
+      label: Library version
+      description: Release tag or commit SHA.
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: input
+    id: go_version
+    attributes:
+      label: Go version
+      description: Output of `go version`.
+      placeholder: go1.26.7 darwin/arm64
+    validations:
+      required: true
+  - type: dropdown
+    id: direction
+    attributes:
+      label: Conversion direction
+      description: Which pair of formats is involved? Pick the closest match.
+      options:
+        - openai.chat-completions -> openai.responses
+        - openai.chat-completions -> anthropic.messages
+        - openai.responses -> openai.chat-completions
+        - openai.responses -> anthropic.messages
+        - anthropic.messages -> openai.chat-completions
+        - anthropic.messages -> openai.responses
+        - same protocol (model rewrite or passthrough)
+        - native Responses normalization only
+        - routing or gateway (no conversion problem)
+        - not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: entry_point
+    attributes:
+      label: Entry point
+      multiple: true
+      options:
+        - Exchange.ConvertRequest
+        - Exchange.ConvertResponse
+        - StreamConverter.Feed
+        - StreamConverter.Finish
+        - Registry.Inspect
+        - route.Router
+        - gateway.Gateway.Do / Handler
+        - sse.Decoder
+    validations:
+      required: true
+  - type: textarea
+    id: input
+    attributes:
+      label: Input
+      description: Minimal request, response, or SSE bytes that trigger the problem.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected output
+      description: What the target protocol should contain, and where the expectation comes from (spec link, upstream behavior, another client).
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual output
+      description: The bytes the library produced, including framing if the problem is in a stream.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics and errors
+      description: Output of `Exchange.Diagnostics()` and the returned `*apix.Error`, if any.
+      render: text
+    validations:
+      required: false
+  - type: input
+    id: repro
+    attributes:
+      label: Reproducible snippet
+      description: Optional link to a Go Playground or gist that reproduces the issue.
+      placeholder: https://go.dev/play/...
+    validations:
+      required: false
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I removed credentials and private data from every sample.
+          required: true
+        - label: I reproduced this on the latest `main` or the latest release.
+          required: false

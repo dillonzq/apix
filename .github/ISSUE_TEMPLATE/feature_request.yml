@@ -1,0 +1,62 @@
+name: Feature request
+description: A field, tool shape, protocol, or routing behavior that apix should support.
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the protocol gap first. Conversion changes are accepted when the mapping is faithful in both
+        directions — or when the loss is reported as a diagnostic instead of being invented.
+  - type: textarea
+    id: gap
+    attributes:
+      label: What cannot be converted today
+      description: Name the field, tool type, or event that is dropped, rejected, or re-encoded incorrectly.
+    validations:
+      required: true
+  - type: input
+    id: spec
+    attributes:
+      label: Specification reference
+      description: Link to the upstream documentation that defines the field or behavior.
+      placeholder: https://platform.openai.com/docs/api-reference/responses
+    validations:
+      required: true
+  - type: checkboxes
+    id: directions
+    attributes:
+      label: Directions that need the mapping
+      options:
+        - label: openai.chat-completions -> openai.responses
+        - label: openai.chat-completions -> anthropic.messages
+        - label: openai.responses -> openai.chat-completions
+        - label: openai.responses -> anthropic.messages
+        - label: anthropic.messages -> openai.chat-completions
+        - label: anthropic.messages -> openai.responses
+        - label: same-protocol passthrough or native Responses normalization
+        - label: a new protocol or kind (image, audio, another vendor)
+        - label: routing or gateway
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use case
+      description: What breaks for callers today, and how often it happens.
+    validations:
+      required: true
+  - type: textarea
+    id: representability
+    attributes:
+      label: Representability notes
+      description: |
+        State what cannot be carried across losslessly and how it should be surfaced: a diagnostic code,
+        a `LossPolicySafe` rejection, or a documented approximation.
+    validations:
+      required: false
+  - type: textarea
+    id: api
+    attributes:
+      label: Proposed API or option change
+      description: Leave empty if the mapping needs no new exported surface.
+    validations:
+      required: false

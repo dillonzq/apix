@@ -1,0 +1,67 @@
+[
+  {
+    "Name": "message_start",
+    "Data": {
+      "message": {
+        "content": [],
+        "id": "r",
+        "model": "m",
+        "role": "assistant",
+        "type": "message",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "type": "message_start"
+    }
+  },
+  {
+    "Name": "content_block_start",
+    "Data": {
+      "content_block": {
+        "text": "",
+        "type": "text"
+      },
+      "index": 0,
+      "type": "content_block_start"
+    }
+  },
+  {
+    "Name": "content_block_delta",
+    "Data": {
+      "delta": {
+        "text": "hello",
+        "type": "text_delta"
+      },
+      "index": 0,
+      "type": "content_block_delta"
+    }
+  },
+  {
+    "Name": "content_block_stop",
+    "Data": {
+      "index": 0,
+      "type": "content_block_stop"
+    }
+  },
+  {
+    "Name": "message_delta",
+    "Data": {
+      "delta": {
+        "stop_reason": "end_turn"
+      },
+      "type": "message_delta",
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    }
+  },
+  {
+    "Name": "message_stop",
+    "Data": {
+      "type": "message_stop"
+    }
+  }
+]

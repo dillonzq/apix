@@ -1,0 +1,36 @@
+{
+  "input": [
+    {
+      "content": [
+        {
+          "text": "hello",
+          "type": "input_text"
+        }
+      ],
+      "role": "user",
+      "type": "message"
+    }
+  ],
+  "max_output_tokens": 100,
+  "model": "m",
+  "text": {
+    "format": {
+      "name": "response",
+      "schema": {
+        "type": "object"
+      },
+      "strict": true,
+      "type": "json_schema"
+    }
+  },
+  "tools": [
+    {
+      "name": "f",
+      "parameters": {
+        "type": "object"
+      },
+      "strict": true,
+      "type": "function"
+    }
+  ]
+}

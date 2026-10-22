@@ -1,0 +1,6 @@
+/go.work
+/go.work.sum
+/coverage.out
+*.test
+.DS_Store
+/test.log

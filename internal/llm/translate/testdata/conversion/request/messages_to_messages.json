@@ -1,0 +1,27 @@
+{
+  "max_tokens": 100,
+  "messages": [
+    {
+      "content": "hello",
+      "role": "user"
+    }
+  ],
+  "model": "m",
+  "output_config": {
+    "format": {
+      "schema": {
+        "type": "object"
+      },
+      "type": "json_schema"
+    }
+  },
+  "tools": [
+    {
+      "input_schema": {
+        "type": "object"
+      },
+      "name": "f",
+      "strict": true
+    }
+  ]
+}

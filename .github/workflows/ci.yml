@@ -1,0 +1,181 @@
+name: CI
+
+# Reusable: release.yml calls this workflow to gate a release on the same checks.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 22 * * 0" # Monday 06:00 Asia/Shanghai; refresh vulnerability findings.
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Keep CI output stable: a missing or stale requirement fails instead of
+  # being resolved silently, and `go mod tidy -diff` stays authoritative.
+  GOFLAGS: -mod=readonly
+  GOWORK: "off"
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.mod # No go.sum in this standard-library-only module.
+      - name: Check formatting, vet, module files, and dependencies
+        run: make fmt-check vet tidy-check deps
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
+        with:
+          # Pinned: the checked-in .golangci.yml is validated against this release.
+          version: v2.14.0
+          args: --timeout=5m
+      - name: Lint workflows
+        run: make workflow-lint
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.mod # No go.sum in this standard-library-only module.
+      - name: Build
+        run: make build
+      - name: Test with race detector, shuffled order, and coverage
+        run: make coverage
+      - name: Write coverage summary
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          {
+            echo "### Packages"
+            echo
+            echo '```'
+            if [ -f test.log ]; then
+              grep -E '^(ok|FAIL|---)' test.log || true
+            fi
+            echo '```'
+            if [ -f coverage.out ]; then
+              echo "### Total coverage"
+              echo
+              echo '```'
+              go tool cover -func=coverage.out | tail -n 1
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: test-output
+          path: |
+            coverage.out
+            test.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  fuzz:
+    name: fuzz smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.mod # No go.sum in this standard-library-only module.
+      - name: Fuzz stream boundaries and terminal failures
+        run: make fuzz
+      - name: Upload failing inputs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          # go test writes a crashing input to internal/llm/translate/testdata/fuzz/<Target>/; keeping
+          # it lets the failure become a permanent regression case.
+          name: fuzz-failures
+          path: internal/llm/translate/testdata/fuzz/**
+          if-no-files-found: ignore
+          retention-days: 14
+
+  vuln:
+    name: vulnerability scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.mod # No go.sum in this standard-library-only module.
+      - name: govulncheck
+        run: make vuln
+
+  compatibility:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.mod
+      - name: Check native production and test dependencies
+        shell: bash
+        run: bash scripts/check-dependencies.sh
+      - name: Build
+        run: go build ./...
+      - name: Test
+        run: go test -shuffle=on -count=1 ./...
+
+  required:
+    name: CI passed
+    if: always()
+    needs: [lint, test, fuzz, vuln, compatibility]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every validation job to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          if ! jq -e 'all(.[]; .result == "success")' <<< "$RESULTS"; then
+            echo "::error::One or more CI jobs failed, were cancelled, or were skipped"
+            exit 1
+          fi

@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "tool_calls",
+      "message": {
+        "content": "hello",
+        "reasoning_content": "plan",
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "function": {
+              "arguments": "{}",
+              "name": "f"
+            },
+            "id": "c1",
+            "type": "function"
+          }
+        ]
+      }
+    }
+  ],
+  "id": "r",
+  "model": "m",
+  "usage": {
+    "completion_tokens": 2,
+    "prompt_tokens": 4
+  }
+}

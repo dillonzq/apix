@@ -1,0 +1,31 @@
+[
+  {
+    "Name": "",
+    "Data": {
+      "choices": [
+        {
+          "delta": {
+            "content": "hello"
+          }
+        }
+      ],
+      "id": "r",
+      "model": "m"
+    }
+  },
+  {
+    "Name": "",
+    "Data": {
+      "choices": [
+        {
+          "delta": {},
+          "finish_reason": "stop"
+        }
+      ]
+    }
+  },
+  {
+    "Name": "DONE",
+    "Data": null
+  }
+]

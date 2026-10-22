@@ -1,0 +1,52 @@
+[
+  {
+    "Name": "message_start",
+    "Data": {
+      "message": {
+        "id": "r",
+        "model": "m"
+      },
+      "type": "message_start"
+    }
+  },
+  {
+    "Name": "content_block_start",
+    "Data": {
+      "content_block": {
+        "text": "",
+        "type": "text"
+      },
+      "index": 0
+    }
+  },
+  {
+    "Name": "content_block_delta",
+    "Data": {
+      "delta": {
+        "text": "hello",
+        "type": "text_delta"
+      },
+      "index": 0
+    }
+  },
+  {
+    "Name": "content_block_stop",
+    "Data": {
+      "index": 0
+    }
+  },
+  {
+    "Name": "message_delta",
+    "Data": {
+      "delta": {
+        "stop_reason": "end_turn"
+      }
+    }
+  },
+  {
+    "Name": "message_stop",
+    "Data": {
+      "type": "message_stop"
+    }
+  }
+]

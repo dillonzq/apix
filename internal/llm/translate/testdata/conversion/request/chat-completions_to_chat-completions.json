@@ -1,0 +1,31 @@
+{
+  "messages": [
+    {
+      "content": "hello",
+      "role": "user"
+    }
+  ],
+  "model": "m",
+  "response_format": {
+    "json_schema": {
+      "name": "answer",
+      "schema": {
+        "type": "object"
+      },
+      "strict": true
+    },
+    "type": "json_schema"
+  },
+  "tools": [
+    {
+      "function": {
+        "name": "f",
+        "parameters": {
+          "type": "object"
+        },
+        "strict": true
+      },
+      "type": "function"
+    }
+  ]
+}

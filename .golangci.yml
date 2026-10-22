@@ -1,0 +1,56 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - copyloopvar # stale loop-variable copies
+    - errorlint # %w wrapping and errors.Is / errors.As
+    - gocritic # bug-prone constructs (see the tag note below)
+    - misspell # comment and message typos
+    - nilerr # returning nil after a non-nil error
+    - nolintlint # every directive names a linter and gives a reason
+    - prealloc # slices that grow without a capacity hint
+    - unconvert # conversions that cannot change the value
+    - unparam # parameters that are always the same or unused
+  settings:
+    errcheck:
+      # Production code handles decode errors that can change the output and
+      # marks documented best-effort probes with shared.DecodeProbe; blank
+      # assignments stay visible as deliberate discards.
+      check-blank: false
+    gocritic:
+      # gocritic keeps its default checks and adds the diagnostic tag. The
+      # default style checks that conflict with this codebase are disabled
+      # explicitly: the converters keep if/else chains for mixed predicates.
+      enabled-tags:
+        - diagnostic
+      disabled-checks:
+        - ifElseChain
+    misspell:
+      ignore-rules:
+        - cancelled # upstream wire status value, not a typo
+    nolintlint:
+      allow-unused: false
+      require-explanation: true
+      require-specific: true
+    staticcheck:
+      checks:
+        - all
+        # Staticcheck's ST* style checks and QF* editor quickfixes are
+        # suggestions, not correctness rules.
+        - -ST*
+        - -QF*
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - prealloc
+          - unparam
+
+formatters:
+  enable:
+    - gofmt

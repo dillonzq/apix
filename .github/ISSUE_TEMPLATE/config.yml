@@ -1,0 +1,14 @@
+blank_issues_enabled: true
+contact_links:
+  - name: LLM protocol conversion reference
+    url: https://github.com/dillonzq/apix/blob/main/docs/protocols/llm.md
+    about: Field mappings, per-direction limits, and known losses. Check here before filing a bug.
+  - name: Code structure and maintenance
+    url: https://github.com/dillonzq/apix/blob/main/docs/architecture.md
+    about: Module responsibilities, dispatch rules, and state contracts.
+  - name: Contributing guide
+    url: https://github.com/dillonzq/apix/blob/main/CONTRIBUTING.md
+    about: Local checks, design rules, commit conventions, and the release process.
+  - name: Report a security vulnerability
+    url: https://github.com/dillonzq/apix/security/advisories/new
+    about: Leaked credentials or exploitable behavior — use private reporting, not a public issue.

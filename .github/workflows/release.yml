@@ -1,0 +1,141 @@
+name: Release
+
+# Pushing a vX.Y.Z tag is the release trigger. The GitHub Release is created
+# only after the full CI workflow passes on the tagged commit. Note that a
+# pushed tag is already resolvable by the Go toolchain, so this gate protects
+# the release notes and the published release, not the module version itself.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: validate release tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.mod
+      - name: Validate the tag as a Go module version
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Canonical SemVer 2.0.0 with the leading v, which is exactly
+          # golang.org/x/mod/semver's canonical form: leading zeros, empty
+          # prerelease identifiers, and build metadata are not module versions.
+          if [[ ! "${TAG}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)\.)*(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))?$ ]]; then
+            echo "::error::${TAG} is not a canonical vX.Y.Z module version"
+            exit 1
+          fi
+          module="$(go list -m)"
+          major="${TAG#v}"
+          major="${major%%.*}"
+          suffix="${module##*/}"
+          want=""
+          if [[ "${suffix}" =~ ^v([0-9]+)$ ]]; then
+            want="${BASH_REMATCH[1]}"
+          fi
+          if [[ -n "${want}" && "${major}" != "${want}" ]]; then
+            echo "::error::${TAG} does not match module path ${module}, which requires major ${want}"
+            exit 1
+          fi
+          if [[ -z "${want}" && "${major}" != "0" && "${major}" != "1" ]]; then
+            echo "::error::module path ${module} has no /vN suffix, so only v0 and v1 are valid (got ${TAG})"
+            exit 1
+          fi
+          echo "${TAG} is a valid version for ${module}"
+      - name: Check the tag is on main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --quiet "https://github.com/${GITHUB_REPOSITORY}.git" +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main; then
+            echo "::error::${GITHUB_REF_NAME} does not point at a commit on main; releases are cut from main"
+            exit 1
+          fi
+
+  verify:
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: publish GitHub release
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # create the release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0 # full history for generated notes
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.mod
+      - name: Create or confirm the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if is_draft="$(gh release view "${GITHUB_REF_NAME}" --json isDraft --jq .isDraft)"; then
+            if [[ "${is_draft}" == "true" ]]; then
+              # CI has verified the tag. Preserve prepared notes and assets,
+              # but ensure release visibility and prerelease status match it.
+              prerelease=false
+              if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+                prerelease=true
+              fi
+              gh release edit "${GITHUB_REF_NAME}" --draft=false --verify-tag --prerelease="${prerelease}"
+              echo "${GITHUB_REF_NAME} draft published"
+            else
+              echo "${GITHUB_REF_NAME} already has a published release; nothing to do"
+            fi
+            exit 0
+          fi
+          args=(--verify-tag --generate-notes --title "${GITHUB_REF_NAME}")
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "${GITHUB_REF_NAME}" "${args[@]}"
+      - name: Check the module is fetchable
+        continue-on-error: true
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -uo pipefail
+          # Advisory only: the module proxy indexes a new tag asynchronously and
+          # `go list -m` is the lookup that pulls it in. This step always ends
+          # successfully; it reports how long consumers may see a delay.
+          last=""
+          for attempt in 1 2 3 4 5; do
+            if last="$(GOPROXY=https://proxy.golang.org go list -m "github.com/dillonzq/apix@${TAG}" 2>&1)"; then
+              echo "module is fetchable at ${TAG}"
+              exit 0
+            fi
+            if [ "${attempt}" -lt 5 ]; then
+              sleep "$((attempt * 15))"
+            fi
+          done
+          echo "::warning::proxy.golang.org has not indexed ${TAG} yet; consumers may see a short delay"
+          printf '%s\n' "${last}"

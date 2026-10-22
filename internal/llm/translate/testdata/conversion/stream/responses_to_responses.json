@@ -1,0 +1,32 @@
+[
+  {
+    "Name": "response.created",
+    "Data": {
+      "response": {
+        "id": "r",
+        "model": "m"
+      }
+    }
+  },
+  {
+    "Name": "response.output_text.delta",
+    "Data": {
+      "content_index": 0,
+      "delta": "hello",
+      "item_id": "m1"
+    }
+  },
+  {
+    "Name": "response.completed",
+    "Data": {
+      "response": {
+        "id": "r",
+        "model": "m",
+        "object": "response",
+        "output": [],
+        "status": "completed"
+      },
+      "type": "response.completed"
+    }
+  }
+]

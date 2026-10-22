@@ -1,0 +1,24 @@
+{
+  "input": "hello",
+  "model": "m",
+  "text": {
+    "format": {
+      "name": "answer",
+      "schema": {
+        "type": "object"
+      },
+      "strict": true,
+      "type": "json_schema"
+    }
+  },
+  "tools": [
+    {
+      "name": "f",
+      "parameters": {
+        "type": "object"
+      },
+      "strict": true,
+      "type": "function"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "content": [
+    {
+      "thinking": "plan",
+      "type": "thinking"
+    },
+    {
+      "text": "hello",
+      "type": "text"
+    },
+    {
+      "id": "c1",
+      "input": {},
+      "name": "f",
+      "type": "tool_use"
+    }
+  ],
+  "id": "r",
+  "model": "m",
+  "stop_reason": "tool_use",
+  "usage": {
+    "input_tokens": 4,
+    "output_tokens": 2
+  }
+}

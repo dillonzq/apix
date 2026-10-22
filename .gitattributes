@@ -1,0 +1,2 @@
+# Keep byte-for-byte golden snapshots and source files identical on every OS.
+* text=auto eol=lf

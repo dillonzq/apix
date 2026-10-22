@@ -1,0 +1,114 @@
+[
+  {
+    "Name": "response.created",
+    "Data": {
+      "response": {
+        "id": "r",
+        "object": "response",
+        "status": "in_progress"
+      },
+      "sequence_number": 0,
+      "type": "response.created"
+    }
+  },
+  {
+    "Name": "response.output_item.added",
+    "Data": {
+      "item": {
+        "content": [],
+        "id": "r",
+        "role": "assistant",
+        "type": "message"
+      },
+      "output_index": 0,
+      "sequence_number": 1,
+      "type": "response.output_item.added"
+    }
+  },
+  {
+    "Name": "response.output_text.delta",
+    "Data": {
+      "content_index": 0,
+      "delta": "hello",
+      "item_id": "r",
+      "output_index": 0,
+      "sequence_number": 2,
+      "type": "response.output_text.delta"
+    }
+  },
+  {
+    "Name": "response.output_text.done",
+    "Data": {
+      "content_index": 0,
+      "item_id": "r",
+      "output_index": 0,
+      "sequence_number": 3,
+      "text": "hello",
+      "type": "response.output_text.done"
+    }
+  },
+  {
+    "Name": "response.content_part.done",
+    "Data": {
+      "content_index": 0,
+      "item_id": "r",
+      "output_index": 0,
+      "part": {
+        "text": "hello",
+        "type": "output_text"
+      },
+      "sequence_number": 4,
+      "type": "response.content_part.done"
+    }
+  },
+  {
+    "Name": "response.output_item.done",
+    "Data": {
+      "item": {
+        "content": [
+          {
+            "text": "hello",
+            "type": "output_text"
+          }
+        ],
+        "id": "r",
+        "role": "assistant",
+        "type": "message"
+      },
+      "output_index": 0,
+      "sequence_number": 5,
+      "type": "response.output_item.done"
+    }
+  },
+  {
+    "Name": "response.completed",
+    "Data": {
+      "response": {
+        "id": "r",
+        "model": "m",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "text": "hello",
+                "type": "output_text"
+              }
+            ],
+            "id": "r",
+            "role": "assistant",
+            "type": "message"
+          }
+        ],
+        "status": "completed",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0
+        }
+      },
+      "sequence_number": 6,
+      "type": "response.completed"
+    }
+  }
+]

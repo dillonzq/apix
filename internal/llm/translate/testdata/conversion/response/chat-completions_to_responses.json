@@ -1,0 +1,46 @@
+{
+  "id": "r",
+  "model": "m",
+  "object": "response",
+  "output": [
+    {
+      "content": [
+        {
+          "text": "plan",
+          "type": "reasoning_text"
+        }
+      ],
+      "id": "r_reasoning",
+      "summary": [
+        {
+          "text": "plan",
+          "type": "summary_text"
+        }
+      ],
+      "type": "reasoning"
+    },
+    {
+      "content": [
+        {
+          "text": "hello",
+          "type": "output_text"
+        }
+      ],
+      "id": "r",
+      "role": "assistant",
+      "type": "message"
+    },
+    {
+      "arguments": "{}",
+      "call_id": "c1",
+      "name": "f",
+      "type": "function_call"
+    }
+  ],
+  "status": "completed",
+  "usage": {
+    "input_tokens": 4,
+    "output_tokens": 2,
+    "total_tokens": 6
+  }
+}
