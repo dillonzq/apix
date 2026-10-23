@@ -27,7 +27,7 @@ The following deliberately stay outside this repository. Changes that pull them 
 
 | Tool | Version | Notes |
 | --- | --- | --- |
-| Go | 1.26.7 or newer | Pinned by `go.mod`; `actions/setup-go` installs the same version in CI. |
+| Go | 1.26.10 or newer | Pinned by `go.mod`; `actions/setup-go` installs the same version in CI. |
 | golangci-lint | v2.14.0 | Only needed for the `lint` job. |
 | git | any recent | — |
 | GNU Make and Bash | any recent | Shared local/CI check commands. On Windows, use WSL for `make`; native Go commands also work. |

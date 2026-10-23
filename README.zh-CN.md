@@ -12,14 +12,14 @@
 
 [![许可证：MIT](https://img.shields.io/badge/license-MIT-64748b?style=flat-square)](LICENSE)
 [![版本：v0.1.0](https://img.shields.io/badge/release-v0.1.0-6366f1?style=flat-square)](https://github.com/dillonzq/apix/releases/tag/v0.1.0)
-[![Go：1.26.7+](https://img.shields.io/badge/Go-1.26.7%2B-0891b2?style=flat-square&logo=go&logoColor=white)](go.mod)
+[![Go：1.26.10+](https://img.shields.io/badge/Go-1.26.10%2B-0891b2?style=flat-square&logo=go&logoColor=white)](go.mod)
 [![依赖：标准库](https://img.shields.io/badge/dependencies-standard_library-0d9488?style=flat-square)](go.mod)
 
 </div>
 
 ---
 
-apix 在不同供应商的 API 协议之间转换请求、普通响应和流式响应，并把每个请求路由到最合适的供应商：优先选择与客户端同协议的供应商，其次选择可转换的同类接口。仅依赖 Go 标准库，要求 Go **1.26.7+**。
+apix 在不同供应商的 API 协议之间转换请求、普通响应和流式响应，并把每个请求路由到最合适的供应商：优先选择与客户端同协议的供应商，其次选择可转换的同类接口。仅依赖 Go 标准库，要求 Go **1.26.10+**。
 
 库是分层的：核心只做转换和路由决策，不做任何网络 I/O；可选的 gateway 通过 HTTP 执行请求并自动故障切换。
 
