@@ -25,8 +25,8 @@ import (
 	"time"
 
 	"github.com/dillonzq/apix"
+	"github.com/dillonzq/apix/reasoning"
 	"github.com/dillonzq/apix/route"
-	"github.com/dillonzq/apix/thinking"
 )
 
 // Upstream is a routable endpoint plus how to reach it.
@@ -72,11 +72,11 @@ type Config struct {
 	// Content-Length are never copied. Response.UpstreamHeader holds all of
 	// them.
 	ForwardHeaders []string
-	// ThinkingSuffix makes Do parse a trailing "model(value)" reasoning
+	// ReasoningSuffix makes Do parse a trailing "model(value)" reasoning
 	// suffix: requests route by the model without it, and a recognized value
 	// becomes Request.Reasoning. Off by default because model IDs may contain
 	// parentheses.
-	ThinkingSuffix bool
+	ReasoningSuffix bool
 	// RouterOptions configure the underlying route.Router.
 	RouterOptions []route.Option
 	// OnAttempt observes every attempt, for logs and metrics.
@@ -150,7 +150,7 @@ type Gateway struct {
 	maxResponseBytes int64
 	commitTimeout    time.Duration
 	forwardHeaders   []string
-	thinkingSuffix   bool
+	reasoningSuffix  bool
 	onAttempt        func(Attempt)
 	mu               sync.RWMutex // guards routing and upstream configuration together
 	upstreams        map[string]Upstream
@@ -163,7 +163,7 @@ func New(cfg Config) (*Gateway, error) {
 	}
 	g := &Gateway{reg: cfg.Registry, client: cfg.Client, maxAttempts: cfg.MaxAttempts, maxRequestBytes: cfg.MaxRequestBytes,
 		maxResponseBytes: cfg.MaxResponseBytes, commitTimeout: cfg.CommitTimeout, forwardHeaders: append([]string(nil), cfg.ForwardHeaders...),
-		thinkingSuffix: cfg.ThinkingSuffix, onAttempt: cfg.OnAttempt}
+		reasoningSuffix: cfg.ReasoningSuffix, onAttempt: cfg.OnAttempt}
 	if g.client == nil {
 		g.client = &http.Client{}
 	}
@@ -245,8 +245,8 @@ func (g *Gateway) Do(ctx context.Context, req Request) (*Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	if g.thinkingSuffix && req.Reasoning == nil {
-		if s := thinking.ParseSuffix(info.Model); s.HasSuffix {
+	if g.reasoningSuffix && req.Reasoning == nil {
+		if s := reasoning.ParseSuffix(info.Model); s.HasSuffix {
 			info.Model = s.Model
 			req.Payload.Metadata.Model = s.Model
 			req.Reasoning = s.Reasoning()

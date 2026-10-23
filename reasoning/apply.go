@@ -1,9 +1,9 @@
-package thinking
+package reasoning
 
 import (
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/internal/llm/ids"
-	"github.com/dillonzq/apix/internal/llm/reasoning"
+	rs "github.com/dillonzq/apix/internal/llm/reasoning"
 	"github.com/dillonzq/apix/protocol/gemini"
 )
 
@@ -19,7 +19,7 @@ func StripSupersededReasoning(target, source apix.Protocol, body []byte) []byte 
 	if !ok || !ok2 {
 		return body
 	}
-	return reasoning.Strip(to, from, body)
+	return rs.Strip(to, from, body)
 }
 
 // Options select how ApplySuffixWith renders a suffix for an upstream. Use
@@ -53,7 +53,7 @@ func ApplySuffixWith(target apix.Protocol, body []byte, suffix Suffix, opts Opti
 	if r == nil || !ok {
 		return body, nil
 	}
-	out, _, err := reasoning.Apply(format, body, *r, reasoning.Options{MessagesManual: opts.MessagesManual, GeminiMode: string(opts.GeminiMode)})
+	out, _, err := rs.Apply(format, body, *r, rs.Options{MessagesManual: opts.MessagesManual, GeminiMode: string(opts.GeminiMode)})
 	if err != nil {
 		return nil, err
 	}

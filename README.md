@@ -30,7 +30,7 @@ The library is layered. The core converts and decides routes without any network
 | `route` | Native-first endpoint selection, priorities, weights, health tracking |
 | `gateway` | Optional HTTP executor and `http.Handler` with failover |
 | `sse` | Server-Sent Events framing and decoding |
-| `thinking` | Optional LLM reasoning controls and `model(high)` suffixes |
+| `reasoning` | Optional LLM reasoning controls and `model(high)` suffixes |
 
 ## Supported protocols
 
@@ -91,7 +91,7 @@ An `Exchange` holds one execution's state, such as tool identities restored in r
 | `Output: openai.Responses` | any | Convert responses and streams to another protocol of the same Kind instead of the client's; for hosts that choose the response format separately |
 | `LossPolicy: apix.LossPolicySafe` | any | Reject request conversions that lose semantics |
 | `LossPolicy: apix.LossPolicyStrict` | any | Reject every reported request loss |
-| `Reasoning: &apix.Reasoning{Effort: "high"}` | any LLM | Replace the request's reasoning control after conversion, rendered with the upstream's own thinking options; `thinking.ParseSuffix(model).Reasoning()` builds it from a `model(high)` suffix |
+| `Reasoning: &apix.Reasoning{Effort: "high"}` | any LLM | Replace the request's reasoning control after conversion, rendered with the upstream's own thinking options; `reasoning.ParseSuffix(model).Reasoning()` builds it from a `model(high)` suffix |
 | `Ext: anthropic.MessagesOptions{AllowUnsignedThinking: true}` | Messages | Replay cross-protocol reasoning as unsigned thinking blocks |
 | `Ext: anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}` | Messages | Send reasoning levels as fixed `budget_tokens` for Claude models without adaptive thinking (default: adaptive) |
 | `Ext: openai.ResponsesOptions{NormalizeTools: true}` | Responses | Flatten namespaces, wrap custom tools, and adapt local shell for upstreams that only accept function tools |
@@ -142,7 +142,7 @@ http.Handle("/v1/chat/completions", g.Handler(openai.ChatCompletions))
 | `CommitTimeout` | Cancel an attempt that has not reached the commit point in time, and fail over |
 | `MaxResponseBytes` | Limit ordinary response bodies (default 64 MiB); a larger one fails over |
 | `ForwardHeaders` | Upstream response headers to pass to clients, such as `"X-Request-Id"` or `"X-Ratelimit-*"`; `Response.UpstreamHeader` holds them all |
-| `ThinkingSuffix` | Route `model(high)` by `model` and apply the suffix as `Request.Reasoning` |
+| `ReasoningSuffix` | Route `model(high)` by `model` and apply the suffix as `Request.Reasoning` |
 
 An upstream's `Retry-After` reaches the error as `RetryAfter`, pauses that endpoint, and is relayed by `Handler`. Stored responses and interactions are remembered per endpoint, so follow-up turns return to it.
 

@@ -11,7 +11,7 @@ import (
 	"github.com/dillonzq/apix/protocol/anthropic"
 	"github.com/dillonzq/apix/protocol/gemini"
 	"github.com/dillonzq/apix/protocol/openai"
-	"github.com/dillonzq/apix/thinking"
+	"github.com/dillonzq/apix/reasoning"
 )
 
 func TestMediaRequestsAndSchema(t *testing.T) {
@@ -176,7 +176,7 @@ func TestThinkingAndTransportMetadata(t *testing.T) {
 		t.Fatalf("metadata %s %v", out.Body, err)
 	}
 	for _, s := range []string{"m(high)", "m(8192)", "m(none)", "m(auto)"} {
-		out, err := thinking.ApplySuffix(gemini.GenerateContent, []byte(`{"generationConfig":{"thinkingConfig":{"includeThoughts":false}}}`), thinking.ParseSuffix(s))
+		out, err := reasoning.ApplySuffix(gemini.GenerateContent, []byte(`{"generationConfig":{"thinkingConfig":{"includeThoughts":false}}}`), reasoning.ParseSuffix(s))
 		if err != nil {
 			t.Fatal(err)
 		}

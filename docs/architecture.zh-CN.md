@@ -8,7 +8,7 @@
 flowchart TD
     GW[gateway：HTTP 执行、提交点、故障切换] --> RT[route：候选排序、健康统计、亲和性]
     GW --> REG[apix.Registry：Codec 注册表]
-    GW --> TH[thinking：模型后缀]
+    GW --> TH[reasoning：模型后缀]
     RT --> REG
     REG --> VENDOR[protocol/openai、protocol/anthropic、protocol/gemini：协议 ID、构造函数、选项]
     VENDOR --> CODEC[internal/llm/codec：apix.Codec、协议表、Interactions Codec]
@@ -61,7 +61,7 @@ GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/gemini` �
 | `route` | `Router`、`NativeFirst`、带半开试探的 `Breaker`、`Affinity`、热更新 |
 | `gateway` | `Gateway.Do`、`Handler`、鉴权注入、提交点与超时、Retry-After、响应头透传、状态记录 |
 | `sse` | SSE 分帧（`Framer`）与解码（`Decoder`）；shared 中保留别名 |
-| `thinking` | `model(value)` 后缀解析，以及基于 `internal/llm/reasoning` 的公开辅助函数 |
+| `reasoning` | `model(value)` 后缀解析，以及基于 `internal/llm/reasoning` 的公开辅助函数 |
 
 ## Exchange 与状态
 

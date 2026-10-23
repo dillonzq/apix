@@ -1,4 +1,4 @@
-package thinking
+package reasoning
 
 import "testing"
 

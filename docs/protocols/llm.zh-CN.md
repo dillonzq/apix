@@ -121,9 +121,9 @@ Responses 的流式转换接收 `response.reasoning_summary_text.delta/done` 与
 默认入口不解析尾部 `model(value)`。需要后缀优先时，把它作为推理覆盖交给 Exchange：
 
 ```go
-import "github.com/dillonzq/apix/thinking"
+import "github.com/dillonzq/apix/reasoning"
 
-suffix := thinking.ParseSuffix(requestedModel)
+suffix := reasoning.ParseSuffix(requestedModel)
 ex, err := reg.NewExchange(client, upstream, apix.ExchangeOptions{
     Reasoning: suffix.Reasoning(), // 没有后缀或后缀无法识别时为 nil
     Ext:       upstreamOptions,    // 例如 anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}
@@ -131,7 +131,7 @@ ex, err := reg.NewExchange(client, upstream, apix.ExchangeOptions{
 out, err := ex.ConvertRequest(apix.Payload{Body: payload}, suffix.Model)
 ```
 
-Exchange 会在转换据此推导目标推理控制的路径上剥离客户端自己的控制，完成转换后，再用与本次 Exchange 相同的选项渲染覆盖值，因此后缀与上游推理模式不会互相矛盾。`gateway.Config{ThinkingSuffix: true}` 会对每个请求完成上述步骤，并按去掉后缀的模型名路由。自行构造上游请求体的宿主仍可在转换前调用 `thinking.StripSupersededReasoning`、转换后调用 `thinking.ApplySuffixWith(upstream, body, suffix, thinking.Options{...})`，其中 `MessagesManual`、`GeminiMode` 应与 Exchange 的设置一致。
+Exchange 会在转换据此推导目标推理控制的路径上剥离客户端自己的控制，完成转换后，再用与本次 Exchange 相同的选项渲染覆盖值，因此后缀与上游推理模式不会互相矛盾。`gateway.Config{ReasoningSuffix: true}` 会对每个请求完成上述步骤，并按去掉后缀的模型名路由。自行构造上游请求体的宿主仍可在转换前调用 `reasoning.StripSupersededReasoning`、转换后调用 `reasoning.ApplySuffixWith(upstream, body, suffix, reasoning.Options{...})`，其中 `MessagesManual`、`GeminiMode` 应与 Exchange 的设置一致。
 
 识别到的后缀取代请求体中的推理控制；`none` / `0` 关闭，`auto` / `-1` 采用上游默认。Chat 与 Responses 得到 effort，数值后缀按上表阈值转换。Messages 遵循 Exchange 的推理模式：默认 adaptive 并写入 `output_config.effort`；使用 `anthropic.ThinkingManual` 时发送 enabled thinking，档位按表取预算，数值后缀保留精确预算。GenerateContent 遵循 `gemini.GenerateContentOptions.ThinkingMode`：budget 模式发送 `thinkingBudget`，level 模式发送 `thinkingLevel`，默认时数值后缀发送预算、档位发送档位。Gemini 没有高于 `high` 的档位，`xhigh` 与 `max` 会变为 `high`，并作为非语义请求损耗报告。
 
@@ -210,6 +210,6 @@ logprobs、供应商扩展、历史 compaction 和签名不保证跨协议保留
 
 ## 实现与验证
 
-供应商 Codec 委托给 `internal/llm/translate` 中的引擎，由引擎负责分派、请求策略和流式分帧。`internal/llm/adapter` 下的各协议 adapter 负责直接转换、上游事件分派和目标流式输出。共享协议类型、事件构造、工具身份和字段规则按职责分文件，位于 `internal/llm/adapter/shared`；推理控制与后缀位于 `thinking`。模块与状态约定见[代码结构说明](../architecture.zh-CN.md)。
+供应商 Codec 委托给 `internal/llm/translate` 中的引擎，由引擎负责分派、请求策略和流式分帧。`internal/llm/adapter` 下的各协议 adapter 负责直接转换、上游事件分派和目标流式输出。共享协议类型、事件构造、工具身份和字段规则按职责分文件，位于 `internal/llm/adapter/shared`；推理控制与后缀位于 `reasoning`。模块与状态约定见[代码结构说明](../architecture.zh-CN.md)。
 
 测试覆盖 48 份请求/响应/流式快照、交错工具、晚到身份、引用分片、搜索失败、终止一致性及本地 shell 恢复/错误路径。fuzz 验证网络分块一致性和失败状态不可恢复；这些测试不替代真实上游的兼容验证。命令见 README。

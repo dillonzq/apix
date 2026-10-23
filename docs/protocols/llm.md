@@ -116,9 +116,9 @@ Reverse mapping uses thresholds, so round trips are not exact. Positive budgets 
 Default entry points do not parse trailing `model(value)`. To give a suffix precedence, pass it to the exchange as a reasoning override:
 
 ```go
-import "github.com/dillonzq/apix/thinking"
+import "github.com/dillonzq/apix/reasoning"
 
-suffix := thinking.ParseSuffix(requestedModel)
+suffix := reasoning.ParseSuffix(requestedModel)
 ex, err := reg.NewExchange(client, upstream, apix.ExchangeOptions{
     Reasoning: suffix.Reasoning(), // nil for an absent or unknown suffix
     Ext:       upstreamOptions,    // e.g. anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}
@@ -126,7 +126,7 @@ ex, err := reg.NewExchange(client, upstream, apix.ExchangeOptions{
 out, err := ex.ConvertRequest(apix.Payload{Body: payload}, suffix.Model)
 ```
 
-The exchange strips the client's own control where conversion would derive the target control from it, converts, and then renders the override with the same options as the rest of the exchange, so the suffix and the upstream's thinking mode cannot disagree. `gateway.Config{ThinkingSuffix: true}` does all of this for every request, routing by the model without the suffix. Hosts that build upstream bodies themselves can still call `thinking.StripSupersededReasoning` before conversion and `thinking.ApplySuffixWith(upstream, body, suffix, thinking.Options{...})` after it, setting `MessagesManual` and `GeminiMode` to match the exchange.
+The exchange strips the client's own control where conversion would derive the target control from it, converts, and then renders the override with the same options as the rest of the exchange, so the suffix and the upstream's thinking mode cannot disagree. `gateway.Config{ReasoningSuffix: true}` does all of this for every request, routing by the model without the suffix. Hosts that build upstream bodies themselves can still call `reasoning.StripSupersededReasoning` before conversion and `reasoning.ApplySuffixWith(upstream, body, suffix, reasoning.Options{...})` after it, setting `MessagesManual` and `GeminiMode` to match the exchange.
 
 Recognized suffixes replace body reasoning controls. `none` / `0` disables reasoning; `auto` / `-1` uses upstream defaults. Chat and Responses receive an effort; numeric suffixes map through the thresholds above. Messages follows the exchange's thinking mode: adaptive thinking with `output_config.effort` by default, or enabled thinking with a table budget or a numeric suffix's exact budget under `anthropic.ThinkingManual`. GenerateContent follows `gemini.GenerateContentOptions.ThinkingMode`: budget mode sends `thinkingBudget`, level mode sends `thinkingLevel`, and the default sends numeric suffixes as budgets and levels as levels. Gemini has no level above `high`, so `xhigh` and `max` become `high` and are reported as a non-semantic request loss.
 
@@ -205,6 +205,6 @@ Logprobs, provider extensions, historical compaction, and signatures are not gua
 
 ## Implementation and validation
 
-The vendor codecs delegate to the engine in `internal/llm/translate`, which owns dispatch, request policy, and stream framing. Protocol adapters under `internal/llm/adapter` own direct conversion, upstream event dispatch, and target stream output. Shared protocol types, event construction, tool identities, and field rules are organized by responsibility in `internal/llm/adapter/shared`; reasoning controls and suffixes live in `thinking`. See [code structure and maintenance](../architecture.md) for module and state contracts.
+The vendor codecs delegate to the engine in `internal/llm/translate`, which owns dispatch, request policy, and stream framing. Protocol adapters under `internal/llm/adapter` own direct conversion, upstream event dispatch, and target stream output. Shared protocol types, event construction, tool identities, and field rules are organized by responsibility in `internal/llm/adapter/shared`; reasoning controls and suffixes live in `reasoning`. See [code structure and maintenance](../architecture.md) for module and state contracts.
 
 Tests cover 48 request/response/stream snapshots, interleaved tools, late identity, citation fragments, search failure, termination consistency, and local shell restoration/error paths. Fuzz tests check network chunking invariance and irreversible errors; they do not replace real-upstream compatibility validation. Commands are in the README.

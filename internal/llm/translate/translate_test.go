@@ -7,7 +7,7 @@ import (
 
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/internal/llm/translate"
-	"github.com/dillonzq/apix/thinking"
+	"github.com/dillonzq/apix/reasoning"
 )
 
 var formats = []string{translate.FormatChatCompletions, translate.FormatMessages, translate.FormatResponses}
@@ -193,7 +193,7 @@ func TestErrorsAndSuffixPriority(t *testing.T) {
 	if err.StatusCode != 429 || strings.Contains(err.Message, "abc123") {
 		t.Fatalf("classified error: %+v", err)
 	}
-	suffix := thinking.ParseSuffix("m(8192)")
+	suffix := reasoning.ParseSuffix("m(8192)")
 	source := translate.StripReasoning("messages", "chat-completions", []byte(`{"messages":[],"reasoning_effort":"unrepresentable"}`))
 	state := translate.NewRequestState()
 	state.Options.MessagesThinkingMode = "manual"

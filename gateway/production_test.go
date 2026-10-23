@@ -195,9 +195,9 @@ func TestStoredResponseAffinity(t *testing.T) {
 	}
 }
 
-func TestThinkingSuffix(t *testing.T) {
+func TestReasoningSuffix(t *testing.T) {
 	msgs := newUpstream(t, respond(200, "application/json", messagesReply))
-	cfg := gateway.Config{ThinkingSuffix: true, Upstreams: []gateway.Upstream{messagesUpstream(msgs)}}
+	cfg := gateway.Config{ReasoningSuffix: true, Upstreams: []gateway.Upstream{messagesUpstream(msgs)}}
 	g := newGateway(t, cfg)
 	resp, err := g.Do(context.Background(), gateway.Request{Protocol: openai.ChatCompletions, Payload: apix.Payload{Body: []byte(`{"model":"fast(high)","messages":[{"role":"user","content":"hi"}],"reasoning_effort":"low"}`)}})
 	if err != nil {
@@ -209,7 +209,7 @@ func TestThinkingSuffix(t *testing.T) {
 	if got["model"] != "claude-up" || cfgBody["effort"] != "high" {
 		t.Fatalf("upstream body %v", got)
 	}
-	cfg.ThinkingSuffix = false
+	cfg.ReasoningSuffix = false
 	plain := newGateway(t, cfg)
 	if _, err := plain.Do(context.Background(), gateway.Request{Protocol: openai.ChatCompletions, Payload: apix.Payload{Body: []byte(`{"model":"fast(high)","messages":[]}`)}}); apix.AsError(err).Class != apix.ClassInvalidModel {
 		t.Fatalf("suffix parsed while disabled: %v", err)

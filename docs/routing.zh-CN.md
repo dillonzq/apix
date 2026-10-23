@@ -119,4 +119,4 @@ route.Endpoint{
 
 客户端的凭据不会被转发。上游响应头只有列在 `Config.ForwardHeaders` 中时才会传给客户端（末尾的 `*` 表示前缀匹配），`Content-Length` 等描述报文的头永远不会复制；`Do` 的调用方可以从 `Response.UpstreamHeader` 读取全部响应头。请求失败时，`Handler` 会转告上游的 `Retry-After`。
 
-`Request.Output` 把响应转换为同 Kind 的另一种协议，为空时即请求协议。路由仍然优先选择与请求协议相同的端点，因为请求是否需要转换取决于请求协议。`Request.Reasoning` 会为每个上游覆盖推理控制；开启 `Config.ThinkingSuffix` 后，`Do` 从 `model(high)` 后缀生成它，并按去掉后缀的模型名路由。
+`Request.Output` 把响应转换为同 Kind 的另一种协议，为空时即请求协议。路由仍然优先选择与请求协议相同的端点，因为请求是否需要转换取决于请求协议。`Request.Reasoning` 会为每个上游覆盖推理控制；开启 `Config.ReasoningSuffix` 后，`Do` 从 `model(high)` 后缀生成它，并按去掉后缀的模型名路由。

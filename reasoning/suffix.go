@@ -1,4 +1,4 @@
-package thinking
+package reasoning
 
 import (
 	"strconv"
@@ -26,7 +26,7 @@ type Suffix struct {
 	Budget *int64
 }
 
-// ParseSuffix splits a thinking suffix off a model name: the last "(" of a
+// ParseSuffix splits a reasoning suffix off a model name: the last "(" of a
 // name that ends with ")" opens the suffix. Unrecognized values yield an
 // empty Effort while still removing the suffix from Model.
 func ParseSuffix(model string) Suffix {

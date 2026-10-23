@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve `apix`. This library converts requests, non-streaming responses, and streams between provider API protocols, and routes requests across providers. It uses only the Go standard library. The core packages (`apix`, `protocol/*`, `route`, `sse`, `thinking`) perform no network I/O; only the optional `gateway` package sends requests. Wire output is the product, so behavior changes are reviewed as protocol changes rather than as ordinary refactors.
+Thanks for helping improve `apix`. This library converts requests, non-streaming responses, and streams between provider API protocols, and routes requests across providers. It uses only the Go standard library. The core packages (`apix`, `protocol/*`, `route`, `sse`, `reasoning`) perform no network I/O; only the optional `gateway` package sends requests. Wire output is the product, so behavior changes are reviewed as protocol changes rather than as ordinary refactors.
 
 By taking part you agree to keep discussion technical and respectful, and to license your contribution under the [MIT License](LICENSE).
 
@@ -87,7 +87,7 @@ The weekly run catches new vulnerability database findings even when there are n
 | `route` | Endpoint selection, the native-first strategy, health tracking. |
 | `gateway` | Optional HTTP executor and handler with failover. |
 | `sse` | SSE framing and decoding. |
-| `thinking` | Optional reasoning controls and model-name suffixes. Not part of the default conversion path. |
+| `reasoning` | Optional reasoning controls and model-name suffixes. Not part of the default conversion path. |
 | `internal/llm/codec` | The `apix.Codec` implementation for LLM protocols and the protocol ID mapping. |
 | `internal/llm/translate` | The LLM conversion engine entry points and execution state. |
 | `internal/llm/adapter/chatcompletions`, `messages`, `responses` | Per-protocol request, response, and stream conversion. |

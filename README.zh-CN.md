@@ -30,7 +30,7 @@ apix 在不同供应商的 API 协议之间转换请求、普通响应和流式�
 | `route` | 同协议优先的端点选择、优先级、权重、健康统计 |
 | `gateway` | 可选的 HTTP 执行器与 `http.Handler`，支持故障切换 |
 | `sse` | Server-Sent Events 分帧与解码 |
-| `thinking` | 可选的 LLM 推理控制与 `model(high)` 后缀 |
+| `reasoning` | 可选的 LLM 推理控制与 `model(high)` 后缀 |
 
 ## 支持范围
 
@@ -91,7 +91,7 @@ tail, err := stream.Finish()                   // 上游 EOF 时调用
 | `Output: openai.Responses` | 任意 | 把响应和流转换为同 Kind 的另一种协议，而不是客户端协议；适用于响应格式与请求格式分开指定的宿主 |
 | `LossPolicy: apix.LossPolicySafe` | 任意 | 拒绝影响语义的请求转换损耗 |
 | `LossPolicy: apix.LossPolicyStrict` | 任意 | 拒绝所有已报告的请求损耗 |
-| `Reasoning: &apix.Reasoning{Effort: "high"}` | 任意 LLM | 转换后替换请求的推理控制，按上游自身的推理选项渲染；`thinking.ParseSuffix(model).Reasoning()` 可从 `model(high)` 后缀生成 |
+| `Reasoning: &apix.Reasoning{Effort: "high"}` | 任意 LLM | 转换后替换请求的推理控制，按上游自身的推理选项渲染；`reasoning.ParseSuffix(model).Reasoning()` 可从 `model(high)` 后缀生成 |
 | `Ext: anthropic.MessagesOptions{AllowUnsignedThinking: true}` | Messages | 把跨协议推理历史回传为无签名 thinking 块 |
 | `Ext: anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}` | Messages | 为不支持 adaptive 的旧 Claude 模型发送固定 `budget_tokens`（默认 adaptive） |
 | `Ext: openai.ResponsesOptions{NormalizeTools: true}` | Responses | 为只接受函数工具的上游展开 namespace、包装 custom 工具并适配本地 shell |
@@ -141,7 +141,7 @@ http.Handle("/v1/chat/completions", g.Handler(openai.ChatCompletions))
 | `CommitTimeout` | 单次尝试在限定时间内未到达提交点时取消并切换 |
 | `MaxResponseBytes` | 限制普通响应体大小（默认 64 MiB），超出时切换 |
 | `ForwardHeaders` | 透传给客户端的上游响应头，如 `"X-Request-Id"`、`"X-Ratelimit-*"`；`Response.UpstreamHeader` 保留全部响应头 |
-| `ThinkingSuffix` | 按去掉后缀的模型名路由 `model(high)`，并把后缀作为 `Request.Reasoning` |
+| `ReasoningSuffix` | 按去掉后缀的模型名路由 `model(high)`，并把后缀作为 `Request.Reasoning` |
 
 上游的 `Retry-After` 会写入错误的 `RetryAfter`，让该端点暂停接收流量，并由 `Handler` 转告客户端。已存储的 response 和 interaction 会记住所属端点，后续轮次回到同一端点。
 

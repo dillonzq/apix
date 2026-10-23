@@ -8,7 +8,7 @@ English | [简体中文](architecture.zh-CN.md) · [Routing](routing.md) · [Ext
 flowchart TD
     GW[gateway: HTTP execution, commit point, failover] --> RT[route: candidate ordering, health, affinity]
     GW --> REG[apix.Registry: codecs]
-    GW --> TH[thinking: model suffixes]
+    GW --> TH[reasoning: model suffixes]
     RT --> REG
     REG --> VENDOR[protocol/openai, protocol/anthropic, protocol/gemini: IDs, constructors, options]
     VENDOR --> CODEC[internal/llm/codec: apix.Codec, protocol table, Interactions codec]
@@ -61,7 +61,7 @@ Public protocol IDs are namespaced: `openai.chat-completions`, `anthropic.messag
 | `route` | `Router`, `NativeFirst`, `Breaker` with half-open trials, `Affinity`, atomic updates |
 | `gateway` | `Gateway.Do`, `Handler`, authentication, commit point and timeout, Retry-After, header forwarding, state recording |
 | `sse` | SSE `Framer` and `Decoder`; `shared` keeps aliases |
-| `thinking` | `model(value)` suffix parsing and public helpers over `internal/llm/reasoning` |
+| `reasoning` | `model(value)` suffix parsing and public helpers over `internal/llm/reasoning` |
 
 ## Exchanges and state
 
