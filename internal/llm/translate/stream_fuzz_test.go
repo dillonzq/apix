@@ -2,10 +2,11 @@ package translate_test
 
 import (
 	"encoding/json"
-	"github.com/dillonzq/apix/internal/llm/translate"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/dillonzq/apix/internal/llm/translate"
 )
 
 func normalizeEventTimes(events []wireEvent) {

@@ -7,13 +7,14 @@ import (
 	"strings"
 
 	"github.com/dillonzq/apix/internal/errclass"
+	"github.com/dillonzq/apix/internal/llm/ids"
 )
 
 const (
-	FormatChatCompletions = "chat-completions"
-	FormatResponses       = "responses"
-	FormatMessages        = "messages"
-	FormatGemini          = "gemini"
+	FormatChatCompletions = ids.FormatChatCompletions
+	FormatResponses       = ids.FormatResponses
+	FormatMessages        = ids.FormatMessages
+	FormatGemini          = ids.FormatGemini
 )
 
 // LossPolicy controls request conversions that cannot preserve every field.
@@ -63,6 +64,7 @@ const MessagesThinkingManual = "manual"
 func (s *ConversionContext) Report(from, to, path string, semantic bool) {
 	s.Record(DiagnosticFor(from, to, path, semantic))
 }
+
 func (s *ConversionContext) RejectLoss(d Diagnostic) *errclass.Error {
 	s.Record(d)
 	if s != nil && (s.Options.LossPolicy == LossPolicyStrict || (s.Options.LossPolicy == LossPolicySafe && d.Semantic)) {
@@ -70,6 +72,7 @@ func (s *ConversionContext) RejectLoss(d Diagnostic) *errclass.Error {
 	}
 	return nil
 }
+
 func DiagnosticFor(from, to, path string, semantic bool) Diagnostic {
 	path = errclass.Redact(path)
 	return Diagnostic{Code: "unrepresentable_field", Path: path, Message: "conversion cannot preserve " + path, Semantic: semantic, From: from, To: to}
@@ -370,13 +373,22 @@ func requestDiagnostics(from, to string, body []byte) []Diagnostic {
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out
 }
-func (state *ConversionContext) CheckRequestLosses(from, to string, body []byte) *errclass.Error {
+
+// ValidatePolicy rejects an unknown loss policy before any conversion runs.
+func (state *ConversionContext) ValidatePolicy() *errclass.Error {
 	if state != nil {
 		switch state.Options.LossPolicy {
 		case "", LossPolicyAllow, LossPolicySafe, LossPolicyStrict:
 		default:
 			return errclass.Translation("invalid conversion loss policy")
 		}
+	}
+	return nil
+}
+
+func (state *ConversionContext) CheckRequestLosses(from, to string, body []byte) *errclass.Error {
+	if err := state.ValidatePolicy(); err != nil {
+		return err
 	}
 	diagnostics := requestDiagnostics(from, to, body)
 	for _, d := range diagnostics {

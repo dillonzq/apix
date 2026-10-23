@@ -6,10 +6,11 @@ package anthropic
 import (
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/internal/llm/codec"
+	"github.com/dillonzq/apix/internal/llm/ids"
 )
 
-// Messages is POST /v1/messages.
-const Messages apix.Protocol = "anthropic.messages"
+// Messages is "anthropic.messages": POST /v1/messages.
+const Messages = ids.Messages
 
 // ThinkingMode selects how a cross-protocol reasoning level becomes Messages
 // thinking. The host chooses it from model capabilities; no model-name
@@ -40,7 +41,7 @@ type MessagesOptions struct {
 
 // MessagesCodec returns the Messages codec. It accepts MessagesOptions.
 func MessagesCodec() apix.Codec {
-	return codec.New(codec.Messages, func(ext any) (codec.Options, bool) {
+	return codec.New(Messages, func(ext any) (codec.Options, bool) {
 		var o MessagesOptions
 		switch v := ext.(type) {
 		case MessagesOptions:

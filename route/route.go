@@ -5,7 +5,8 @@
 // The default strategy prefers endpoints that speak the client's own protocol
 // (no conversion), then falls back to endpoints of the same Kind whose
 // protocol the request can be converted to. Within each tier, lower Priority
-// wins and equal priorities are shuffled by Weight.
+// wins and equal priorities are shuffled by Weight. Requests that refer to
+// upstream-owned state go to the endpoint that owns it first; see Affinity.
 package route
 
 import (
@@ -35,13 +36,31 @@ type Endpoint struct {
 	Priority int
 	// Weight shuffles endpoints of equal priority; values below 1 count as 1.
 	Weight int
-	// Features lists the capabilities the endpoint supports, such as
-	// apix.FeatureStream. An empty list means no restriction.
-	Features []string
+	// Unsupported lists capabilities the endpoint lacks, such as
+	// apix.FeatureStream; requests that need any of them skip it. Capabilities
+	// not listed, including ones later versions learn to detect, are assumed
+	// supported.
+	Unsupported []string
 	// Disabled removes the endpoint from routing.
 	Disabled bool
-	// Options are passed to the upstream codec for each exchange.
-	Options apix.ExchangeOptions
+	// Options are passed to the upstream codec for each exchange. They are
+	// validated when the endpoint is configured.
+	Options EndpointOptions
+}
+
+// EndpointOptions are the exchange options that belong to an endpoint. The
+// response protocol and reasoning overrides belong to each request instead.
+type EndpointOptions struct {
+	// LossPolicy selects which known request conversion losses are permitted.
+	LossPolicy apix.LossPolicy
+	// Ext holds options defined by the endpoint protocol's package, such as
+	// anthropic.MessagesOptions.
+	Ext any
+}
+
+// Exchange returns the options as apix.ExchangeOptions.
+func (o EndpointOptions) Exchange() apix.ExchangeOptions {
+	return apix.ExchangeOptions{LossPolicy: o.LossPolicy, Ext: o.Ext}
 }
 
 // UpstreamModel returns the upstream model for a client model and whether the
@@ -64,11 +83,8 @@ func (e Endpoint) UpstreamModel(model string) (string, bool) {
 }
 
 func (e Endpoint) supports(info apix.RequestInfo) bool {
-	if len(e.Features) == 0 {
-		return true
-	}
-	for _, f := range info.Features {
-		if !slices.Contains(e.Features, f) {
+	for _, f := range e.Unsupported {
+		if info.Needs(f) {
 			return false
 		}
 	}
@@ -83,7 +99,7 @@ func (e Endpoint) clone() Endpoint {
 		}
 		e.Models = models
 	}
-	e.Features = slices.Clone(e.Features)
+	e.Unsupported = slices.Clone(e.Unsupported)
 	return e
 }
 
@@ -94,12 +110,15 @@ type Candidate struct {
 	// Native reports that the endpoint speaks the client's protocol, so the
 	// request only needs its model rewritten.
 	Native bool
+	// failOpen marks candidates returned although the health tracker rejects
+	// them; Begin always admits them.
+	failOpen bool
 }
 
 // Outcome is the result of one attempt against an endpoint. A nil Err is a
 // success.
 type Outcome struct {
-	Err     *apix.Error
+	Err     error
 	Latency time.Duration
 }
 
@@ -121,19 +140,25 @@ func WithHealth(h Health) Option { return func(r *Router) { r.health = h } }
 // WithRand makes weighted ordering deterministic, for tests.
 func WithRand(rnd *rand.Rand) Option { return func(r *Router) { r.rnd = rnd } }
 
+// WithAffinity replaces the default AffinityCache. Pass nil to disable
+// affinity.
+func WithAffinity(a Affinity) Option { return func(r *Router) { r.affinity = a; r.affinitySet = true } }
+
 // WithClock replaces time.Now, for tests.
 func WithClock(now func() time.Time) Option { return func(r *Router) { r.now = now } }
 
 // Router orders endpoints for requests. It is safe for concurrent use;
 // Update replaces the endpoint set atomically.
 type Router struct {
-	reg       *apix.Registry
-	endpoints atomic.Pointer[[]Endpoint]
-	strategy  Strategy
-	health    Health
-	now       func() time.Time
-	mu        sync.Mutex // guards rnd
-	rnd       *rand.Rand
+	reg         *apix.Registry
+	endpoints   atomic.Pointer[[]Endpoint]
+	strategy    Strategy
+	health      Health
+	affinity    Affinity
+	affinitySet bool
+	now         func() time.Time
+	mu          sync.Mutex // guards rnd
+	rnd         *rand.Rand
 }
 
 // New creates a router over endpoints whose protocols are registered in reg.
@@ -148,14 +173,17 @@ func New(reg *apix.Registry, endpoints []Endpoint, opts ...Option) (*Router, err
 	if r.health == nil {
 		r.health = &Breaker{}
 	}
+	if !r.affinitySet {
+		r.affinity = &AffinityCache{}
+	}
 	if err := r.Update(endpoints); err != nil {
 		return nil, err
 	}
 	return r, nil
 }
 
-// Update validates and replaces the endpoint set. Health state is kept per
-// endpoint ID.
+// Update validates and replaces the endpoint set, including each endpoint's
+// options against its protocol's codec. Health state is kept per endpoint ID.
 func (r *Router) Update(endpoints []Endpoint) error {
 	seen := make(map[string]bool, len(endpoints))
 	next := make([]Endpoint, 0, len(endpoints))
@@ -166,8 +194,11 @@ func (r *Router) Update(endpoints []Endpoint) error {
 		case seen[e.ID]:
 			return fmt.Errorf("route: endpoint %s is listed twice", e.ID)
 		}
-		if _, ok := r.reg.Spec(e.Protocol); !ok {
+		if _, ok := r.reg.Kind(e.Protocol); !ok {
 			return fmt.Errorf("route: endpoint %s uses unregistered protocol %q", e.ID, e.Protocol)
+		}
+		if err := r.reg.ValidateOptions(e.Protocol, e.Options.Exchange()); err != nil {
+			return fmt.Errorf("route: endpoint %s: %w", e.ID, err)
 		}
 		seen[e.ID] = true
 		next = append(next, e.clone())
@@ -193,16 +224,22 @@ func (r *Router) Endpoints() []Endpoint {
 // Endpoints the health tracker rejects are skipped. When every eligible
 // endpoint is unhealthy they are all returned anyway, so an outage of the
 // tracker's making never refuses service outright.
-func (r *Router) Route(info apix.RequestInfo) ([]Candidate, *apix.Error) {
+//
+// Stateful requests only go to endpoints of the client's protocol. When the
+// Affinity knows the endpoint that owns state the request refers to, that
+// endpoint comes first; for a stateful request it is returned even while
+// unhealthy, because no other endpoint can serve it.
+func (r *Router) Route(info apix.RequestInfo) ([]Candidate, error) {
 	now := r.now()
 	kind := info.Kind
-	if spec, ok := r.reg.Spec(info.Protocol); ok {
-		kind = spec.Kind
+	if k, ok := r.reg.Kind(info.Protocol); ok {
+		kind = k
 	}
+	pinned := r.owner(info)
 	var healthy, unhealthy []Candidate
 	served := false
 	for _, e := range *r.endpoints.Load() {
-		if spec, _ := r.reg.Spec(e.Protocol); e.Disabled || spec.Kind != kind {
+		if k, _ := r.reg.Kind(e.Protocol); e.Disabled || k != kind {
 			continue
 		}
 		model, ok := e.UpstreamModel(info.Model)
@@ -210,31 +247,84 @@ func (r *Router) Route(info apix.RequestInfo) ([]Candidate, *apix.Error) {
 			continue
 		}
 		served = true
-		if !e.supports(info) || !r.reg.CanConvert(info.Protocol, e.Protocol) {
+		native := e.Protocol == info.Protocol
+		if !e.supports(info) || !r.reg.CanConvert(info.Protocol, e.Protocol) || (info.Stateful && !native) {
 			continue
 		}
-		c := Candidate{Endpoint: e.clone(), UpstreamModel: model, Native: e.Protocol == info.Protocol}
+		c := Candidate{Endpoint: e.clone(), UpstreamModel: model, Native: native}
 		if r.health.Allow(e.ID, now) {
 			healthy = append(healthy, c)
 		} else {
+			c.failOpen = true
 			unhealthy = append(unhealthy, c)
 		}
 	}
-	if len(healthy) == 0 {
-		healthy = unhealthy
+	candidates := healthy
+	if len(candidates) == 0 {
+		candidates = unhealthy
 	}
-	if len(healthy) == 0 {
-		if !served {
+	if len(candidates) == 0 {
+		switch {
+		case !served:
 			return nil, &apix.Error{Class: apix.ClassInvalidModel, Message: apix.Redact("no endpoint serves model " + info.Model)}
+		case info.Stateful:
+			return nil, apix.Unsupported("no " + string(info.Protocol) + " endpoint serves model " + info.Model + "; the request refers to upstream-owned state that conversion cannot carry")
 		}
 		return nil, apix.Unsupported("no endpoint can serve " + string(info.Protocol) + " requests for model " + info.Model)
 	}
-	return r.strategy.Order(info, healthy, r.intn), nil
+	ordered := r.strategy.Order(info, candidates, r.intn)
+	if pinned == "" {
+		return ordered, nil
+	}
+	if i := slices.IndexFunc(ordered, func(c Candidate) bool { return c.Endpoint.ID == pinned }); i >= 0 {
+		return slices.Concat(ordered[i:i+1], ordered[:i], ordered[i+1:]), nil
+	}
+	if i := slices.IndexFunc(unhealthy, func(c Candidate) bool { return c.Endpoint.ID == pinned }); i >= 0 && info.Stateful {
+		return slices.Concat(unhealthy[i:i+1], ordered), nil
+	}
+	return ordered, nil
+}
+
+// owner returns the endpoint the Affinity associates with the first known
+// key of the request.
+func (r *Router) owner(info apix.RequestInfo) string {
+	if r.affinity == nil {
+		return ""
+	}
+	for _, key := range info.Affinity {
+		if id, ok := r.affinity.Lookup(key); ok {
+			return id
+		}
+	}
+	return ""
+}
+
+// Begin reports whether an attempt against c may start now. Executors call
+// it immediately before sending each request; a Health that implements
+// Prober uses it to admit one trial request at a time to a recovering
+// endpoint. Candidates returned while unhealthy always pass.
+func (r *Router) Begin(c Candidate) bool {
+	if c.failOpen {
+		return true
+	}
+	if p, ok := r.health.(Prober); ok {
+		return p.Begin(c.Endpoint.ID, r.now())
+	}
+	return true
 }
 
 // Report records the outcome of an attempt against an endpoint.
 func (r *Router) Report(endpointID string, o Outcome) {
 	r.health.Report(endpointID, o, r.now())
+}
+
+// Remember associates upstream-owned state with the endpoint that owns it,
+// for example a file uploaded outside the router. Executors call it with
+// apix.StateReporter keys after a response.
+func (r *Router) Remember(key, endpointID string) {
+	if r.affinity != nil && key != "" && endpointID != "" {
+		r.affinity.Remember(key, endpointID)
+	}
 }
 
 func (r *Router) intn(n int) int {

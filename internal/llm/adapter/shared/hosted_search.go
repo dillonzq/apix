@@ -44,6 +44,7 @@ func SearchFromResponse(item map[string]json.RawMessage) (HostedSearch, bool, *e
 	s.Sources = action.Sources
 	return s, true, nil
 }
+
 func (s HostedSearch) ResponseItem() map[string]any {
 	status := s.Status
 	if status == "" {
@@ -55,6 +56,7 @@ func (s HostedSearch) ResponseItem() map[string]any {
 	}
 	return map[string]any{"id": s.ID, "type": "web_search_call", "status": status, "action": action}
 }
+
 func (s HostedSearch) MessageBlocks() []map[string]any {
 	results := make([]map[string]any, 0, len(s.Sources))
 	for _, source := range s.Sources {
@@ -70,6 +72,7 @@ func (s HostedSearch) MessageBlocks() []map[string]any {
 	}
 	return []map[string]any{{"type": "server_tool_use", "id": s.ID, "name": "web_search", "input": map[string]string{"query": s.Query}}, {"type": "web_search_tool_result", "tool_use_id": s.ID, "content": content}}
 }
+
 func ReadSearchResults(s *HostedSearch, raw json.RawMessage, from, to, path string, state *ConversionContext) {
 	var list []map[string]json.RawMessage
 	if json.Unmarshal(raw, &list) != nil {
@@ -95,12 +98,15 @@ func ReadSearchResults(s *HostedSearch, raw json.RawMessage, from, to, path stri
 		}
 	}
 }
+
 func IsSearchTool(typ string) bool {
 	return typ == "web_search" || typ == "web_search_preview" || strings.HasPrefix(typ, "web_search_")
 }
+
 func UnsupportedHostedChoice() *errclass.Error {
 	return &errclass.Error{Class: errclass.ClassUnsupported, Message: "Chat Completions cannot force a hosted web search tool"}
 }
+
 func HostedChoice(raw json.RawMessage, to string) (json.RawMessage, *errclass.Error) {
 	var choice struct {
 		Type string `json:"type"`
@@ -114,6 +120,7 @@ func HostedChoice(raw json.RawMessage, to string) (json.RawMessage, *errclass.Er
 	}
 	return raw, nil
 }
+
 func MessageSearchTool(tool ClaudeTool) RespTool {
 	mapped := RespTool{Type: "web_search"}
 	if len(tool.UserLocation) > 0 {
@@ -128,6 +135,7 @@ func MessageSearchTool(tool ClaudeTool) RespTool {
 	}
 	return mapped
 }
+
 func ResponseSearchTool(tool RespTool) ClaudeTool {
 	mapped := ClaudeTool{Type: "web_search_20250305", Name: "web_search"}
 	if len(tool.UserLocation) > 0 {

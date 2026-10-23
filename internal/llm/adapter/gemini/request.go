@@ -13,8 +13,8 @@ func ConvertRequest(from, to, model string, body []byte, ctx *shared.ConversionC
 	ctx = shared.ContextOrNew([]*shared.ConversionContext{ctx})
 	return ctx.WithToolTransaction(func(work *shared.ConversionContext) ([]byte, *errclass.Error) {
 		c := &conversion{from: from, to: to, ctx: work, native: from == to}
-		if work.Options.LossPolicy != "" && work.Options.LossPolicy != shared.LossPolicyAllow && work.Options.LossPolicy != shared.LossPolicySafe && work.Options.LossPolicy != shared.LossPolicyStrict {
-			return nil, errclass.Translation("invalid conversion loss policy")
+		if err := work.ValidatePolicy(); err != nil {
+			return nil, err
 		}
 		if from == responses {
 			var err *errclass.Error
@@ -75,6 +75,7 @@ func ConvertRequest(from, to, model string, body []byte, ctx *shared.ConversionC
 		return encode(out), nil
 	})
 }
+
 func (c *conversion) nativeRequest(root object) {
 	contents := c.array(root["contents"], "contents")
 	if len(contents) == 0 {
@@ -99,6 +100,7 @@ func (c *conversion) nativeRequest(root object) {
 		}
 	}
 }
+
 func (c *conversion) toGemini(root object) object {
 	out := object{}
 	var contents, system []any
@@ -271,6 +273,7 @@ func (c *conversion) toGemini(root object) object {
 	}
 	return out
 }
+
 func (c *conversion) toolResult(v any) object {
 	if v == nil {
 		return object{"result": ""}
@@ -297,6 +300,7 @@ func (c *conversion) toolResult(v any) object {
 	c.fail("tool result must be text, an object or content parts")
 	return nil
 }
+
 func (c *conversion) fromGemini(root object, model string) object {
 	out := object{"model": model}
 	var msgs, items []any

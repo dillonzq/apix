@@ -1,149 +1,41 @@
-// Package errclass classifies errors, records retryability, and redacts secrets.
+// Package errclass gives internal packages short names for the error
+// classification defined in package apix.
 package errclass
 
-import (
-	"regexp"
-	"strings"
-)
+import "github.com/dillonzq/apix"
 
-// Class is a stable error-category identifier.
-type Class string
+// Error is apix.Error.
+type Error = apix.Error
+
+// Class is apix.Class.
+type Class = apix.Class
 
 const (
-	ClassAuth         Class = "auth_failure"
-	ClassInvalidModel Class = "invalid_model"
-	ClassUnsupported  Class = "unsupported_protocol_or_parameter"
-	ClassRateLimit    Class = "rate_limit"
-	ClassQuota        Class = "quota_exhaustion"
-	ClassBilling      Class = "billing"
-	ClassUpstream     Class = "upstream_server_failure"
-	ClassNetwork      Class = "timeout_or_network_failure"
-	ClassTranslation  Class = "translation_failure"
+	ClassAuth         = apix.ClassAuth
+	ClassInvalidModel = apix.ClassInvalidModel
+	ClassUnsupported  = apix.ClassUnsupported
+	ClassRateLimit    = apix.ClassRateLimit
+	ClassQuota        = apix.ClassQuota
+	ClassBilling      = apix.ClassBilling
+	ClassUpstream     = apix.ClassUpstream
+	ClassNetwork      = apix.ClassNetwork
+	ClassTranslation  = apix.ClassTranslation
 )
 
-// Error describes classified request errors and retryability.
-type Error struct {
-	Class      Class
-	Message    string
-	StatusCode int
-	Retryable  bool
-}
+// FromStatus is apix.FromStatus.
+func FromStatus(status int, message string) *Error { return apix.FromStatus(status, message) }
 
-func (e *Error) Error() string {
-	return string(e.Class) + ": " + e.Message
-}
+// FromNetwork is apix.FromNetwork.
+func FromNetwork(err error) *Error { return apix.FromNetwork(err) }
 
-// FromStatus classifies an upstream HTTP status by HTTP code.
-// Network/timeout failures (no status) use FromNetwork instead. A redacted
-// message containing "quota" (case-insensitive) upgrades 429/402/403 to
-// ClassQuota — a bounded heuristic given no documented upstream quota
-// taxonomy.
-func FromStatus(status int, message string) *Error {
-	msg := Redact(message)
-	lowerMsg := strings.ToLower(msg)
-	quota := strings.Contains(lowerMsg, "quota")
-	quotaClass := func(base Class) Class {
-		if quota {
-			return ClassQuota
-		}
-		return base
-	}
-	switch status {
-	case 401:
-		return &Error{Class: ClassAuth, Message: msg, StatusCode: status, Retryable: true}
-	case 403:
-		return &Error{Class: quotaClass(ClassAuth), Message: msg, StatusCode: status, Retryable: true}
-	case 402:
-		return &Error{Class: quotaClass(ClassBilling), Message: msg, StatusCode: status, Retryable: true}
-	case 404:
-		return &Error{Class: ClassInvalidModel, Message: msg, StatusCode: status}
-	case 429:
-		return &Error{Class: quotaClass(ClassRateLimit), Message: msg, StatusCode: status, Retryable: true}
-	}
-	if status >= 500 {
-		return &Error{Class: ClassUpstream, Message: msg, StatusCode: status, Retryable: true}
-	}
-	return &Error{Class: ClassUnsupported, Message: msg, StatusCode: status}
-}
+// PostFirstByteNetwork is apix.PostFirstByteNetwork.
+func PostFirstByteNetwork(message string) *Error { return apix.PostFirstByteNetwork(message) }
 
-// FromNetwork classifies a PRE-first-byte network/timeout failure; always
-// retryable. Failures observed after the first upstream byte must use
-// PostFirstByteNetwork instead.
-func FromNetwork(err error) *Error {
-	msg := ""
-	if err != nil {
-		msg = Redact(err.Error())
-	}
-	return &Error{Class: ClassNetwork, Message: msg, Retryable: true}
-}
+// Translation is apix.Translation.
+func Translation(message string) *Error { return apix.Translation(message) }
 
-// PostFirstByteNetwork classifies a network/timeout failure seen AFTER the
-// first upstream byte was received: part of the response may already be
-// delivered downstream, so a retry would risk duplicate delivery of a half
-// stream — never retryable.
-func PostFirstByteNetwork(msg string) *Error {
-	return &Error{Class: ClassNetwork, Message: Redact(msg), Retryable: false}
-}
+// UpstreamFallback is apix.UpstreamFallback.
+func UpstreamFallback(message string) *Error { return apix.UpstreamFallback(message) }
 
-// Translation reports a translation failure; never retryable.
-func Translation(msg string) *Error {
-	return &Error{Class: ClassTranslation, Message: Redact(msg)}
-}
-
-// UpstreamFallback builds a ClassUpstream error for the adapter fallback
-// sites (chunk/failure errors) that have no upstream status code.
-// Upstream server failures are retryable; the message is redacted at
-// construction.
-func UpstreamFallback(msg string) *Error {
-	return &Error{Class: ClassUpstream, Message: Redact(msg), Retryable: true}
-}
-
-// bearerRe matches a bearer token (case-insensitive scheme, optional
-// space/tab separator, token terminated by whitespace, comma, or quote).
-// The separator is optional so a bare "bearer" word is redacted exactly as
-// the previous hand-rolled scanner did. Redact is idempotent — applying it
-// twice yields the same output — which is what makes edge re-redaction safe.
-var bearerRe = regexp.MustCompile(`(?i)bearer[ \t]*[^\s,"]*`)
-
-// apiKeyRe finds x-api-key header echoes (Messages-route auth):
-// case-insensitive name, then a run of quote/colon/equals/space separators,
-// then the value run. The value class spans hex/base62 plus the base64
-// alphabet ("+", "/", "="), matching bearerRe/queryKeyRe sibling classes.
-// The candidate is only replaced when the value looks
-// like a key (contains a digit) so ordinary prose after the header name —
-// "x-api-key authentication failed" — passes untouched; every real key
-// alphabet (hex, base64, base62) carries digits. Idempotent: "[redacted]"
-// starts with '[' which is outside the value class, so it never re-matches.
-var apiKeyRe = regexp.MustCompile(`(?i)x-api-key["':= ]*[A-Za-z0-9_\-.+/=]+`)
-
-func redactAPIKey(match string) string {
-	value := strings.TrimLeft(match[len("x-api-key"):], "\"':= ")
-	hasDigit := false
-	for _, r := range value {
-		if r >= '0' && r <= '9' {
-			hasDigit = true
-			break
-		}
-	}
-	if !hasDigit || len(value) < 8 {
-		return match
-	}
-	return match[:len(match)-len(value)] + "[redacted]"
-}
-
-// queryKeyRe redacts secrets carried in URL query strings: transport
-// failures conventionally echo the full URL, so base-url/catalog-url keys
-// passed as ?api_key=… / ?token=… must not survive into envelopes or logs.
-// The value run stops at whitespace, '&', and quotes so consecutive params
-// survive; the replacement keeps the parameter name. Idempotent: the
-// redacted value "[redacted]" still matches the value class, so re-running
-// yields the same text.
-var queryKeyRe = regexp.MustCompile(`(?i)([?&](?:api[_-]?key|key|access[_-]?token|token)=)[^\s&"']+`)
-
-// Redact strips bearer tokens, x-api-key echoes, and query-string key
-// parameters from a message so keys never reach logs or clients.
-func Redact(msg string) string {
-	msg = bearerRe.ReplaceAllString(msg, "Bearer [redacted]")
-	msg = apiKeyRe.ReplaceAllStringFunc(msg, redactAPIKey)
-	return queryKeyRe.ReplaceAllString(msg, "${1}[redacted]")
-}
+// Redact is apix.Redact.
+func Redact(message string) string { return apix.Redact(message) }

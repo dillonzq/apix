@@ -130,6 +130,7 @@ func (c *conversion) toParts(value any, role string) []any {
 	}
 	return parts
 }
+
 func audioMIME(format string) string {
 	switch format {
 	case "wav":
@@ -147,6 +148,7 @@ func audioMIME(format string) string {
 	}
 	return ""
 }
+
 func (c *conversion) inline(mime, data string) object {
 	if mime == "" || data == "" {
 		c.fail("inline media requires MIME type and data")
@@ -156,6 +158,7 @@ func (c *conversion) inline(mime, data string) object {
 	}
 	return object{"inlineData": object{"mimeType": mime, "data": data}}
 }
+
 func (c *conversion) file(mime, uri string) object {
 	if uri == "" {
 		c.fail("file media requires a URI")
@@ -166,6 +169,7 @@ func (c *conversion) file(mime, uri string) object {
 	}
 	return object{"fileData": f}
 }
+
 func (c *conversion) mediaURL(mime, uri string) object {
 	if strings.HasPrefix(uri, "data:") {
 		head, data, ok := strings.Cut(strings.TrimPrefix(uri, "data:"), ",")
@@ -177,6 +181,7 @@ func (c *conversion) mediaURL(mime, uri string) object {
 	}
 	return c.file(mime, uri)
 }
+
 func (c *conversion) fromMedia(part object) object {
 	inline := c.object(first(part, "inlineData", "inline_data"), "inlineData")
 	file := c.object(first(part, "fileData", "file_data"), "fileData")

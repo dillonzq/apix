@@ -25,6 +25,7 @@ func (c *conversion) numeric(v any, path string, integer bool) {
 		}
 	}
 }
+
 func (c *conversion) flags(v any, path string) {
 	if v != nil {
 		if _, ok := v.(bool); !ok {
@@ -32,11 +33,13 @@ func (c *conversion) flags(v any, path string) {
 		}
 	}
 }
+
 func (c *conversion) strings(v any, path string) {
 	for _, entry := range c.array(v, path) {
 		c.text(entry, path+"[]")
 	}
 }
+
 func (c *conversion) aliases(o object, pairs ...string) {
 	for i := 0; i < len(pairs); i += 2 {
 		source, target := pairs[i], pairs[i+1]
@@ -74,6 +77,7 @@ func (c *conversion) normalizeGemini(root object) {
 		normalizeParts(obj(cand["content"]))
 	}
 }
+
 func (c *conversion) validateConfig(root object) {
 	if c.from != Format {
 		for _, k := range []string{"temperature", "top_p"} {
@@ -109,6 +113,7 @@ func (c *conversion) validateConfig(root object) {
 		c.fail("thinkingBudget and thinkingLevel are mutually exclusive")
 	}
 }
+
 func (c *conversion) schema(value any, path string) any {
 	if value == nil {
 		return object{"type": "object", "properties": object{}}

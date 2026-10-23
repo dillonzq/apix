@@ -1,4 +1,4 @@
-package errclass
+package apix
 
 import (
 	"errors"
@@ -43,7 +43,7 @@ func TestFromStatus(t *testing.T) {
 		{"401 quota text stays auth", 401, "quota exhausted for key", ClassAuth, true},
 		{"403 forbidden auth failure", 403, "no access", ClassAuth, true},
 		{"402 billing failure", 402, "payment required", ClassBilling, true},
-		{"404 invalid model", 404, "no such model", ClassInvalidModel, false},
+		{"404 invalid model", 404, "no such model", ClassInvalidModel, true},
 		{"429 rate limit", 429, "too many", ClassRateLimit, true},
 		{"429 quota text upgrades", 429, "quota exceeded for project", ClassQuota, true},
 		{"429 Go usage limit", 429, "GoUsageLimitError", ClassRateLimit, true},

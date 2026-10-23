@@ -1,7 +1,10 @@
 package apix_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -22,16 +25,16 @@ type fakeCodec struct {
 func (c fakeCodec) Spec() apix.ProtocolSpec {
 	return apix.ProtocolSpec{ID: c.id, Kind: c.kind, Headers: c.headers}
 }
-func (c fakeCodec) Inspect(apix.Payload) (apix.RequestInfo, *apix.Error) {
+func (c fakeCodec) Inspect(apix.Payload) (apix.RequestInfo, error) {
 	return apix.RequestInfo{Model: "m"}, nil
 }
-func (c fakeCodec) EncodeError(err *apix.Error) apix.Payload {
-	return apix.Payload{Body: []byte(string(c.id) + ":" + err.Message)}
+func (c fakeCodec) EncodeError(err error) apix.Payload {
+	return apix.Payload{Body: []byte(string(c.id) + ":" + apix.AsError(err).Message)}
 }
 func (c fakeCodec) Accepts(client apix.Protocol) bool {
 	return client == c.id || slices.Contains(c.accepts, client)
 }
-func (c fakeCodec) NewExchange(client apix.Protocol, _ apix.ExchangeOptions) (apix.Exchange, *apix.Error) {
+func (c fakeCodec) NewExchange(client apix.Protocol, _ apix.ExchangeOptions) (apix.Exchange, error) {
 	return nil, nil
 }
 
@@ -82,10 +85,10 @@ func TestCanConvert(t *testing.T) {
 			t.Fatalf("%s -> %s = %v", tc.client, tc.upstream, got)
 		}
 	}
-	if _, err := reg.NewExchange("a.text", "b.text", apix.ExchangeOptions{}); err == nil || err.Class != apix.ClassUnsupported {
+	if _, err := reg.NewExchange("a.text", "b.text", apix.ExchangeOptions{}); err == nil || apix.AsError(err).Class != apix.ClassUnsupported {
 		t.Fatalf("unsupported exchange: %v", err)
 	}
-	if _, err := reg.NewExchange("missing", "a.text", apix.ExchangeOptions{}); err == nil || !strings.Contains(err.Message, "missing") {
+	if _, err := reg.NewExchange("missing", "a.text", apix.ExchangeOptions{}); err == nil || !strings.Contains(apix.AsError(err).Message, "missing") {
 		t.Fatalf("unregistered client: %v", err)
 	}
 }
@@ -115,7 +118,7 @@ type recordingCodec struct {
 	got *apix.ExchangeOptions
 }
 
-func (c recordingCodec) NewExchange(_ apix.Protocol, opts apix.ExchangeOptions) (apix.Exchange, *apix.Error) {
+func (c recordingCodec) NewExchange(_ apix.Protocol, opts apix.ExchangeOptions) (apix.Exchange, error) {
 	*c.got = opts
 	return nil, nil
 }
@@ -141,7 +144,7 @@ func TestExchangeOutput(t *testing.T) {
 		{"other kind", "b.text", "a.text", "x.image"}, // a accepts x.image, but Kinds differ
 		{"no response path", "b.text", "b.text", "a.text"},
 	} {
-		if _, err := reg.NewExchange(tc.client, tc.upstream, apix.ExchangeOptions{Output: tc.output}); err == nil || err.Class != apix.ClassUnsupported {
+		if _, err := reg.NewExchange(tc.client, tc.upstream, apix.ExchangeOptions{Output: tc.output}); err == nil || apix.AsError(err).Class != apix.ClassUnsupported {
 			t.Fatalf("%s: %v", tc.name, err)
 		}
 	}
@@ -171,11 +174,15 @@ func TestEncodeError(t *testing.T) {
 }
 
 func TestHTTPStatus(t *testing.T) {
+	var typedNil *apix.Error
 	for _, tc := range []struct {
-		err  *apix.Error
+		err  error
 		want int
 	}{
 		{nil, http.StatusOK},
+		{typedNil, http.StatusOK},
+		{fmt.Errorf("wrapped: %w", apix.FromStatus(429, "slow")), 429},
+		{errors.New("plain"), http.StatusBadGateway},
 		{apix.FromStatus(503, "down"), 503},
 		{apix.FromStatus(429, "slow"), 429},
 		{apix.FromNetwork(nil), http.StatusGatewayTimeout},
@@ -196,5 +203,61 @@ func TestRequestInfoNeeds(t *testing.T) {
 	info := apix.RequestInfo{Features: []string{apix.FeatureStream}}
 	if !info.Needs(apix.FeatureStream) || info.Needs(apix.FeatureTools) {
 		t.Fatal("Needs")
+	}
+}
+
+// validatingCodec rejects every Ext value.
+type validatingCodec struct{ fakeCodec }
+
+func (validatingCodec) ValidateOptions(opts apix.ExchangeOptions) error {
+	if opts.Ext != nil {
+		return apix.Unsupported("no options")
+	}
+	return nil
+}
+
+func TestValidateOptions(t *testing.T) {
+	reg, _ := apix.NewRegistry(validatingCodec{textA}, textB, imageX)
+	for _, tc := range []struct {
+		name     string
+		upstream apix.Protocol
+		opts     apix.ExchangeOptions
+		ok       bool
+	}{
+		{"zero", "a.text", apix.ExchangeOptions{}, true},
+		{"codec rejects", "a.text", apix.ExchangeOptions{Ext: 1}, false},
+		{"plain codec", "b.text", apix.ExchangeOptions{Ext: 1}, true},
+		{"loss policy", "b.text", apix.ExchangeOptions{LossPolicy: "lenient"}, false},
+		{"output path", "a.text", apix.ExchangeOptions{Output: "b.text"}, true},
+		{"no output path", "b.text", apix.ExchangeOptions{Output: "a.text"}, false},
+		{"unregistered", "missing", apix.ExchangeOptions{}, false},
+	} {
+		if err := reg.ValidateOptions(tc.upstream, tc.opts); (err == nil) != tc.ok {
+			t.Errorf("%s: %v", tc.name, err)
+		}
+	}
+	if _, err := reg.NewExchange("a.text", "a.text", apix.ExchangeOptions{LossPolicy: "lenient"}); err == nil {
+		t.Fatal("unknown loss policy accepted")
+	}
+	if k, ok := reg.Kind("x.image"); !ok || k != apix.KindImage {
+		t.Fatalf("kind %q %v", k, ok)
+	}
+}
+
+func TestAsError(t *testing.T) {
+	if apix.AsError(nil) != nil {
+		t.Fatal("nil error classified")
+	}
+	plain := apix.AsError(errors.New("dial https://h/?key=secret1234"))
+	if plain.Class != apix.ClassUpstream || strings.Contains(plain.Message, "secret1234") {
+		t.Fatalf("plain error: %+v", plain)
+	}
+	canceled := &apix.Error{Class: apix.ClassNetwork, Message: "canceled", Err: context.Canceled}
+	if !errors.Is(fmt.Errorf("attempt: %w", canceled), context.Canceled) {
+		t.Fatal("cause is not reachable through errors.Is")
+	}
+	var typedNil *apix.Error
+	if typedNil.Error() != "<nil>" || typedNil.Unwrap() != nil {
+		t.Fatal("nil *Error methods")
 	}
 }

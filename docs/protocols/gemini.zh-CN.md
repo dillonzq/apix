@@ -24,11 +24,11 @@ payload := apix.Payload{
 info, err := reg.Inspect(gemini.GenerateContent, payload)
 ```
 
-非空 Model 和非 nil Stream 优先于请求体中的路由值。元信息只用于请求，不会序列化到请求体中。现有 Codec、Exchange 方法签名保持不变；自定义 Codec 在转换时也应读取元信息，Registry 会将其用于路由。
+非空 Model 和非 nil Stream 优先于请求体中的路由值。元信息只用于请求，不会序列化到请求体中。`Registry.Inspect` 在 Codec 读取请求体之后把它叠加到路由信息上；自定义 Codec 的 Exchange 在转换时也应读取元信息。
 
 Gemini 的 `ProtocolSpec.ParsePath` 解析 `/v1beta/models/{model}:generateContent` 或 `:streamGenerateContent`，也接受 `/v1/models/` 前缀。将 `gateway.Handler(gemini.GenerateContent)` 注册到 `/v1beta/models/` 即可自动提取元信息；`countTokens` 等其他操作会明确拒绝。
 
-上游路径由 `ProtocolSpec.Path` 按模型和模式生成，流式使用 `:streamGenerateContent?alt=sse`，认证头为 `x-goog-api-key`。转换后的 Gemini Payload 在 Metadata 中返回有效模型和模式；未显式修改推理选项时，原生请求体逐字节保留。Gemini 客户端转向其他协议时，会将流式标记写入目标 JSON。
+上游路径由 `ProtocolSpec.Path` 按模型和模式生成，流式使用 `:streamGenerateContent?alt=sse`，认证头为 `x-goog-api-key`。转换后的 Gemini Payload 在 Metadata 中返回有效模型和模式，网关据此生成上游路径；`Upstream.Path` 不能替换这个随模型变化的路径，前缀应放进 `BaseURL`。未显式修改推理选项时，原生请求体逐字节保留。Gemini 客户端转向其他协议时，会将流式标记写入目标 JSON。
 
 ## 字段映射
 
@@ -57,7 +57,7 @@ opts := apix.ExchangeOptions{
 }
 ```
 
-`ThinkingBudget` 将档位映射为预算；`ThinkingLevel` 将正数预算映射为档位。未指定时保留客户端控制的形式；0/off 与 -1/auto 保持数字哨兵。`IncludeThoughts` 独立控制推理展示。宿主根据实际模型能力选择模式，本库不按模型名猜能力，也不自动下载模型目录或调整模型上限。`thinking.ApplySuffix` 同样支持 GenerateContent。
+`ThinkingBudget` 将档位映射为预算；`ThinkingLevel` 将正数预算映射为档位。未指定时保留客户端控制的形式；0/off 与 -1/auto 保持数字哨兵。`IncludeThoughts` 独立控制推理展示。宿主根据实际模型能力选择模式，本库不按模型名猜能力，也不自动下载模型目录或调整模型上限。`ExchangeOptions.Reasoning` 与 `thinking.ApplySuffixWith` 按同一模式渲染覆盖值。GenerateContent 没有高于 `high` 的档位：`xhigh`、`max` 档位会变为 `high`，并报告为非语义损耗。
 
 Gemini 推理控制转向 Messages 时遵循 Messages 推理模式：默认 adaptive，数字预算转换为 effort 档位；使用 `anthropic.ThinkingManual` 时数字预算原样保留，档位按固定预算表转换。宿主仍需选择兼容的 Anthropic 模型并校验预算与输出上限。
 
@@ -83,7 +83,7 @@ Gemini 推理控制转向 Messages 时遵循 Messages 推理模式：默认 adap
 
 路径为 `POST /v1beta/interactions`，认证头为 `x-goog-api-key`。请求必须且只能指定 `model` 或 `agent`。模型别名可以改写；agent 请求不能被改写成另一个模型。`previous_interaction_id`、`background`、tools、input 和扩展字段交给上游处理；后台响应允许处于 `in_progress`。
 
-原生 SSE 保留事件并验证完成/工具交接与错误。暂不提供跨协议转换、历史资源获取、后台任务轮询、取消或跨供应商会话迁移，这些能力由宿主或上游负责。
+原生 Exchange 通过 `apix.StateReporter` 把每个新建的 interaction 报告为亲和键 `interaction:<id>`，带 `previous_interaction_id` 的请求标记为 `Stateful`，因此网关会把后续轮次发往持有该 interaction 的端点。原生 SSE 保留事件并验证完成/工具交接与错误。暂不提供跨协议转换、历史资源获取、后台任务轮询、取消或跨供应商会话迁移，这些能力由宿主或上游负责。
 
 ## 验证
 

@@ -23,6 +23,7 @@ func intField(raw json.RawMessage) *int {
 	}
 	return nil
 }
+
 func ReadCitation(raw json.RawMessage, from, to, path, text string, offset int, state *ConversionContext) (Citation, bool) {
 	var doc map[string]json.RawMessage
 	if json.Unmarshal(raw, &doc) != nil || doc == nil {
@@ -75,6 +76,7 @@ func ReadCitation(raw json.RawMessage, from, to, path, text string, offset int, 
 	}
 	return c, true
 }
+
 func (c Citation) Wire(to string) map[string]any {
 	if to == FormatMessages {
 		out := map[string]any{"type": "web_search_result_location", "url": c.URL}
@@ -118,6 +120,7 @@ func DecodeCitations(raw json.RawMessage, from, to, path, text string, offset in
 	}
 	return out
 }
+
 func CitationValues(citations []Citation, to string) []map[string]any {
 	out := make([]map[string]any, 0, len(citations))
 	for _, c := range citations {
@@ -125,6 +128,7 @@ func CitationValues(citations []Citation, to string) []map[string]any {
 	}
 	return out
 }
+
 func AddBlockCitations(blocks []map[string]any, citations []Citation) {
 	for _, c := range citations {
 		base := 0
@@ -150,6 +154,7 @@ func AddBlockCitations(blocks []map[string]any, citations []Citation) {
 		}
 	}
 }
+
 func (e ResponsesEventEmitter) AnnotationAdded(id string, index, contentIndex, annotationIndex int, c Citation) []byte {
 	return SSEEvent("response.output_text.annotation.added", map[string]any{"type": "response.output_text.annotation.added", "item_id": id, "output_index": index, "content_index": contentIndex, "annotation_index": annotationIndex, "annotation": c.Wire(FormatResponses)})
 }

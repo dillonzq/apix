@@ -47,6 +47,7 @@ func ConvertResponse(from, to string, status int, body []byte, ctx *shared.Conve
 	}
 	return encode(out), nil
 }
+
 func responseError(root object, body []byte) *errclass.Error {
 	e := obj(root["error"])
 	if e == nil {
@@ -76,6 +77,7 @@ func responseError(root object, body []byte) *errclass.Error {
 	}
 	return shared.UpstreamStatusError(status, body)
 }
+
 func (c *conversion) validateResponse(root object) {
 	candidates := c.array(root["candidates"], "candidates")
 	if len(candidates) == 0 && str(obj(root["promptFeedback"])["blockReason"]) == "" {
@@ -92,12 +94,14 @@ func (c *conversion) validateResponse(root object) {
 		}
 	}
 }
+
 func normalizedID(root object) string {
 	if id := str(root["responseId"]); id != "" {
 		return id
 	}
 	return "apix"
 }
+
 func finish(reason string, hasTools bool) string {
 	switch reason {
 	case "MAX_TOKENS":
@@ -112,6 +116,7 @@ func finish(reason string, hasTools bool) string {
 	}
 	return "stop"
 }
+
 func geminiFinish(reason string) string {
 	switch reason {
 	case "length", "max_tokens":
@@ -122,6 +127,7 @@ func geminiFinish(reason string) string {
 		return "STOP"
 	}
 }
+
 func (c *conversion) renderedParts(parts []any, offset ...int) (content, tools, items []any, text, reasoning string) {
 	for i, pv := range parts {
 		if len(offset) > 0 {
@@ -206,6 +212,7 @@ func (c *conversion) renderedParts(parts []any, offset ...int) (content, tools, 
 	}
 	return
 }
+
 func (c *conversion) renderResponse(root object) object {
 	id, model := normalizedID(root), str(root["modelVersion"])
 	usage := obj(root["usageMetadata"])
@@ -275,12 +282,14 @@ func (c *conversion) renderResponse(root object) object {
 	}
 	return object{"id": id, "object": "chat.completion", "created": time.Now().Unix(), "model": model, "choices": choices, "usage": renderUsage(usage, chat)}
 }
+
 func nonNil(a []any) []any {
 	if a == nil {
 		return []any{}
 	}
 	return a
 }
+
 func renderUsage(u object, to string) object {
 	input, output, thought, cached := number(u["promptTokenCount"]), number(u["candidatesTokenCount"]), number(u["thoughtsTokenCount"]), number(u["cachedContentTokenCount"])
 	total := number(u["totalTokenCount"])
@@ -317,6 +326,7 @@ func renderUsage(u object, to string) object {
 		return r
 	}
 }
+
 func usageToGemini(u object, from string) object {
 	in, out := number(u["input_tokens"]), number(u["output_tokens"])
 	cached, thought := int64(0), int64(0)
@@ -342,6 +352,7 @@ func usageToGemini(u object, from string) object {
 	}
 	return r
 }
+
 func (c *conversion) responseToGemini(root object) object {
 	id, model := str(root["id"]), str(root["model"])
 	var candidates []any

@@ -3,7 +3,9 @@ package gateway
 import (
 	"errors"
 	"io"
+	"math"
 	"net/http"
+	"strconv"
 
 	"github.com/dillonzq/apix"
 )
@@ -37,9 +39,9 @@ func (g *Gateway) Handler(p apix.Protocol) http.Handler {
 			}
 			payload.Metadata = metadata
 		}
-		resp, aerr := g.Do(r.Context(), Request{Protocol: p, Payload: payload})
-		if aerr != nil {
-			g.writeError(w, p, aerr)
+		resp, derr := g.Do(r.Context(), Request{Protocol: p, Payload: payload})
+		if derr != nil {
+			g.writeError(w, p, derr)
 			return
 		}
 		defer func() { _ = resp.Body.Close() }()
@@ -66,9 +68,12 @@ func (g *Gateway) Handler(p apix.Protocol) http.Handler {
 	})
 }
 
-func (g *Gateway) writeError(w http.ResponseWriter, p apix.Protocol, err *apix.Error) {
+func (g *Gateway) writeError(w http.ResponseWriter, p apix.Protocol, err error) {
 	payload := g.reg.EncodeError(p, err)
 	w.Header().Set("Content-Type", contentType(payload.ContentType, "application/json"))
+	if e := apix.AsError(err); e.RetryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(e.RetryAfter.Seconds()))))
+	}
 	w.WriteHeader(apix.HTTPStatus(err))
 	_, _ = w.Write(payload.Body)
 }

@@ -32,6 +32,7 @@ func (part *respTextPart) UnmarshalJSON(data []byte) error {
 	}
 	return json.Unmarshal(data, &part.Raw)
 }
+
 func (part respTextPart) unsupported() *errclass.Error {
 	if part.Type == "output_text" || part.Type == "refusal" {
 		return nil

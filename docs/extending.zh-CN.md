@@ -16,20 +16,27 @@ apix 的核心与协议无关。新增一种协议或一种接口类型（Kind�
 ```go
 type Codec interface {
     Spec() apix.ProtocolSpec
-    Inspect(req apix.Payload) (apix.RequestInfo, *apix.Error)
-    EncodeError(err *apix.Error) apix.Payload
+    Inspect(req apix.Payload) (apix.RequestInfo, error)
+    EncodeError(err error) apix.Payload
     Accepts(p apix.Protocol) bool
-    NewExchange(client apix.Protocol, opts apix.ExchangeOptions) (apix.Exchange, *apix.Error)
+    NewExchange(client apix.Protocol, opts apix.ExchangeOptions) (apix.Exchange, error)
 }
 ```
 
 | 方法 | 要点 |
 | --- | --- |
 | `Spec` | 填写 `ID`、`Kind`、`Method`、`Path`、默认鉴权方式 `Auth`、固定头 `Headers`、流式帧格式 `Stream`。`Path` 可以使用上游模型名，适合把模型放在 URL 里的协议。 |
-| `Inspect` | 从客户端请求中读出 `Model`、`Stream` 和需要的 `Features`。请求体不一定是 JSON：multipart 表单要用 `Payload.ContentType` 解析。 |
+| `Inspect` | 从客户端请求中读出 `Model`、`Stream`、需要的 `Features`，以及请求引用的上游状态（`Affinity` 键和 `Stateful` 标记）。请求体不一定是 JSON：multipart 表单要用 `Payload.ContentType` 解析。`Registry.Inspect` 随后会叠加 `Payload.Metadata`。 |
 | `EncodeError` | 按该协议的错误格式输出错误体，`gateway.Handler` 用它回复客户端。 |
 | `Accepts` | 列出与本协议之间存在**直接**路径的协议：请求可以从这些协议转入，响应可以转出为这些协议。对自身恒为 true。 |
 | `NewExchange` | 为一次执行创建状态。响应转换为 `opts.Output`（为空时即客户端协议）。从 `opts.Ext` 读取本协议包定义的选项；遇到不认识的选项类型时返回 `ClassUnsupported`。 |
+
+错误以 `*apix.Error` 值作为 `error` 返回；成功时返回字面量 `nil`：存进 `error` 的 nil `*apix.Error` 并不等于 nil。
+
+两个可选扩展会接入路由：
+
+- Codec 实现 `apix.OptionsValidator`：`ValidateOptions(opts)` 让路由器在配置端点时拒绝错误的 `Ext`、损耗策略或推理覆盖。`NewExchange` 仍需自行校验。
+- Exchange 实现 `apix.StateReporter`：`CreatedState()` 返回上游存储的状态的亲和键，例如 `response:<id>`，使后续请求回到同一端点。
 
 `Exchange` 的要求：
 
@@ -56,7 +63,7 @@ func (imagesCodec) Spec() apix.ProtocolSpec {
     }
 }
 
-func (imagesCodec) Inspect(req apix.Payload) (apix.RequestInfo, *apix.Error) {
+func (imagesCodec) Inspect(req apix.Payload) (apix.RequestInfo, error) {
     var doc struct{ Model string `json:"model"` }
     if err := json.Unmarshal(req.Body, &doc); err != nil {
         return apix.RequestInfo{}, apix.Translation("malformed images request: " + err.Error())
@@ -69,7 +76,7 @@ func (imagesCodec) Accepts(p apix.Protocol) bool {
     return p == ImagesGenerations || p == "gemini.images"
 }
 
-func (imagesCodec) NewExchange(client apix.Protocol, opts apix.ExchangeOptions) (apix.Exchange, *apix.Error) {
+func (imagesCodec) NewExchange(client apix.Protocol, opts apix.ExchangeOptions) (apix.Exchange, error) {
     return image.NewExchange(client, ImagesGenerations, opts) // 共用实现放在 internal/image
 }
 ```

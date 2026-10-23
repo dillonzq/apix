@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/dillonzq/apix/internal/errclass"
-	"github.com/dillonzq/apix/thinking"
+	"github.com/dillonzq/apix/internal/llm/reasoning"
 )
 
 // ToolResultErrorPrefix marks tool results that arrived with is_error set;
@@ -49,7 +49,7 @@ func ClaudeReasoningEffort(r *ClaudeRequestRecord) (string, *errclass.Error) {
 		if r.Thinking.BudgetTokens == nil {
 			return "auto", nil
 		}
-		if effort, ok := thinking.EffortFromBudget(*r.Thinking.BudgetTokens); ok {
+		if effort, ok := reasoning.EffortFromBudget(*r.Thinking.BudgetTokens); ok {
 			return effort, nil
 		}
 		return "", &errclass.Error{Class: errclass.ClassUnsupported,

@@ -61,21 +61,21 @@ reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs()).
 if err != nil {
     log.Fatal(err)
 }
-ex, aerr := reg.NewExchange(anthropic.Messages, openai.ChatCompletions, apix.ExchangeOptions{})
-if aerr != nil {
-    log.Fatal(aerr)
+ex, err := reg.NewExchange(anthropic.Messages, openai.ChatCompletions, apix.ExchangeOptions{})
+if err != nil {
+    log.Fatal(err)
 }
-upstream, aerr := ex.ConvertRequest(apix.Payload{Body: clientBody}, "gpt-4.1")
+upstream, err := ex.ConvertRequest(apix.Payload{Body: clientBody}, "gpt-4.1")
 // Send upstream.Body with your HTTP client, then:
-reply, aerr := ex.ConvertResponse(status, apix.Payload{Body: upstreamBody})
+reply, err := ex.ConvertResponse(status, apix.Payload{Body: upstreamBody})
 ```
 
 An empty upstream model keeps the client's model. For streams, convert the upstream body chunk by chunk:
 
 ```go
-stream, aerr := ex.NewStreamConverter()
-events, done, aerr := stream.Feed(networkChunk) // write events in order
-tail, aerr := stream.Finish()                   // at upstream EOF
+stream, err := ex.NewStreamConverter()
+events, done, err := stream.Feed(networkChunk) // write events in order
+tail, err := stream.Finish()                   // at upstream EOF
 ```
 
 `Feed` accepts arbitrary chunks and returns complete client events ready to write. A call may return events together with an error: write the events, then stop. `Finish` fails a stream that ended without a valid terminal event, and a failed converter keeps failing.
@@ -84,35 +84,40 @@ An `Exchange` holds one execution's state, such as tool identities restored in r
 
 ### Exchange options
 
-`apix.ExchangeOptions` carries a loss policy and protocol-specific options for the upstream codec:
+`apix.ExchangeOptions` carries a loss policy, per-request choices, and protocol-specific options for the upstream codec. `Registry.ValidateOptions` checks options ahead of time; routers call it when endpoints are configured.
 
 | Option | Upstream | Effect |
 | --- | --- | --- |
 | `Output: openai.Responses` | any | Convert responses and streams to another protocol of the same Kind instead of the client's; for hosts that choose the response format separately |
 | `LossPolicy: apix.LossPolicySafe` | any | Reject request conversions that lose semantics |
 | `LossPolicy: apix.LossPolicyStrict` | any | Reject every reported request loss |
+| `Reasoning: &apix.Reasoning{Effort: "high"}` | any LLM | Replace the request's reasoning control after conversion, rendered with the upstream's own thinking options; `thinking.ParseSuffix(model).Reasoning()` builds it from a `model(high)` suffix |
 | `Ext: anthropic.MessagesOptions{AllowUnsignedThinking: true}` | Messages | Replay cross-protocol reasoning as unsigned thinking blocks |
 | `Ext: anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}` | Messages | Send reasoning levels as fixed `budget_tokens` for Claude models without adaptive thinking (default: adaptive) |
 | `Ext: openai.ResponsesOptions{NormalizeTools: true}` | Responses | Flatten namespaces, wrap custom tools, and adapt local shell for upstreams that only accept function tools |
+| `Ext: gemini.GenerateContentOptions{ThinkingMode: gemini.ThinkingBudget}` | GenerateContent | Send reasoning as `thinkingBudget` (or `ThinkingLevel` for `thinkingLevel`), for the model in use |
 
 `ex.Diagnostics()` lists fields that conversion omitted or approximated, with `Code`, `Path`, `Message`, `Semantic`, `From`, and `To`. Responses and streams report losses but are never rejected because of the policy.
 
 ## Routing
 
-`route.Router` orders the endpoints that can serve a request. Endpoints that speak the client's protocol come first (zero conversion); endpoints of the same kind whose protocol the request converts to follow. Within each tier, lower `Priority` wins and equal priorities are shuffled by `Weight`. Endpoints that keep failing are skipped for a cooldown.
+`route.Router` orders the endpoints that can serve a request. Endpoints that speak the client's protocol come first (zero conversion); endpoints of the same kind whose protocol the request converts to follow. Within each tier, lower `Priority` wins and equal priorities are shuffled by `Weight`. Endpoints that keep failing are skipped for a cooldown, then receive one trial request at a time. Requests that refer to upstream-owned state, such as `previous_response_id` or an uploaded file, go to the endpoint that owns it first; requests that continue such context never convert to another protocol.
 
 ```go
 r, err := route.New(reg, []route.Endpoint{
     {ID: "openai", Protocol: openai.ChatCompletions, Models: map[string]string{"smart": "gpt-4.1"}},
     {ID: "anthropic", Protocol: anthropic.Messages, Priority: 1, Models: map[string]string{"smart": "claude-sonnet-4-5"}},
 })
-info, aerr := reg.Inspect(anthropic.Messages, apix.Payload{Body: clientBody})
-candidates, aerr := r.Route(info) // anthropic first: it is native for a Messages client
-// Try candidates in order and report every attempt so health tracking works:
-r.Report(candidates[0].Endpoint.ID, route.Outcome{Err: attemptErr, Latency: elapsed})
+info, err := reg.Inspect(anthropic.Messages, apix.Payload{Body: clientBody})
+candidates, err := r.Route(info) // anthropic first: it is native for a Messages client
+// Try candidates in order. Call Begin right before sending, and report every
+// attempt that was sent so health tracking works:
+if r.Begin(candidates[0]) {
+    r.Report(candidates[0].Endpoint.ID, route.Outcome{Err: attemptErr, Latency: elapsed})
+}
 ```
 
-`Models` maps client model names or aliases to upstream names; `"*"` matches any model. `Update` replaces the endpoint set at runtime. See [routing](docs/routing.md) for filters, the breaker, and custom strategies.
+`Models` maps client model names or aliases to upstream names; `"*"` matches any model. `Unsupported` lists capabilities an endpoint lacks. `Update` validates each endpoint's options against its codec and replaces the endpoint set at runtime. See [routing](docs/routing.md) for filters, the breaker, affinity, and custom strategies.
 
 ## Gateway
 
@@ -132,9 +137,18 @@ http.Handle("/v1/chat/completions", g.Handler(openai.ChatCompletions))
 
 `Do` returns at the commit point: once an ordinary response converted, or once a stream produced its first event. Before that point, retryable failures (rate limits, server errors, network errors, unusable upstream output) and rejected conversions move to the next candidate. After it, nothing is retried, because the client may already have output; a failure surfaces from `Response.Body.Read`. Authentication headers follow each protocol's scheme (`Authorization: Bearer` for OpenAI, `x-api-key` plus `anthropic-version` for Anthropic). Client credentials are never forwarded.
 
+| `gateway.Config` field | Effect |
+| --- | --- |
+| `CommitTimeout` | Cancel an attempt that has not reached the commit point in time, and fail over |
+| `MaxResponseBytes` | Limit ordinary response bodies (default 64 MiB); a larger one fails over |
+| `ForwardHeaders` | Upstream response headers to pass to clients, such as `"X-Request-Id"` or `"X-Ratelimit-*"`; `Response.UpstreamHeader` holds them all |
+| `ThinkingSuffix` | Route `model(high)` by `model` and apply the suffix as `Request.Reasoning` |
+
+An upstream's `Retry-After` reaches the error as `RetryAfter`, pauses that endpoint, and is relayed by `Handler`. Stored responses and interactions are remembered per endpoint, so follow-up turns return to it.
+
 ## Errors
 
-Errors are `*apix.Error` with `Class`, `Message`, `StatusCode`, and `Retryable`. Messages are redacted; use `apix.Redact` for your own text. `apix.HTTPStatus` picks a response status, and `Registry.EncodeError` renders an error in the client protocol's envelope. `FromNetwork` and `PostFirstByteNetwork` classify transport failures before and after the first upstream byte.
+Functions return `error`; the values are `*apix.Error` with `Class`, `Message`, `StatusCode`, `Retryable`, and `RetryAfter`. Use `apix.AsError(err)` (or `errors.As`) to read them; a canceled request also matches `errors.Is(err, context.Canceled)`. Messages are redacted; use `apix.Redact` for your own text. `apix.HTTPStatus` picks a response status, and `Registry.EncodeError` renders an error in the client protocol's envelope. `FromNetwork` and `PostFirstByteNetwork` classify transport failures before and after the first upstream byte.
 
 ## SSE framing for hosts
 

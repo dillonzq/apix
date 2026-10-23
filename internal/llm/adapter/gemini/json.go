@@ -14,10 +14,14 @@ import (
 	"github.com/dillonzq/apix/internal/llm/adapter/shared"
 )
 
+// Format is the internal format name of GenerateContent.
 const Format = shared.FormatGemini
-const chat = shared.FormatChatCompletions
-const messages = shared.FormatMessages
-const responses = shared.FormatResponses
+
+const (
+	chat      = shared.FormatChatCompletions
+	messages  = shared.FormatMessages
+	responses = shared.FormatResponses
+)
 
 type object = map[string]any
 
@@ -34,6 +38,7 @@ func decode(body []byte) (object, *errclass.Error) {
 	}
 	return out, nil
 }
+
 func encode(v any) []byte { b, _ := json.Marshal(v); return b }
 func obj(v any) object    { o, _ := v.(map[string]any); return o }
 func list(v any) []any    { a, _ := v.([]any); return a }
@@ -51,6 +56,7 @@ func number(v any) int64 {
 	}
 	return 0
 }
+
 func first(o object, keys ...string) any {
 	for _, k := range keys {
 		if v, ok := o[k]; ok {
@@ -59,6 +65,7 @@ func first(o object, keys ...string) any {
 	}
 	return nil
 }
+
 func clone(o object) object {
 	r := object{}
 	for k, v := range o {
@@ -66,12 +73,14 @@ func clone(o object) object {
 	}
 	return r
 }
+
 func stringOrJSON(v any) string {
 	if s, ok := v.(string); ok {
 		return s
 	}
 	return string(encode(v))
 }
+
 func dataFrame(v any) []byte { return append(append([]byte("data: "), encode(v)...), '\n', '\n') }
 func unsupported(message string) *errclass.Error {
 	return &errclass.Error{Class: errclass.ClassUnsupported, Message: message}
@@ -90,11 +99,13 @@ func (c *conversion) fail(message string) {
 		c.err = errclass.Translation(message)
 	}
 }
+
 func (c *conversion) reject(message string) {
 	if c.err == nil {
 		c.err = unsupported(message)
 	}
 }
+
 func (c *conversion) object(v any, path string) object {
 	if v == nil {
 		return nil
@@ -105,6 +116,7 @@ func (c *conversion) object(v any, path string) object {
 	}
 	return o
 }
+
 func (c *conversion) array(v any, path string) []any {
 	if v == nil {
 		return nil
@@ -115,6 +127,7 @@ func (c *conversion) array(v any, path string) []any {
 	}
 	return a
 }
+
 func (c *conversion) text(v any, path string) string {
 	if v == nil {
 		return ""
@@ -125,6 +138,7 @@ func (c *conversion) text(v any, path string) string {
 	}
 	return s
 }
+
 func (c *conversion) loss(path string, semantic bool) {
 	if c.response {
 		c.ctx.Report(c.from, c.to, path, semantic)
@@ -134,6 +148,7 @@ func (c *conversion) loss(path string, semantic bool) {
 		c.err = err
 	}
 }
+
 func (c *conversion) unknown(o object, path string, known ...string) {
 	if c.native {
 		return
@@ -153,6 +168,7 @@ func (c *conversion) unknown(o object, path string, known ...string) {
 		c.loss(path+k, k != "metadata" && k != "user" && k != "stream_options")
 	}
 }
+
 func (c *conversion) args(v any) object {
 	if v == nil {
 		return object{}
@@ -173,6 +189,7 @@ func (c *conversion) args(v any) object {
 	}
 	return o
 }
+
 func callID(fc object, index int) string {
 	if id := str(fc["id"]); id != "" {
 		return id
@@ -188,6 +205,7 @@ func signature(part object) string { return str(first(part, "thoughtSignature", 
 func signatureFrom(o object) string {
 	return str(obj(obj(o["extra_content"])["google"])["thought_signature"])
 }
+
 func (c *conversion) validateParts(parts []any) {
 	for _, v := range parts {
 		p := c.object(v, "parts[]")

@@ -16,6 +16,7 @@ type streamCall struct {
 	emitted        bool
 	ready          bool
 }
+
 type streamCandidate struct {
 	parts     []any
 	finish    string
@@ -25,6 +26,7 @@ type streamCandidate struct {
 	order     []string
 	text      map[string]string
 }
+
 type streamBlock struct {
 	kind string
 	call *streamCall
@@ -54,6 +56,7 @@ type StreamConverter struct {
 func NewStreamConverter(from, to string, ctx *shared.ConversionContext) *StreamConverter {
 	return &StreamConverter{from: from, to: to, ctx: shared.ContextOrNew([]*shared.ConversionContext{ctx}), framer: shared.NewSSEFramer(true), created: time.Now().Unix(), candidates: map[int]*streamCandidate{}, blocks: map[int]*streamBlock{}, usage: object{}, activePart: -1}
 }
+
 func (s *StreamConverter) candidate(index int) *streamCandidate {
 	c := s.candidates[index]
 	if c == nil {
@@ -63,9 +66,11 @@ func (s *StreamConverter) candidate(index int) *streamCandidate {
 	}
 	return c
 }
+
 func (s *StreamConverter) converter() *conversion {
 	return &conversion{from: s.from, to: s.to, ctx: s.ctx, response: true}
 }
+
 func (s *StreamConverter) Feed(chunk []byte) ([][]byte, bool, *errclass.Error) {
 	if s.failure != nil {
 		return nil, false, s.failure
@@ -80,6 +85,7 @@ func (s *StreamConverter) Feed(chunk []byte) ([][]byte, bool, *errclass.Error) {
 	}
 	return events, s.done && err == nil, err
 }
+
 func (s *StreamConverter) drain() ([][]byte, *errclass.Error) {
 	var events [][]byte
 	for {
@@ -125,6 +131,7 @@ func (s *StreamConverter) drain() ([][]byte, *errclass.Error) {
 		}
 	}
 }
+
 func (s *StreamConverter) Finish() ([][]byte, *errclass.Error) {
 	if s.failure != nil {
 		return nil, s.failure
@@ -144,6 +151,7 @@ func (s *StreamConverter) Finish() ([][]byte, *errclass.Error) {
 	}
 	return out, err
 }
+
 func (s *StreamConverter) identity(id, model string) {
 	if !s.started && id != "" {
 		s.id = id
@@ -152,6 +160,7 @@ func (s *StreamConverter) identity(id, model string) {
 		s.model = model
 	}
 }
+
 func (s *StreamConverter) event(name string, doc object) []byte {
 	doc["type"] = name
 	if s.to == responses {
@@ -160,6 +169,7 @@ func (s *StreamConverter) event(name string, doc object) []byte {
 	}
 	return shared.SSEEvent(name, doc)
 }
+
 func (s *StreamConverter) start() [][]byte {
 	if s.started {
 		return nil
@@ -176,6 +186,7 @@ func (s *StreamConverter) start() [][]byte {
 	}
 	return nil
 }
+
 func (s *StreamConverter) chatChunk(index int, delta object, reason any, usage object) []byte {
 	out := object{"id": s.id, "object": "chat.completion.chunk", "created": s.created, "model": s.model, "choices": []any{object{"index": index, "delta": delta, "finish_reason": reason}}}
 	if usage != nil {
@@ -183,6 +194,7 @@ func (s *StreamConverter) chatChunk(index int, delta object, reason any, usage o
 	}
 	return dataFrame(out)
 }
+
 func (s *StreamConverter) geminiChunk(root object, raw []byte) ([][]byte, *errclass.Error) {
 	normalizer := s.converter()
 	normalizer.normalizeGemini(root)
@@ -287,6 +299,7 @@ func (s *StreamConverter) geminiChunk(root object, raw []byte) ([][]byte, *errcl
 	}
 	return out, nil
 }
+
 func partKind(p object) string {
 	if p["functionCall"] != nil {
 		return "tool"
@@ -299,6 +312,7 @@ func partKind(p object) string {
 	}
 	return "media"
 }
+
 func (s *StreamConverter) geminiPart(index int, state *streamCandidate, part object) ([][]byte, *errclass.Error) {
 	if part["text"] == nil && part["functionCall"] == nil && signature(part) != "" && len(part) == 1 {
 		if len(state.parts) > 0 {
@@ -441,6 +455,7 @@ func (s *StreamConverter) geminiPart(index int, state *streamCandidate, part obj
 	}
 	return out, conv.err
 }
+
 func countCalls(parts []any) int {
 	n := 0
 	for _, pv := range parts {
@@ -450,6 +465,7 @@ func countCalls(parts []any) int {
 	}
 	return n
 }
+
 func (s *StreamConverter) closePart(state *streamCandidate) ([][]byte, *errclass.Error) {
 	if s.activePart < 0 {
 		return nil, nil
@@ -490,6 +506,7 @@ func (s *StreamConverter) closePart(state *streamCandidate) ([][]byte, *errclass
 	out = append(out, s.event("response.output_item.done", object{"output_index": index, "item": item}))
 	return out, nil
 }
+
 func (s *StreamConverter) emitGemini(index int, parts []any) [][]byte {
 	if len(parts) == 0 {
 		return nil
@@ -499,6 +516,7 @@ func (s *StreamConverter) emitGemini(index int, parts []any) [][]byte {
 	state.parts = append(state.parts, parts...)
 	return [][]byte{dataFrame(object{"responseId": s.id, "modelVersion": s.model, "candidates": []any{object{"index": index, "content": object{"role": "model", "parts": parts}}}})}
 }
+
 func (s *StreamConverter) appendText(index int, key, text string, thought, snapshot bool) [][]byte {
 	if text == "" {
 		return nil
@@ -523,6 +541,7 @@ func (s *StreamConverter) appendText(index int, key, text string, thought, snaps
 	}
 	return s.emitGemini(index, []any{p})
 }
+
 func (s *StreamConverter) call(index int, key string) *streamCall {
 	state := s.candidate(index)
 	call := state.calls[key]
@@ -533,6 +552,7 @@ func (s *StreamConverter) call(index int, key string) *streamCall {
 	}
 	return call
 }
+
 func (s *StreamConverter) otherChunk(name string, root object) ([][]byte, *errclass.Error) {
 	var out [][]byte
 	if name == "" {
@@ -741,6 +761,7 @@ func (s *StreamConverter) otherChunk(name string, root object) ([][]byte, *errcl
 	}
 	return out, nil
 }
+
 func (s *StreamConverter) responsesItem(item object) ([][]byte, *errclass.Error) {
 	var out [][]byte
 	id := str(item["id"])
@@ -804,6 +825,7 @@ func (s *StreamConverter) responsesItem(item object) ([][]byte, *errclass.Error)
 	}
 	return out, nil
 }
+
 func (s *StreamConverter) flushCalls(index int, final bool) ([][]byte, *errclass.Error) {
 	state := s.candidate(index)
 	var out [][]byte
@@ -843,6 +865,7 @@ func (s *StreamConverter) flushCalls(index int, final bool) ([][]byte, *errclass
 	}
 	return out, nil
 }
+
 func (s *StreamConverter) complete() ([][]byte, *errclass.Error) {
 	if s.done {
 		return nil, nil

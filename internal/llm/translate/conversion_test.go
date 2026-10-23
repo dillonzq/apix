@@ -3,9 +3,10 @@ package translate_test
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/dillonzq/apix/internal/llm/translate"
 	"strings"
 	"testing"
+
+	"github.com/dillonzq/apix/internal/llm/translate"
 )
 
 type wireEvent struct {

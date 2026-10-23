@@ -19,12 +19,12 @@ type imageCodec struct{}
 func (imageCodec) Spec() apix.ProtocolSpec {
 	return apix.ProtocolSpec{ID: "test.images", Kind: apix.KindImage}
 }
-func (imageCodec) Inspect(apix.Payload) (apix.RequestInfo, *apix.Error) {
+func (imageCodec) Inspect(apix.Payload) (apix.RequestInfo, error) {
 	return apix.RequestInfo{}, nil
 }
-func (imageCodec) EncodeError(*apix.Error) apix.Payload { return apix.Payload{} }
-func (imageCodec) Accepts(apix.Protocol) bool           { return true }
-func (imageCodec) NewExchange(apix.Protocol, apix.ExchangeOptions) (apix.Exchange, *apix.Error) {
+func (imageCodec) EncodeError(error) apix.Payload { return apix.Payload{} }
+func (imageCodec) Accepts(apix.Protocol) bool     { return true }
+func (imageCodec) NewExchange(apix.Protocol, apix.ExchangeOptions) (apix.Exchange, error) {
 	return nil, nil
 }
 
@@ -111,9 +111,9 @@ func TestModelMapping(t *testing.T) {
 
 func TestFeaturesDisabledAndKind(t *testing.T) {
 	r := newRouter(t, []route.Endpoint{
-		{ID: "no-stream", Protocol: anthropic.Messages, Features: []string{apix.FeatureTools}},
+		{ID: "no-stream", Protocol: anthropic.Messages, Unsupported: []string{apix.FeatureStream}},
 		{ID: "off", Protocol: anthropic.Messages, Disabled: true},
-		{ID: "full", Protocol: openai.ChatCompletions, Features: []string{apix.FeatureStream, apix.FeatureTools}},
+		{ID: "full", Protocol: openai.ChatCompletions},
 		{ID: "any", Protocol: openai.Responses},
 		{ID: "images", Protocol: "test.images"},
 	})
@@ -128,17 +128,23 @@ func TestFeaturesDisabledAndKind(t *testing.T) {
 	if cands[0].Endpoint.ID != "no-stream" {
 		t.Fatalf("non-streaming request should use the native endpoint: %v", ids(cands))
 	}
+	// A capability the endpoint does not list as unsupported, including one a
+	// later version learns to detect, does not exclude it.
+	cands, _ = r.Route(messagesRequest("m", "future-capability"))
+	if cands[0].Endpoint.ID != "no-stream" {
+		t.Fatalf("unknown capability excluded the endpoint: %v", ids(cands))
+	}
 }
 
 func TestRouteErrors(t *testing.T) {
 	r := newRouter(t, []route.Endpoint{
 		{ID: "images", Protocol: "test.images"},
-		{ID: "mapped", Protocol: anthropic.Messages, Models: map[string]string{"known": "x"}, Features: []string{apix.FeatureTools}},
+		{ID: "mapped", Protocol: anthropic.Messages, Models: map[string]string{"known": "x"}, Unsupported: []string{apix.FeatureStream}},
 	})
-	if _, err := r.Route(messagesRequest("unknown")); err == nil || err.Class != apix.ClassInvalidModel {
+	if _, err := r.Route(messagesRequest("unknown")); err == nil || apix.AsError(err).Class != apix.ClassInvalidModel {
 		t.Fatalf("unknown model: %v", err)
 	}
-	if _, err := r.Route(messagesRequest("known", apix.FeatureStream)); err == nil || err.Class != apix.ClassUnsupported {
+	if _, err := r.Route(messagesRequest("known", apix.FeatureStream)); err == nil || apix.AsError(err).Class != apix.ClassUnsupported {
 		t.Fatalf("unsupported feature: %v", err)
 	}
 }
@@ -216,9 +222,12 @@ func TestBreaker(t *testing.T) {
 func TestUpdateValidation(t *testing.T) {
 	r := newRouter(t, nil)
 	for name, eps := range map[string][]route.Endpoint{
-		"no id":     {{Protocol: anthropic.Messages}},
-		"duplicate": {{ID: "a", Protocol: anthropic.Messages}, {ID: "a", Protocol: openai.Responses}},
-		"protocol":  {{ID: "a", Protocol: "nope"}},
+		"no id":           {{Protocol: anthropic.Messages}},
+		"duplicate":       {{ID: "a", Protocol: anthropic.Messages}, {ID: "a", Protocol: openai.Responses}},
+		"protocol":        {{ID: "a", Protocol: "nope"}},
+		"foreign options": {{ID: "a", Protocol: openai.ChatCompletions, Options: route.EndpointOptions{Ext: anthropic.MessagesOptions{}}}},
+		"bad mode":        {{ID: "a", Protocol: anthropic.Messages, Options: route.EndpointOptions{Ext: anthropic.MessagesOptions{ThinkingMode: "turbo"}}}},
+		"loss policy":     {{ID: "a", Protocol: anthropic.Messages, Options: route.EndpointOptions{LossPolicy: "lenient"}}},
 	} {
 		if err := r.Update(eps); err == nil {
 			t.Fatalf("%s: accepted", name)

@@ -2,9 +2,10 @@ package shared
 
 import (
 	"encoding/json"
-	"github.com/dillonzq/apix/internal/errclass"
 	"strconv"
 	"strings"
+
+	"github.com/dillonzq/apix/internal/errclass"
 )
 
 // ProtocolError is an upstream error carried inside a successful HTTP body.

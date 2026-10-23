@@ -61,21 +61,21 @@ reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs()).
 if err != nil {
     log.Fatal(err)
 }
-ex, aerr := reg.NewExchange(anthropic.Messages, openai.ChatCompletions, apix.ExchangeOptions{})
-if aerr != nil {
-    log.Fatal(aerr)
+ex, err := reg.NewExchange(anthropic.Messages, openai.ChatCompletions, apix.ExchangeOptions{})
+if err != nil {
+    log.Fatal(err)
 }
-upstream, aerr := ex.ConvertRequest(apix.Payload{Body: clientBody}, "gpt-4.1")
+upstream, err := ex.ConvertRequest(apix.Payload{Body: clientBody}, "gpt-4.1")
 // 用自己的 HTTP 客户端发送 upstream.Body，然后：
-reply, aerr := ex.ConvertResponse(status, apix.Payload{Body: upstreamBody})
+reply, err := ex.ConvertResponse(status, apix.Payload{Body: upstreamBody})
 ```
 
 上游模型名为空时沿用客户端的模型。流式响应按块转换：
 
 ```go
-stream, aerr := ex.NewStreamConverter()
-events, done, aerr := stream.Feed(networkChunk) // 按顺序写出 events
-tail, aerr := stream.Finish()                   // 上游 EOF 时调用
+stream, err := ex.NewStreamConverter()
+events, done, err := stream.Feed(networkChunk) // 按顺序写出 events
+tail, err := stream.Finish()                   // 上游 EOF 时调用
 ```
 
 `Feed` 接收任意大小的字节块，返回可直接写出的完整客户端事件。一次调用可能同时返回事件和错误：先写出事件，再停止。没有有效终止事件就结束的流会在 `Finish` 时失败，失败后的转换器会持续返回错误。
@@ -84,35 +84,39 @@ tail, aerr := stream.Finish()                   // 上游 EOF 时调用
 
 ### Exchange 选项
 
-`apix.ExchangeOptions` 携带损耗策略，以及上游 Codec 专属的选项：
+`apix.ExchangeOptions` 携带损耗策略、按请求决定的选项，以及上游 Codec 专属的选项。`Registry.ValidateOptions` 可以提前校验选项，路由器在配置端点时就会调用它。
 
 | 选项 | 上游 | 作用 |
 | --- | --- | --- |
 | `Output: openai.Responses` | 任意 | 把响应和流转换为同 Kind 的另一种协议，而不是客户端协议；适用于响应格式与请求格式分开指定的宿主 |
 | `LossPolicy: apix.LossPolicySafe` | 任意 | 拒绝影响语义的请求转换损耗 |
 | `LossPolicy: apix.LossPolicyStrict` | 任意 | 拒绝所有已报告的请求损耗 |
+| `Reasoning: &apix.Reasoning{Effort: "high"}` | 任意 LLM | 转换后替换请求的推理控制，按上游自身的推理选项渲染；`thinking.ParseSuffix(model).Reasoning()` 可从 `model(high)` 后缀生成 |
 | `Ext: anthropic.MessagesOptions{AllowUnsignedThinking: true}` | Messages | 把跨协议推理历史回传为无签名 thinking 块 |
 | `Ext: anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}` | Messages | 为不支持 adaptive 的旧 Claude 模型发送固定 `budget_tokens`（默认 adaptive） |
 | `Ext: openai.ResponsesOptions{NormalizeTools: true}` | Responses | 为只接受函数工具的上游展开 namespace、包装 custom 工具并适配本地 shell |
+| `Ext: gemini.GenerateContentOptions{ThinkingMode: gemini.ThinkingBudget}` | GenerateContent | 按所用模型把推理发送为 `thinkingBudget`（`ThinkingLevel` 则为 `thinkingLevel`） |
 
 `ex.Diagnostics()` 列出转换省略或近似的字段，包含 `Code`、`Path`、`Message`、`Semantic`、`From`、`To`。响应和流式响应只报告损耗，不会因策略被拒绝。
 
 ## 路由
 
-`route.Router` 对能服务某个请求的端点排序：与客户端同协议的端点排在前面（零转换），可转换的同类端点排在后面。每一层内 `Priority` 小者优先，同优先级按 `Weight` 加权打散。持续失败的端点会在冷却期内被跳过。
+`route.Router` 对能服务某个请求的端点排序：与客户端同协议的端点排在前面（零转换），可转换的同类端点排在后面。每一层内 `Priority` 小者优先，同优先级按 `Weight` 加权打散。持续失败的端点会在冷却期内被跳过，之后每次只放行一个试探请求。引用上游状态（如 `previous_response_id`、已上传文件）的请求优先发往持有该状态的端点；延续这类上下文的请求不会转换到其他协议。
 
 ```go
 r, err := route.New(reg, []route.Endpoint{
     {ID: "openai", Protocol: openai.ChatCompletions, Models: map[string]string{"smart": "gpt-4.1"}},
     {ID: "anthropic", Protocol: anthropic.Messages, Priority: 1, Models: map[string]string{"smart": "claude-sonnet-4-5"}},
 })
-info, aerr := reg.Inspect(anthropic.Messages, apix.Payload{Body: clientBody})
-candidates, aerr := r.Route(info) // anthropic 在前：对 Messages 客户端它是同协议
-// 按顺序尝试候选，并回报每次尝试的结果，供健康统计使用：
-r.Report(candidates[0].Endpoint.ID, route.Outcome{Err: attemptErr, Latency: elapsed})
+info, err := reg.Inspect(anthropic.Messages, apix.Payload{Body: clientBody})
+candidates, err := r.Route(info) // anthropic 在前：对 Messages 客户端它是同协议
+// 按顺序尝试候选。发送前调用 Begin，并回报每次已发送尝试的结果，供健康统计使用：
+if r.Begin(candidates[0]) {
+    r.Report(candidates[0].Endpoint.ID, route.Outcome{Err: attemptErr, Latency: elapsed})
+}
 ```
 
-`Models` 把客户端模型名或别名映射到上游模型名，`"*"` 匹配任意模型。`Update` 可在运行时替换端点集合。过滤规则、熔断和自定义策略见[路由](docs/routing.zh-CN.md)。
+`Models` 把客户端模型名或别名映射到上游模型名，`"*"` 匹配任意模型。`Unsupported` 列出端点不支持的能力。`Update` 会按 Codec 校验每个端点的选项，并在运行时替换端点集合。过滤规则、熔断、亲和性和自定义策略见[路由](docs/routing.zh-CN.md)。
 
 ## 网关
 
@@ -132,9 +136,18 @@ http.Handle("/v1/chat/completions", g.Handler(openai.ChatCompletions))
 
 `Do` 在提交点返回：普通响应转换成功之后，或流式响应产出第一个事件之后。提交点之前，可重试的失败（限流、服务端错误、网络错误、上游输出无法使用）以及被拒绝的转换会切换到下一个候选；提交点之后不再重试，因为客户端可能已经收到输出，失败通过 `Response.Body.Read` 返回。鉴权头按各协议的方案注入（OpenAI 用 `Authorization: Bearer`，Anthropic 用 `x-api-key` 加 `anthropic-version`），客户端凭据不会被转发。
 
+| `gateway.Config` 字段 | 作用 |
+| --- | --- |
+| `CommitTimeout` | 单次尝试在限定时间内未到达提交点时取消并切换 |
+| `MaxResponseBytes` | 限制普通响应体大小（默认 64 MiB），超出时切换 |
+| `ForwardHeaders` | 透传给客户端的上游响应头，如 `"X-Request-Id"`、`"X-Ratelimit-*"`；`Response.UpstreamHeader` 保留全部响应头 |
+| `ThinkingSuffix` | 按去掉后缀的模型名路由 `model(high)`，并把后缀作为 `Request.Reasoning` |
+
+上游的 `Retry-After` 会写入错误的 `RetryAfter`，让该端点暂停接收流量，并由 `Handler` 转告客户端。已存储的 response 和 interaction 会记住所属端点，后续轮次回到同一端点。
+
 ## 错误
 
-错误类型为 `*apix.Error`，包含 `Class`、`Message`、`StatusCode` 和 `Retryable`。消息已脱敏，包装自己的消息时可使用 `apix.Redact`。`apix.HTTPStatus` 给出响应状态码，`Registry.EncodeError` 按客户端协议的格式输出错误体。`FromNetwork` 和 `PostFirstByteNetwork` 分别对上游首字节之前和之后的传输失败分类。
+函数返回 `error`，其值为 `*apix.Error`，包含 `Class`、`Message`、`StatusCode`、`Retryable` 和 `RetryAfter`。用 `apix.AsError(err)`（或 `errors.As`）读取；请求被取消时也满足 `errors.Is(err, context.Canceled)`。消息已脱敏，包装自己的消息时可使用 `apix.Redact`。`apix.HTTPStatus` 给出响应状态码，`Registry.EncodeError` 按客户端协议的格式输出错误体。`FromNetwork` 和 `PostFirstByteNetwork` 分别对上游首字节之前和之后的传输失败分类。
 
 ## 宿主自行包装 SSE
 

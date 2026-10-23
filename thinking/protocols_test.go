@@ -5,24 +5,25 @@ import (
 	"testing"
 
 	"github.com/dillonzq/apix/protocol/anthropic"
+	"github.com/dillonzq/apix/protocol/gemini"
 	"github.com/dillonzq/apix/protocol/openai"
 	"github.com/dillonzq/apix/thinking"
 )
 
-// The package keeps private copies of the vendor protocol IDs; these calls
-// fail if the copies drift from the public constants.
-func TestVendorProtocolIDs(t *testing.T) {
+func TestVendorProtocols(t *testing.T) {
 	high := thinking.ParseSuffix("m(high)")
 	for _, tc := range []struct {
 		name string
-		got  func() ([]byte, *thinking.Error)
+		got  func() ([]byte, error)
 		want string
 	}{
-		{"chat", func() ([]byte, *thinking.Error) {
-			return thinking.ApplySuffix(openai.ChatCompletions, []byte(`{}`), high)
-		}, `"reasoning_effort":"high"`},
-		{"responses", func() ([]byte, *thinking.Error) { return thinking.ApplySuffix(openai.Responses, []byte(`{}`), high) }, `"effort":"high"`},
-		{"messages", func() ([]byte, *thinking.Error) { return thinking.ApplySuffix(anthropic.Messages, []byte(`{}`), high) }, `"thinking"`},
+		{"chat", func() ([]byte, error) { return thinking.ApplySuffix(openai.ChatCompletions, []byte(`{}`), high) }, `"reasoning_effort":"high"`},
+		{"chat auto", func() ([]byte, error) {
+			return thinking.ApplySuffix(openai.ChatCompletions, []byte(`{"reasoning_effort":"low"}`), thinking.ParseSuffix("m(auto)"))
+		}, `{}`},
+		{"responses", func() ([]byte, error) { return thinking.ApplySuffix(openai.Responses, []byte(`{}`), high) }, `"effort":"high"`},
+		{"messages", func() ([]byte, error) { return thinking.ApplySuffix(anthropic.Messages, []byte(`{}`), high) }, `"thinking"`},
+		{"gemini", func() ([]byte, error) { return thinking.ApplySuffix(gemini.GenerateContent, []byte(`{}`), high) }, `"thinkingLevel":"high"`},
 	} {
 		got, err := tc.got()
 		if err != nil || !strings.Contains(string(got), tc.want) {
@@ -32,5 +33,56 @@ func TestVendorProtocolIDs(t *testing.T) {
 	body := []byte(`{"reasoning_effort":"low"}`)
 	if got := thinking.StripSupersededReasoning(anthropic.Messages, openai.ChatCompletions, body); strings.Contains(string(got), "reasoning_effort") {
 		t.Fatalf("strip: %s", got)
+	}
+	geminiBody := []byte(`{"contents":[],"generationConfig":{"thinkingConfig":{"thinkingLevel":"low","includeThoughts":true}}}`)
+	if got := thinking.StripSupersededReasoning(openai.ChatCompletions, gemini.GenerateContent, geminiBody); string(got) != `{"contents":[],"generationConfig":{"thinkingConfig":{"includeThoughts":true}}}` {
+		t.Fatalf("strip gemini: %s", got)
+	}
+	if got := thinking.StripSupersededReasoning(gemini.GenerateContent, openai.Responses, []byte(`{"reasoning":{"effort":"low","summary":"auto"}}`)); string(got) != `{"reasoning":{"summary":"auto"}}` {
+		t.Fatalf("strip responses: %s", got)
+	}
+	if got := thinking.StripSupersededReasoning(gemini.Interactions, openai.ChatCompletions, body); string(got) != string(body) {
+		t.Fatalf("strip without a reasoning path: %s", got)
+	}
+	if got, err := thinking.ApplySuffix(gemini.Interactions, body, high); err != nil || string(got) != string(body) {
+		t.Fatalf("apply without a reasoning control: %s %v", got, err)
+	}
+}
+
+// Gemini suffixes follow the exchange's ThinkingMode and never send a level
+// GenerateContent does not define.
+func TestGeminiModes(t *testing.T) {
+	for _, tc := range []struct {
+		model string
+		mode  gemini.ThinkingMode
+		want  string
+	}{
+		{"m(high)", "", `{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingLevel":"high"}}}`},
+		{"m(max)", "", `{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingLevel":"high"}}}`},
+		{"m(3000)", "", `{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingBudget":3000}}}`},
+		{"m(high)", gemini.ThinkingBudget, `{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingBudget":24576}}}`},
+		{"m(max)", gemini.ThinkingBudget, `{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingBudget":128000}}}`},
+		{"m(3000)", gemini.ThinkingLevel, `{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingLevel":"medium"}}}`},
+		{"m(none)", gemini.ThinkingLevel, `{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingBudget":0}}}`},
+		{"m(auto)", gemini.ThinkingLevel, `{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingBudget":-1}}}`},
+	} {
+		body := []byte(`{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingLevel":"low"}}}`)
+		got, err := thinking.ApplySuffixWith(gemini.GenerateContent, body, thinking.ParseSuffix(tc.model), thinking.Options{GeminiMode: tc.mode})
+		if err != nil || string(got) != tc.want {
+			t.Errorf("%s mode %q = %s %v, want %s", tc.model, tc.mode, got, err, tc.want)
+		}
+	}
+}
+
+func TestSuffixReasoning(t *testing.T) {
+	if r := thinking.ParseSuffix("m").Reasoning(); r != nil {
+		t.Fatalf("no suffix = %+v", r)
+	}
+	if r := thinking.ParseSuffix("m(turbo)").Reasoning(); r != nil {
+		t.Fatalf("unrecognized suffix = %+v", r)
+	}
+	r := thinking.ParseSuffix("m(3000)").Reasoning()
+	if r == nil || r.Effort != "medium" || r.Budget == nil || *r.Budget != 3000 {
+		t.Fatalf("numeric suffix = %+v", r)
 	}
 }

@@ -3,6 +3,7 @@ package gemini_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -148,10 +149,10 @@ func TestStreamErrorIsTerminal(t *testing.T) {
 		if err == nil || done || len(events) == 0 {
 			t.Fatalf("%s lost prefix or accepted error: %v %v %d", p, err, done, len(events))
 		}
-		if _, err2 := sc.Finish(); err2 != err {
+		if _, err2 := sc.Finish(); !errors.Is(err2, err) {
 			t.Fatal("error changed at EOF")
 		}
-		if events, done, err2 := sc.Feed([]byte(fixtures[gemini.GenerateContent].stream)); err2 != err || done || len(events) > 0 {
+		if events, done, err2 := sc.Feed([]byte(fixtures[gemini.GenerateContent].stream)); !errors.Is(err2, err) || done || len(events) > 0 {
 			t.Fatal("failed stream recovered")
 		}
 		sc, _ = ex.NewStreamConverter()

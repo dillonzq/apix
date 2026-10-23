@@ -115,7 +115,8 @@ func newGateway(t *testing.T, cfg gateway.Config) *gateway.Gateway {
 
 func do(t *testing.T, g *gateway.Gateway, body string) (*gateway.Response, *apix.Error) {
 	t.Helper()
-	return g.Do(context.Background(), gateway.Request{Protocol: anthropic.Messages, Payload: apix.Payload{Body: []byte(body)}})
+	resp, err := g.Do(context.Background(), gateway.Request{Protocol: anthropic.Messages, Payload: apix.Payload{Body: []byte(body)}})
+	return resp, apix.AsError(err)
 }
 
 func readAll(t *testing.T, resp *gateway.Response) []byte {
@@ -195,7 +196,7 @@ func TestFailoverToConvertibleProtocol(t *testing.T) {
 			if req.path != "/v1/chat/completions" || req.header.Get("Authorization") != "Bearer k-chat" || req.body["model"] != "gpt-up" {
 				t.Fatalf("chat request %s %v %v", req.path, req.header, req.body)
 			}
-			if len(resp.Attempts) != 2 || resp.Attempts[0].Status != status || resp.Attempts[0].Err == nil || !resp.Attempts[0].Err.Retryable || resp.Attempts[1].Native {
+			if len(resp.Attempts) != 2 || resp.Attempts[0].Status != status || resp.Attempts[0].Err == nil || !apix.AsError(resp.Attempts[0].Err).Retryable || resp.Attempts[1].Native {
 				t.Fatalf("attempts %+v", resp.Attempts)
 			}
 			if len(seen) != 2 || seen[1].Endpoint != "chat" {
@@ -227,7 +228,7 @@ func TestNetworkFailover(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Attempts[0].Err.Class != apix.ClassNetwork || resp.Attempts[0].Status != 0 || resp.Endpoint != "chat" {
+	if apix.AsError(resp.Attempts[0].Err).Class != apix.ClassNetwork || resp.Attempts[0].Status != 0 || resp.Endpoint != "chat" {
 		t.Fatalf("attempts %+v", resp.Attempts)
 	}
 }
@@ -236,7 +237,7 @@ func TestConversionRejectionTriesNextCandidate(t *testing.T) {
 	strict := newUpstream(t, respond(200, "application/json", messagesReply))
 	lenient := newUpstream(t, respond(200, "application/json", messagesReply))
 	safe := messagesUpstream(strict)
-	safe.ID, safe.Priority, safe.Options = "safe", 0, apix.ExchangeOptions{LossPolicy: apix.LossPolicySafe}
+	safe.ID, safe.Priority, safe.Options = "safe", 0, route.EndpointOptions{LossPolicy: apix.LossPolicySafe}
 	allow := messagesUpstream(lenient)
 	allow.ID, allow.Priority = "allow", 1
 	g := newGateway(t, gateway.Config{Upstreams: []gateway.Upstream{safe, allow}})
@@ -244,7 +245,7 @@ func TestConversionRejectionTriesNextCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strict.hits() != 0 || lenient.hits() != 1 || resp.Attempts[0].Status != 0 || resp.Attempts[0].Err.Class != apix.ClassUnsupported {
+	if strict.hits() != 0 || lenient.hits() != 1 || resp.Attempts[0].Status != 0 || apix.AsError(resp.Attempts[0].Err).Class != apix.ClassUnsupported {
 		t.Fatalf("attempts %+v", resp.Attempts)
 	}
 	if len(resp.Diagnostics()) == 0 {
@@ -289,7 +290,7 @@ func TestStreamFailoverBeforeFirstEvent(t *testing.T) {
 	if names[0] != "message_start" || names[len(names)-1] != "message_stop" || !bytes.Contains(bytes.Join([][]byte{events[2].Data}, nil), []byte("hello")) {
 		t.Fatalf("events %v", names)
 	}
-	if resp.Attempts[0].Err == nil || !resp.Attempts[0].Err.Retryable {
+	if resp.Attempts[0].Err == nil || !apix.AsError(resp.Attempts[0].Err).Retryable {
 		t.Fatalf("first attempt %+v", resp.Attempts[0])
 	}
 }
@@ -435,7 +436,7 @@ func TestContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	_, err := g.Do(ctx, gateway.Request{Protocol: anthropic.Messages, Payload: apix.Payload{Body: []byte(clientRequest)}})
-	if err == nil || err.Class != apix.ClassNetwork || err.Retryable {
+	if e := apix.AsError(err); e == nil || e.Class != apix.ClassNetwork || e.Retryable || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err %v", err)
 	}
 	if chat.hits() != 0 {
@@ -474,7 +475,7 @@ func TestOutputProtocol(t *testing.T) {
 	}
 	bad := request(`{"model":"fast","messages":[]}`)
 	bad.Output = "nope"
-	if _, err := g.Do(context.Background(), bad); err == nil || err.Class != apix.ClassUnsupported || chat.hits() != 2 {
+	if _, err := g.Do(context.Background(), bad); err == nil || apix.AsError(err).Class != apix.ClassUnsupported || chat.hits() != 2 {
 		t.Fatalf("unregistered output: %v, hits %d", err, chat.hits())
 	}
 }

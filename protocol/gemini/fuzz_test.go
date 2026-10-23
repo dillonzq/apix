@@ -2,6 +2,7 @@ package gemini_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -39,7 +40,7 @@ func FuzzGeminiStreamChunkBoundaries(f *testing.F) {
 				t.Fatal(err)
 			}
 			var frames [][]byte
-			var failure *apix.Error
+			var failure error
 			for i := 0; i < len(wire); i += step {
 				events, done, e := sc.Feed(wire[i:min(i+step, len(wire))])
 				frames = append(frames, events...)
@@ -58,11 +59,11 @@ func FuzzGeminiStreamChunkBoundaries(f *testing.F) {
 			}
 			class := apix.Class("")
 			if failure != nil {
-				class = failure.Class
-				if ev, done, e := sc.Feed([]byte(fixtures[from].stream)); e != failure || done || len(ev) > 0 {
+				class = apix.AsError(failure).Class
+				if ev, done, e := sc.Feed([]byte(fixtures[from].stream)); !errors.Is(e, failure) || done || len(ev) > 0 {
 					t.Fatal("failure is not terminal")
 				}
-				if ev, e := sc.Finish(); e != failure || len(ev) > 0 {
+				if ev, e := sc.Finish(); !errors.Is(e, failure) || len(ev) > 0 {
 					t.Fatal("Finish recovered from failure")
 				}
 			}

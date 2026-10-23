@@ -8,10 +8,14 @@ import (
 
 	"github.com/dillonzq/apix/internal/errclass"
 	"github.com/dillonzq/apix/internal/llm/adapter/shared"
+	"github.com/dillonzq/apix/internal/llm/ids"
 )
 
-const Format = "interactions"
+// Format is the internal format name of Interactions.
+const Format = ids.FormatInteractions
 
+// ConvertResponse validates an ordinary Interactions response and returns it
+// unchanged, or the classified upstream error.
 func ConvertResponse(status int, body []byte) ([]byte, *errclass.Error) {
 	if status >= 400 {
 		return nil, shared.UpstreamStatusError(status, body)
@@ -36,15 +40,19 @@ func ConvertResponse(status int, body []byte) ([]byte, *errclass.Error) {
 	return body, nil
 }
 
+// StreamConverter validates an Interactions SSE stream and passes its frames
+// through unchanged.
 type StreamConverter struct {
 	framer         *shared.SSEFramer
 	terminal, done bool
 	failure        *errclass.Error
 }
 
+// NewStreamConverter returns a converter for one stream.
 func NewStreamConverter() *StreamConverter {
 	return &StreamConverter{framer: shared.NewSSEFramer(true)}
 }
+
 func (s *StreamConverter) Feed(chunk []byte) ([][]byte, bool, *errclass.Error) {
 	if s.failure != nil {
 		return nil, false, s.failure
@@ -57,6 +65,7 @@ func (s *StreamConverter) Feed(chunk []byte) ([][]byte, bool, *errclass.Error) {
 	s.failure = err
 	return out, s.done && err == nil, err
 }
+
 func (s *StreamConverter) drain() ([][]byte, *errclass.Error) {
 	var out [][]byte
 	for {
@@ -122,6 +131,7 @@ func (s *StreamConverter) drain() ([][]byte, *errclass.Error) {
 		}
 	}
 }
+
 func (s *StreamConverter) Finish() ([][]byte, *errclass.Error) {
 	if s.failure != nil {
 		return nil, s.failure

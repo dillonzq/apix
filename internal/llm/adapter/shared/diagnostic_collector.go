@@ -11,6 +11,7 @@ func (c *ConversionContext) Diagnostics() []Diagnostic {
 	}
 	return append([]Diagnostic(nil), c.diagnostics.items...)
 }
+
 func (c *ConversionContext) Record(d Diagnostic) {
 	if c == nil {
 		return

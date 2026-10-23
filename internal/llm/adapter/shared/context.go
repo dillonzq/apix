@@ -71,5 +71,6 @@ func (c *ConversionContext) Identity(name string) responseToolIdentity {
 	}
 	return c.Tools.Identity(name)
 }
+
 func (c *ConversionContext) IsCustom(name string) bool { return c.Identity(name).isCustom }
 func (c *ConversionContext) IsShell(name string) bool  { return c.Identity(name).isShell }

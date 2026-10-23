@@ -828,6 +828,7 @@ func validateOutputItem(item functionCallItem) *errclass.Error {
 	}
 	return nil
 }
+
 func knownResponseMetadataEvent(name string) bool {
 	switch name {
 	case "response.in_progress", "response.content_part.added", "response.content_part.done", "response.reasoning_summary_part.added", "response.reasoning_summary_part.done", "response.web_search_call.in_progress", "response.web_search_call.searching", "response.web_search_call.completed":

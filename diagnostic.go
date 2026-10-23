@@ -14,6 +14,14 @@ const (
 	LossPolicyStrict LossPolicy = "strict"
 )
 
+func (p LossPolicy) valid() bool {
+	switch p {
+	case "", LossPolicyAllow, LossPolicySafe, LossPolicyStrict:
+		return true
+	}
+	return false
+}
+
 // Diagnostic describes a field omitted or approximated by conversion.
 // Messages name fields and never include request values or upstream content.
 type Diagnostic struct {

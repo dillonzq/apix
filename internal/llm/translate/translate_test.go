@@ -5,9 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/internal/llm/translate"
-	"github.com/dillonzq/apix/protocol/anthropic"
-	"github.com/dillonzq/apix/protocol/openai"
 	"github.com/dillonzq/apix/thinking"
 )
 
@@ -195,17 +194,35 @@ func TestErrorsAndSuffixPriority(t *testing.T) {
 		t.Fatalf("classified error: %+v", err)
 	}
 	suffix := thinking.ParseSuffix("m(8192)")
-	source := thinking.StripSupersededReasoning(anthropic.Messages, openai.ChatCompletions, []byte(`{"messages":[],"reasoning_effort":"unrepresentable"}`))
-	body, err := translate.ConvertRequest("messages", suffix.Model, "chat-completions", source, nil)
+	source := translate.StripReasoning("messages", "chat-completions", []byte(`{"messages":[],"reasoning_effort":"unrepresentable"}`))
+	state := translate.NewRequestState()
+	state.Options.MessagesThinkingMode = "manual"
+	body, err := translate.ConvertRequest("messages", suffix.Model, "chat-completions", source, state)
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, err = thinking.ApplySuffixWith(anthropic.Messages, body, suffix, thinking.Options{MessagesManual: true})
+	body, err = translate.ApplyReasoning("messages", "chat-completions", body, *suffix.Reasoning(), state)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if object(t, body)["thinking"].(map[string]any)["budget_tokens"] != float64(8192) {
 		t.Fatalf("suffix budget: %s", body)
+	}
+	// Gemini has no level above high: the override is approximated and
+	// reported, and strict policies reject the approximation.
+	for _, policy := range []translate.LossPolicy{translate.LossPolicyAllow, translate.LossPolicyStrict} {
+		state := translate.NewRequestState()
+		state.Options.LossPolicy = policy
+		body, err := translate.ApplyReasoning("gemini", "chat-completions", []byte(`{"contents":[]}`), apix.Reasoning{Effort: "max"}, state)
+		if policy == translate.LossPolicyStrict {
+			if err == nil {
+				t.Fatalf("strict accepted an approximated level: %s", body)
+			}
+			continue
+		}
+		if err != nil || !strings.Contains(string(body), `"thinkingLevel":"high"`) || len(state.Diagnostics()) != 1 {
+			t.Fatalf("approximated level = %s %v %+v", body, err, state.Diagnostics())
+		}
 	}
 }
 

@@ -7,7 +7,7 @@ import (
 
 	"github.com/dillonzq/apix/internal/errclass"
 	"github.com/dillonzq/apix/internal/llm/adapter/shared"
-	"github.com/dillonzq/apix/thinking"
+	"github.com/dillonzq/apix/internal/llm/reasoning"
 )
 
 type anthropicBlock = map[string]any
@@ -175,7 +175,7 @@ func finalize(req *messagesRequest, system []string, effort string, opts shared.
 // Auto leaves thinking unspecified so the upstream chooses its default.
 // Client output limits and sampling controls stay intact for upstream validation.
 func applyThinking(req *messagesRequest, effort, mode string) *errclass.Error {
-	budget, ok := thinking.BudgetFromEffort(effort)
+	budget, ok := reasoning.BudgetFromEffort(effort)
 	if !ok {
 		return &errclass.Error{Class: errclass.ClassUnsupported,
 			Message: fmt.Sprintf("reasoning effort %q has no Messages equivalent", effort)}

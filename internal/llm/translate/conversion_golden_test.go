@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
-	"github.com/dillonzq/apix/internal/llm/translate"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/dillonzq/apix/internal/llm/translate"
 )
 
 var updateGolden = flag.Bool("update", false, "update reviewed protocol conversion snapshots")

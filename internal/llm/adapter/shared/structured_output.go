@@ -31,6 +31,7 @@ func ConvertOutputFormat(from, to string, raw json.RawMessage, ctx *ConversionCo
 	}
 	return target[key], nil
 }
+
 func cloneRaw(source map[string]json.RawMessage) map[string]json.RawMessage {
 	out := make(map[string]json.RawMessage, len(source))
 	for k, v := range source {
@@ -38,6 +39,7 @@ func cloneRaw(source map[string]json.RawMessage) map[string]json.RawMessage {
 	}
 	return out
 }
+
 func readOutputFormat(from string, source map[string]json.RawMessage) (map[string]json.RawMessage, *errclass.Error) {
 	raw := source["response_format"]
 	if from != FormatChatCompletions {
@@ -84,6 +86,7 @@ func readOutputFormat(from string, source map[string]json.RawMessage) (map[strin
 	}
 	return format, nil
 }
+
 func writeOutputFormat(to string, format map[string]json.RawMessage, target map[string]json.RawMessage, state *ConversionContext, from string) *errclass.Error {
 	var typ string
 	DecodeProbe(format["type"], &typ)

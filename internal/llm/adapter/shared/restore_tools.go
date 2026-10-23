@@ -87,6 +87,7 @@ func RestoreToolItem(raw json.RawMessage, tools *ConversionContext, shellItemIDs
 	}
 	return out, true
 }
+
 func RestoreResponseTools(body []byte, tools *ConversionContext, shellItemIDs ...map[string]string) []byte {
 	var doc map[string]json.RawMessage
 	if json.Unmarshal(body, &doc) != nil {

@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/dillonzq/apix"
-	"github.com/dillonzq/apix/internal/llm/codec"
 	"github.com/dillonzq/apix/internal/llm/translate"
 	"github.com/dillonzq/apix/protocol/anthropic"
 	"github.com/dillonzq/apix/protocol/gemini"
@@ -55,12 +54,6 @@ func registry(t *testing.T) *apix.Registry {
 	return reg
 }
 
-func TestVendorIDsMatchEngine(t *testing.T) {
-	if openai.ChatCompletions != codec.ChatCompletions || openai.Responses != codec.Responses || anthropic.Messages != codec.Messages || gemini.GenerateContent != codec.Gemini {
-		t.Fatal("vendor protocol IDs drifted from internal/llm/codec")
-	}
-}
-
 func TestSpecs(t *testing.T) {
 	reg := registry(t)
 	for p, want := range map[apix.Protocol]string{openai.ChatCompletions: "/v1/chat/completions", openai.Responses: "/v1/responses", anthropic.Messages: "/v1/messages"} {
@@ -77,10 +70,20 @@ func TestSpecs(t *testing.T) {
 	}
 }
 
-func drain(t *testing.T, sc interface {
-	Feed([]byte) ([][]byte, bool, *apix.Error)
-	Finish() ([][]byte, *apix.Error)
-}, wire string) []byte {
+func drainEngine(t *testing.T, sc translate.StreamConverter, wire string) []byte {
+	t.Helper()
+	events, _, err := sc.Feed([]byte(wire))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tail, err := sc.Finish()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bytes.Join(append(events, tail...), nil)
+}
+
+func drain(t *testing.T, sc apix.StreamConverter, wire string) []byte {
 	t.Helper()
 	events, _, err := sc.Feed([]byte(wire))
 	if err != nil {
@@ -116,18 +119,18 @@ func exchangeMatchesEngine(t *testing.T, reg *apix.Registry, client, upstream, o
 		out = from
 	}
 	state := translate.NewRequestState()
-	ex, err := reg.NewExchange(client, upstream, apix.ExchangeOptions{Output: output})
-	if err != nil {
-		t.Fatal(err)
+	ex, xerr := reg.NewExchange(client, upstream, apix.ExchangeOptions{Output: output})
+	if xerr != nil {
+		t.Fatal(xerr)
 	}
 
 	wantReq, err := translate.ConvertRequest(to, "up", from, []byte(fixtures[client].request), state)
 	if err != nil {
 		t.Fatal(err)
 	}
-	gotReq, err := ex.ConvertRequest(apix.Payload{Body: []byte(fixtures[client].request)}, "up")
-	if err != nil {
-		t.Fatal(err)
+	gotReq, gerr := ex.ConvertRequest(apix.Payload{Body: []byte(fixtures[client].request)}, "up")
+	if gerr != nil {
+		t.Fatal(gerr)
 	}
 	if !bytes.Equal(gotReq.Body, wantReq) || gotReq.ContentType != "application/json" {
 		t.Fatalf("request:\n got %s\nwant %s", gotReq.Body, wantReq)
@@ -137,9 +140,9 @@ func exchangeMatchesEngine(t *testing.T, reg *apix.Registry, client, upstream, o
 	if err != nil {
 		t.Fatal(err)
 	}
-	gotResp, err := ex.ConvertResponse(200, apix.Payload{Body: []byte(fixtures[upstream].response)})
-	if err != nil {
-		t.Fatal(err)
+	gotResp, gerr := ex.ConvertResponse(200, apix.Payload{Body: []byte(fixtures[upstream].response)})
+	if gerr != nil {
+		t.Fatal(gerr)
 	}
 	if normalizeTimes(gotResp.Body) != normalizeTimes(wantResp) {
 		t.Fatalf("response:\n got %s\nwant %s", gotResp.Body, wantResp)
@@ -149,11 +152,11 @@ func exchangeMatchesEngine(t *testing.T, reg *apix.Registry, client, upstream, o
 	if err != nil {
 		t.Fatal(err)
 	}
-	gotSC, err := ex.NewStreamConverter()
-	if err != nil {
-		t.Fatal(err)
+	gotSC, gerr := ex.NewStreamConverter()
+	if gerr != nil {
+		t.Fatal(gerr)
 	}
-	want, got := drain(t, wantSC, fixtures[upstream].stream), drain(t, gotSC, fixtures[upstream].stream)
+	want, got := drainEngine(t, wantSC, fixtures[upstream].stream), drain(t, gotSC, fixtures[upstream].stream)
 	if normalizeTimes(got) != normalizeTimes(want) {
 		t.Fatalf("stream:\n got %s\nwant %s", got, want)
 	}
@@ -201,7 +204,7 @@ func TestLossPolicyAndDiagnostics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ex.ConvertRequest(body, "m"); err == nil || err.Class != apix.ClassUnsupported {
+	if _, err := ex.ConvertRequest(body, "m"); err == nil || apix.AsError(err).Class != apix.ClassUnsupported {
 		t.Fatalf("safe policy accepted a semantic loss: %v", err)
 	}
 	ex, _ = reg.NewExchange(openai.ChatCompletions, anthropic.Messages, apix.ExchangeOptions{})
@@ -256,13 +259,13 @@ func TestResponsesNormalizeTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ex, err := reg.NewExchange(openai.Responses, openai.Responses, apix.ExchangeOptions{Ext: openai.ResponsesOptions{NormalizeTools: true}})
-	if err != nil {
-		t.Fatal(err)
+	ex, gerr := reg.NewExchange(openai.Responses, openai.Responses, apix.ExchangeOptions{Ext: openai.ResponsesOptions{NormalizeTools: true}})
+	if gerr != nil {
+		t.Fatal(gerr)
 	}
-	got, err := ex.ConvertRequest(apix.Payload{Body: []byte(body)}, "up")
-	if err != nil || !bytes.Equal(got.Body, want) {
-		t.Fatalf("got %s %v\nwant %s", got.Body, err, want)
+	got, gerr := ex.ConvertRequest(apix.Payload{Body: []byte(body)}, "up")
+	if gerr != nil || !bytes.Equal(got.Body, want) {
+		t.Fatalf("got %s %v\nwant %s", got.Body, gerr, want)
 	}
 	plain, _ := reg.NewExchange(openai.Responses, openai.Responses, apix.ExchangeOptions{})
 	if got, _ := plain.ConvertRequest(apix.Payload{Body: []byte(body)}, "up"); bytes.Contains(got.Body, []byte("ns__f")) || !bytes.Contains(got.Body, []byte(`"namespace"`)) {
@@ -280,7 +283,7 @@ func TestRejectsForeignOptions(t *testing.T) {
 		{anthropic.Messages, openai.ResponsesOptions{}},
 		{openai.Responses, "normalize"},
 	} {
-		if _, err := reg.NewExchange(openai.ChatCompletions, tc.upstream, apix.ExchangeOptions{Ext: tc.ext}); err == nil || err.Class != apix.ClassUnsupported {
+		if _, err := reg.NewExchange(openai.ChatCompletions, tc.upstream, apix.ExchangeOptions{Ext: tc.ext}); err == nil || apix.AsError(err).Class != apix.ClassUnsupported {
 			t.Fatalf("%s accepted %T: %v", tc.upstream, tc.ext, err)
 		}
 	}

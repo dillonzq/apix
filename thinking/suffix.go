@@ -3,6 +3,8 @@ package thinking
 import (
 	"strconv"
 	"strings"
+
+	"github.com/dillonzq/apix"
 )
 
 // Suffix describes an optional trailing "model(value)" reasoning control.
@@ -60,4 +62,19 @@ func suffixConfig(raw string) (string, *int64) {
 		return "", nil
 	}
 	return effort, &budget
+}
+
+// Reasoning returns the override a recognized suffix selects, for
+// apix.ExchangeOptions.Reasoning. It is nil when the suffix is absent or its
+// value is not recognized.
+func (s Suffix) Reasoning() *apix.Reasoning {
+	if s.Effort == "" {
+		return nil
+	}
+	r := &apix.Reasoning{Effort: s.Effort}
+	if s.Budget != nil {
+		budget := *s.Budget
+		r.Budget = &budget
+	}
+	return r
 }

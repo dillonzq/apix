@@ -57,6 +57,7 @@ func (c *conversion) groundingCitations(candidate object) []shared.Citation {
 	}
 	return out
 }
+
 func (c *conversion) applyCitations(candidate object, content, items []any) []any {
 	citations := c.groundingCitations(candidate)
 	chatAnnotations := make([]any, 0, len(citations))
@@ -108,6 +109,7 @@ func (c *conversion) applyCitations(candidate object, content, items []any) []an
 	}
 	return nonNil(chatAnnotations)
 }
+
 func (c *conversion) responseGrounding(root object, parts []any) object {
 	var citations []shared.Citation
 	read := func(v any, text string, offset int) {
@@ -149,6 +151,7 @@ func (c *conversion) responseGrounding(root object, parts []any) object {
 	}
 	return c.citationsToGrounding(citations, parts)
 }
+
 func (c *conversion) citationsToGrounding(citations []shared.Citation, parts []any) object {
 	var chunks, supports []any
 	for _, citation := range citations {

@@ -3,9 +3,9 @@ package translate
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/dillonzq/apix/internal/llm/adapter/gemini"
 
 	"github.com/dillonzq/apix/internal/llm/adapter/chatcompletions"
+	"github.com/dillonzq/apix/internal/llm/adapter/gemini"
 	"github.com/dillonzq/apix/internal/llm/adapter/messages"
 	"github.com/dillonzq/apix/internal/llm/adapter/responses"
 	"github.com/dillonzq/apix/internal/llm/adapter/shared"
@@ -144,6 +144,7 @@ func newPublicStreamConverter(converter StreamConverter, from, to string) *publi
 	}
 	return sc
 }
+
 func (sc *publicStreamConverter) Feed(chunk []byte) ([][]byte, bool, *Error) {
 	if sc.failure != nil {
 		return nil, false, sc.failure
@@ -166,6 +167,7 @@ func (sc *publicStreamConverter) Feed(chunk []byte) ([][]byte, bool, *Error) {
 	sc.done = done && err == nil
 	return sc.encode(events), done, err
 }
+
 func (sc *publicStreamConverter) drain() ([][]byte, bool, *Error) {
 	var events [][]byte
 	for {
@@ -190,6 +192,7 @@ func (sc *publicStreamConverter) drain() ([][]byte, bool, *Error) {
 		}
 	}
 }
+
 func (sc *publicStreamConverter) Finish() ([][]byte, *Error) {
 	if sc.failure != nil {
 		return nil, sc.failure
@@ -220,6 +223,7 @@ func (sc *publicStreamConverter) Finish() ([][]byte, *Error) {
 	}
 	return sc.encode(events), err
 }
+
 func (sc *publicStreamConverter) encode(events [][]byte) [][]byte {
 	if !sc.sequenced {
 		return events

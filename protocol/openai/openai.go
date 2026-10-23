@@ -6,13 +6,15 @@ package openai
 import (
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/internal/llm/codec"
+	"github.com/dillonzq/apix/internal/llm/ids"
 )
 
 const (
-	// ChatCompletions is POST /v1/chat/completions.
-	ChatCompletions apix.Protocol = "openai.chat-completions"
-	// Responses is POST /v1/responses.
-	Responses apix.Protocol = "openai.responses"
+	// ChatCompletions is "openai.chat-completions": POST /v1/chat/completions.
+	ChatCompletions = ids.ChatCompletions
+	// Responses is "openai.responses": POST /v1/responses. A native Responses
+	// exchange reports stored response IDs through apix.StateReporter.
+	Responses = ids.Responses
 )
 
 // ResponsesOptions configures exchanges whose upstream speaks Responses. Pass
@@ -28,11 +30,11 @@ type ResponsesOptions struct {
 }
 
 // ChatCompletionsCodec returns the Chat Completions codec.
-func ChatCompletionsCodec() apix.Codec { return codec.New(codec.ChatCompletions, nil) }
+func ChatCompletionsCodec() apix.Codec { return codec.New(ChatCompletions, nil) }
 
 // ResponsesCodec returns the Responses codec. It accepts ResponsesOptions.
 func ResponsesCodec() apix.Codec {
-	return codec.New(codec.Responses, func(ext any) (codec.Options, bool) {
+	return codec.New(Responses, func(ext any) (codec.Options, bool) {
 		switch o := ext.(type) {
 		case ResponsesOptions:
 			return codec.Options{NormalizeResponsesTools: o.NormalizeTools}, true

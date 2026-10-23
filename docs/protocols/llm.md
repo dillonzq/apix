@@ -8,7 +8,9 @@ GenerateContent and native Interactions are documented separately in [Gemini pro
 
 ## Configuration
 
-The LLM codecs support media input, local shell adaptation, cache hint retention, and reasoning history replay. Configure native Responses tool normalization with `openai.ResponsesOptions{NormalizeTools: true}` and unsigned thinking replay with `anthropic.MessagesOptions{AllowUnsignedThinking: true}`. Use `sse.Decoder` to decode SSE frames.
+The LLM codecs support media input, local shell adaptation, cache hint retention, and reasoning history replay. Configure native Responses tool normalization with `openai.ResponsesOptions{NormalizeTools: true}`, unsigned thinking replay with `anthropic.MessagesOptions{AllowUnsignedThinking: true}`, and reasoning overrides with `apix.ExchangeOptions.Reasoning`. Use `sse.Decoder` to decode SSE frames.
+
+`Inspect` also reports the upstream state a request refers to (`RequestInfo.Affinity`, such as `response:resp_1` or `file:file-1`) and whether it continues upstream-owned context (`RequestInfo.Stateful`). Native Responses exchanges report stored response IDs through `apix.StateReporter`. See [routing](../routing.md#upstream-owned-state).
 
 ## Native paths and responsibilities
 
@@ -111,28 +113,26 @@ Same-protocol responses generally pass through unchanged and preserve these fiel
 
 Reverse mapping uses thresholds, so round trips are not exact. Positive budgets above 24576 map to `xhigh`, never automatically to `max`. The library does not filter against model capabilities or clamp budgets.
 
-Default entry points do not parse trailing `model(value)`. To give a suffix precedence, explicitly use:
+Default entry points do not parse trailing `model(value)`. To give a suffix precedence, pass it to the exchange as a reasoning override:
 
 ```go
 import "github.com/dillonzq/apix/thinking"
 
-// client and upstream are protocol IDs such as openai.ChatCompletions.
 suffix := thinking.ParseSuffix(requestedModel)
-source := payload
-if suffix.Effort != "" {
-    source = thinking.StripSupersededReasoning(upstream, client, source)
-}
-out, err := ex.ConvertRequest(apix.Payload{Body: source}, suffix.Model)
-if err == nil {
-    out.Body, err = thinking.ApplySuffix(upstream, out.Body, suffix)
-}
+ex, err := reg.NewExchange(client, upstream, apix.ExchangeOptions{
+    Reasoning: suffix.Reasoning(), // nil for an absent or unknown suffix
+    Ext:       upstreamOptions,    // e.g. anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}
+})
+out, err := ex.ConvertRequest(apix.Payload{Body: payload}, suffix.Model)
 ```
 
-Recognized suffixes replace body reasoning controls. `none` / `0` disables reasoning; `auto` / `-1` uses upstream defaults. Chat and Responses receive an effort; numeric suffixes map through the thresholds above. Messages follows the same thinking modes as the exchange: `ApplySuffix` uses adaptive thinking with `output_config.effort`, and `thinking.ApplySuffixWith(upstream, out.Body, suffix, thinking.Options{MessagesManual: true})` sends enabled thinking with a table budget or a numeric suffix's exact budget. Use the manual form when the exchange uses `anthropic.ThinkingManual`.
+The exchange strips the client's own control where conversion would derive the target control from it, converts, and then renders the override with the same options as the rest of the exchange, so the suffix and the upstream's thinking mode cannot disagree. `gateway.Config{ThinkingSuffix: true}` does all of this for every request, routing by the model without the suffix. Hosts that build upstream bodies themselves can still call `thinking.StripSupersededReasoning` before conversion and `thinking.ApplySuffixWith(upstream, body, suffix, thinking.Options{...})` after it, setting `MessagesManual` and `GeminiMode` to match the exchange.
+
+Recognized suffixes replace body reasoning controls. `none` / `0` disables reasoning; `auto` / `-1` uses upstream defaults. Chat and Responses receive an effort; numeric suffixes map through the thresholds above. Messages follows the exchange's thinking mode: adaptive thinking with `output_config.effort` by default, or enabled thinking with a table budget or a numeric suffix's exact budget under `anthropic.ThinkingManual`. GenerateContent follows `gemini.GenerateContentOptions.ThinkingMode`: budget mode sends `thinkingBudget`, level mode sends `thinkingLevel`, and the default sends numeric suffixes as budgets and levels as levels. Gemini has no level above `high`, so `xhigh` and `max` become `high` and are reported as a non-semantic request loss.
 
 Messages disables `thinking.display` when turning thinking off and always supersedes the client's `output_config.effort` and `budget_tokens`; active overrides retain applicable display metadata. Responses overrides only `reasoning.effort`, preserving sibling fields.
 
-Unknown suffixes can still be parsed and stripped, but leave body reasoning controls unchanged. Only call `StripSupersededReasoning` for a recognized suffix. Callers decide whether literal parenthesized model IDs should be routed as-is.
+Unknown suffixes can still be parsed and stripped, but leave body reasoning controls unchanged; `Suffix.Reasoning` returns nil for them. Only call `StripSupersededReasoning` for a recognized suffix. Callers decide whether literal parenthesized model IDs should be routed as-is.
 
 Historical reasoning is mapped separately from reasoning controls. Chat assistant `reasoning_content` (or readable `reasoning` / `reasoning_details` aliases) and Messages assistant `thinking` are preserved as Responses `content` parts with `type: reasoning_text`. Responses original content maps back to Chat `reasoning_content`; the reasoning, assistant text, and following parallel calls share an assistant message, with tool results and user/system messages delimiting turns. Messages thinking maps to Chat reasoning on its original assistant message. Chat → Messages and Responses → Messages omit unsigned thinking by default, including with nil or zero-value state. For an upstream known to accept unsigned thinking, explicitly pass `anthropic.MessagesOptions{AllowUnsignedThinking: true}` as the exchange option with the default or `LossPolicyAllow` policy. This option affects request conversion only; native Messages history and response display are unchanged.
 

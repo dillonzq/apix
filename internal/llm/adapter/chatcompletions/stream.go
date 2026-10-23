@@ -311,6 +311,7 @@ func mergeToolName(current, next string) string {
 	}
 	return current + next
 }
+
 func (sc *StreamConverter) validateTools() *errclass.Error {
 	for _, tool := range sc.tools {
 		if tool.id == "" || tool.name == "" {

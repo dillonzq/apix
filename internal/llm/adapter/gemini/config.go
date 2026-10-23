@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/dillonzq/apix/internal/llm/adapter/shared"
-	"github.com/dillonzq/apix/thinking"
+	"github.com/dillonzq/apix/internal/llm/reasoning"
 )
 
 func (c *conversion) checkSourceFields(root object) {
@@ -19,6 +19,7 @@ func (c *conversion) checkSourceFields(root object) {
 	}
 	c.unknown(root, "", known...)
 }
+
 func (c *conversion) toConfig(root, out object) {
 	cfg := object{}
 	for from, to := range map[string]string{"temperature": "temperature", "top_p": "topP", "top_k": "topK"} {
@@ -92,12 +93,14 @@ func (c *conversion) toConfig(root, out object) {
 		out["generationConfig"] = cfg
 	}
 }
+
 func ensure(o object) object {
 	if o == nil {
 		return object{}
 	}
 	return o
 }
+
 func (c *conversion) effort(e string) object {
 	if e == "auto" {
 		return object{"thinkingBudget": -1}
@@ -105,18 +108,19 @@ func (c *conversion) effort(e string) object {
 	if e == "none" {
 		return object{"thinkingBudget": 0}
 	}
-	if _, ok := thinking.BudgetFromEffort(e); !ok {
+	if _, ok := reasoning.BudgetFromEffort(e); !ok {
 		c.reject("unsupported reasoning effort")
 	}
 	return object{"thinkingLevel": e}
 }
+
 func (c *conversion) thinkingMode(t object) object {
 	if t == nil {
 		return nil
 	}
 	mode := c.ctx.Options.GeminiThinkingMode
 	if mode == "budget" && t["thinkingLevel"] != nil {
-		budget, ok := thinking.BudgetFromEffort(str(t["thinkingLevel"]))
+		budget, ok := reasoning.BudgetFromEffort(str(t["thinkingLevel"]))
 		if !ok {
 			c.reject("reasoning level has no budget equivalent")
 		}
@@ -134,7 +138,7 @@ func (c *conversion) thinkingMode(t object) object {
 			budget = number(v)
 		}
 		if budget > 0 {
-			level, ok := thinking.EffortFromBudget(budget)
+			level, ok := reasoning.EffortFromBudget(budget)
 			if !ok {
 				c.reject("reasoning budget has no level equivalent")
 			}
@@ -142,8 +146,16 @@ func (c *conversion) thinkingMode(t object) object {
 			t["thinkingLevel"] = level
 		}
 	}
+	// GenerateContent defines no level above high.
+	if level, ok := t["thinkingLevel"].(string); ok {
+		if mapped, exact := reasoning.GeminiLevel(level); !exact {
+			t["thinkingLevel"] = mapped
+			c.loss("generationConfig.thinkingConfig.thinkingLevel", false)
+		}
+	}
 	return t
 }
+
 func (c *conversion) toSchema(root, cfg object) {
 	var format object
 	switch c.from {
@@ -186,6 +198,7 @@ func (c *conversion) toSchema(root, cfg object) {
 		c.loss("output_format.strict", true)
 	}
 }
+
 func (c *conversion) fromConfig(root, out object) {
 	cfg := c.object(first(root, "generationConfig", "generation_config"), "generationConfig")
 	c.unknown(cfg, "generationConfig.", "temperature", "topP", "top_p", "topK", "top_k", "maxOutputTokens", "max_output_tokens", "stopSequences", "stop_sequences", "candidateCount", "candidate_count", "responseMimeType", "response_mime_type", "responseJsonSchema", "response_json_schema", "responseSchema", "response_schema", "thinkingConfig", "thinking_config")
@@ -233,7 +246,7 @@ func (c *conversion) fromConfig(root, out object) {
 	}
 	if level == "" && budget != nil {
 		var ok bool
-		level, ok = thinking.EffortFromBudget(number(budget))
+		level, ok = reasoning.EffortFromBudget(number(budget))
 		if !ok {
 			c.reject("unsupported thinking budget")
 		}
@@ -262,7 +275,7 @@ func (c *conversion) fromConfig(root, out object) {
 				} else if budget != nil {
 					out["thinking"] = object{"type": "enabled", "budget_tokens": budget}
 				} else {
-					value, _ := thinking.BudgetFromEffort(level)
+					value, _ := reasoning.BudgetFromEffort(level)
 					out["thinking"] = object{"type": "enabled", "budget_tokens": value}
 				}
 			}
@@ -326,6 +339,7 @@ func (c *conversion) fromConfig(root, out object) {
 		}
 	}
 }
+
 func (c *conversion) toTools(root, out object) {
 	var declarations, tools []any
 	for _, tv := range c.array(root["tools"], "tools") {
@@ -417,6 +431,7 @@ func (c *conversion) toTools(root, out object) {
 		out["toolConfig"] = object{"functionCallingConfig": f}
 	}
 }
+
 func (c *conversion) fromTools(root, out object) {
 	var tools []any
 	for _, tv := range c.array(root["tools"], "tools") {

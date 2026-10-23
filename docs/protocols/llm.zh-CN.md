@@ -12,7 +12,10 @@ LLM 协议实现支持媒体输入、本地 shell 适配、缓存提示保留和
 
 - 原生 Responses 工具规范化使用 Exchange 选项 `openai.ResponsesOptions{NormalizeTools: true}`；
 - 无签名 thinking 回传使用 `anthropic.MessagesOptions{AllowUnsignedThinking: true}`；
+- 推理覆盖使用 `apix.ExchangeOptions.Reasoning`；
 - SSE 解码使用 `sse.Decoder`。
+
+`Inspect` 还会报告请求引用的上游状态（`RequestInfo.Affinity`，如 `response:resp_1`、`file:file-1`），以及请求是否延续上游持有的上下文（`RequestInfo.Stateful`）。原生 Responses Exchange 通过 `apix.StateReporter` 报告已存储的 response ID。详见[路由](../routing.zh-CN.md#上游持有的状态)。
 
 ## 原生路径与职责
 
@@ -115,28 +118,26 @@ Responses 的流式转换接收 `response.reasoning_summary_text.delta/done` 与
 
 反向转换按阈值选择档位，不保证精确往返；正数 budget 超过 24576 时映射为 `xhigh`，不会自动得到 `max`。库不按模型能力过滤或限幅。
 
-默认入口不解析尾部 `model(value)`。需要后缀优先时，显式使用：
+默认入口不解析尾部 `model(value)`。需要后缀优先时，把它作为推理覆盖交给 Exchange：
 
 ```go
 import "github.com/dillonzq/apix/thinking"
 
-// client 和 upstream 为协议 ID，例如 openai.ChatCompletions。
 suffix := thinking.ParseSuffix(requestedModel)
-source := payload
-if suffix.Effort != "" {
-    source = thinking.StripSupersededReasoning(upstream, client, source)
-}
-out, err := ex.ConvertRequest(apix.Payload{Body: source}, suffix.Model)
-if err == nil {
-    out.Body, err = thinking.ApplySuffix(upstream, out.Body, suffix)
-}
+ex, err := reg.NewExchange(client, upstream, apix.ExchangeOptions{
+    Reasoning: suffix.Reasoning(), // 没有后缀或后缀无法识别时为 nil
+    Ext:       upstreamOptions,    // 例如 anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}
+})
+out, err := ex.ConvertRequest(apix.Payload{Body: payload}, suffix.Model)
 ```
 
-识别到的后缀取代请求体中的推理控制；`none` / `0` 关闭，`auto` / `-1` 采用上游默认。Chat 与 Responses 得到 effort，数值后缀按上表阈值转换。Messages 与 Exchange 使用同样的推理模式：`ApplySuffix` 采用 adaptive 并写入 `output_config.effort`；`thinking.ApplySuffixWith(upstream, out.Body, suffix, thinking.Options{MessagesManual: true})` 发送 enabled thinking，档位按表取预算，数值后缀保留精确预算。Exchange 使用 `anthropic.ThinkingManual` 时应选用后者。
+Exchange 会在转换据此推导目标推理控制的路径上剥离客户端自己的控制，完成转换后，再用与本次 Exchange 相同的选项渲染覆盖值，因此后缀与上游推理模式不会互相矛盾。`gateway.Config{ThinkingSuffix: true}` 会对每个请求完成上述步骤，并按去掉后缀的模型名路由。自行构造上游请求体的宿主仍可在转换前调用 `thinking.StripSupersededReasoning`、转换后调用 `thinking.ApplySuffixWith(upstream, body, suffix, thinking.Options{...})`，其中 `MessagesManual`、`GeminiMode` 应与 Exchange 的设置一致。
+
+识别到的后缀取代请求体中的推理控制；`none` / `0` 关闭，`auto` / `-1` 采用上游默认。Chat 与 Responses 得到 effort，数值后缀按上表阈值转换。Messages 遵循 Exchange 的推理模式：默认 adaptive 并写入 `output_config.effort`；使用 `anthropic.ThinkingManual` 时发送 enabled thinking，档位按表取预算，数值后缀保留精确预算。GenerateContent 遵循 `gemini.GenerateContentOptions.ThinkingMode`：budget 模式发送 `thinkingBudget`，level 模式发送 `thinkingLevel`，默认时数值后缀发送预算、档位发送档位。Gemini 没有高于 `high` 的档位，`xhigh` 与 `max` 会变为 `high`，并作为非语义请求损耗报告。
 
 Messages 禁用时移除 `thinking.display`，并始终覆盖客户端的 `output_config.effort` 与 `budget_tokens`；启用时保留可用的 display。Responses 只覆盖 `reasoning.effort`，保留同级字段。
 
-未知后缀仍可被解析并剥离，但不改变请求体推理参数。`StripSupersededReasoning` 只应在后缀已识别时调用。真实包含括号的模型 ID 是否按字面名称路由，由调用方决定。
+未知后缀仍可被解析并剥离，但不改变请求体推理参数，`Suffix.Reasoning` 对其返回 nil。`StripSupersededReasoning` 只应在后缀已识别时调用。真实包含括号的模型 ID 是否按字面名称路由，由调用方决定。
 
 历史推理与推理控制分别映射。Chat assistant 的 `reasoning_content`（或可读的 `reasoning` / `reasoning_details` 别名）与 Messages assistant 的 `thinking` 保留为 Responses `content` 中的 `reasoning_text`。Responses 原始 content 映射回 Chat `reasoning_content`，思考、assistant 正文和随后并行工具调用归入同一消息；工具结果及 user/system 消息划分轮次。Messages thinking 转为原 assistant 消息的 Chat reasoning。Chat → Messages 和 Responses → Messages 默认省略无签名 thinking，nil 或零值状态也采用这一行为。仅在上游明确支持无签名 thinking 时，配合默认或 `LossPolicyAllow` 策略，显式传入 Exchange 选项 `anthropic.MessagesOptions{AllowUnsignedThinking: true}`。该选项只影响请求转换，不改变原生 Messages 历史或响应展示。
 

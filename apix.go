@@ -16,7 +16,10 @@ package apix
 type Kind string
 
 const (
-	KindLLM   Kind = "llm"
+	// KindLLM is text and multimodal generation; the built-in codecs belong to it.
+	KindLLM Kind = "llm"
+	// KindImage and KindAudio are reserved for image and speech protocols.
+	// No built-in codec implements them yet.
 	KindImage Kind = "image"
 	KindAudio Kind = "audio"
 )
@@ -90,6 +93,15 @@ type RequestInfo struct {
 	Stream   bool
 	// Features lists capabilities the request needs, such as FeatureStream.
 	Features []string
+	// Affinity lists keys of upstream-owned state the request refers to, such
+	// as "response:resp_1" or "file:file-1". Routers prefer the endpoint that
+	// owns the state; see StateReporter.
+	Affinity []string
+	// Stateful reports that the request continues upstream-owned context,
+	// such as a previous response, that conversion to another protocol would
+	// drop. Routers send such requests only to endpoints of the client's
+	// protocol.
+	Stateful bool
 }
 
 // Needs reports whether the request needs feature.
@@ -100,6 +112,17 @@ func (i RequestInfo) Needs(feature string) bool {
 		}
 	}
 	return false
+}
+
+// Reasoning overrides an LLM request's reasoning control, for example from a
+// "model(high)" suffix parsed with package thinking. Codecs of other Kinds
+// reject it.
+type Reasoning struct {
+	// Effort is none, auto, minimal, low, medium, high, xhigh, or max.
+	Effort string
+	// Budget is an exact token budget, for upstreams whose control is a
+	// budget. Set it with or instead of Effort; -1 means auto and 0 none.
+	Budget *int64
 }
 
 // AuthScheme describes how an API key is sent: the header name and a prefix

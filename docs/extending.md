@@ -16,20 +16,27 @@ The apix core is protocol neutral. Adding a protocol, or a new Kind such as imag
 ```go
 type Codec interface {
     Spec() apix.ProtocolSpec
-    Inspect(req apix.Payload) (apix.RequestInfo, *apix.Error)
-    EncodeError(err *apix.Error) apix.Payload
+    Inspect(req apix.Payload) (apix.RequestInfo, error)
+    EncodeError(err error) apix.Payload
     Accepts(p apix.Protocol) bool
-    NewExchange(client apix.Protocol, opts apix.ExchangeOptions) (apix.Exchange, *apix.Error)
+    NewExchange(client apix.Protocol, opts apix.ExchangeOptions) (apix.Exchange, error)
 }
 ```
 
 | Method | Notes |
 | --- | --- |
 | `Spec` | Fill in `ID`, `Kind`, `Method`, `Path`, the default `Auth` scheme, fixed `Headers`, and `Stream` framing. `Path` receives the upstream model, for protocols that carry it in the URL. |
-| `Inspect` | Read `Model`, `Stream`, and the `Features` the request needs. Bodies are not always JSON; use `Payload.ContentType` for multipart forms. |
+| `Inspect` | Read `Model`, `Stream`, the `Features` the request needs, and any `Affinity` keys and `Stateful` flag for upstream-owned state it refers to. Bodies are not always JSON; use `Payload.ContentType` for multipart forms. `Registry.Inspect` overlays `Payload.Metadata` afterwards. |
 | `EncodeError` | Render an error in the protocol's envelope; `gateway.Handler` replies with it. |
 | `Accepts` | List the protocols with a **direct** path to and from this one: requests convert in from them, and responses convert out to them. Always true for the protocol itself. |
 | `NewExchange` | Create state for one execution. Convert responses to `opts.Output` (the client protocol when empty). Read the options this protocol's package defines from `opts.Ext`, and return `ClassUnsupported` for option types it does not know. |
+
+Return `*apix.Error` values as the `error`, and return a literal `nil` on success: a nil `*apix.Error` stored in an `error` is not nil.
+
+Two optional extensions plug into routing:
+
+- `apix.OptionsValidator` on the codec: `ValidateOptions(opts)` lets routers reject bad `Ext` values, loss policies or reasoning overrides when endpoints are configured. `NewExchange` must still validate.
+- `apix.StateReporter` on the exchange: `CreatedState()` returns the affinity keys of state the upstream stored, such as `response:<id>`, so follow-up requests reach the same endpoint.
 
 An `Exchange` must follow these rules:
 
@@ -56,7 +63,7 @@ func (imagesCodec) Spec() apix.ProtocolSpec {
     }
 }
 
-func (imagesCodec) Inspect(req apix.Payload) (apix.RequestInfo, *apix.Error) {
+func (imagesCodec) Inspect(req apix.Payload) (apix.RequestInfo, error) {
     var doc struct{ Model string `json:"model"` }
     if err := json.Unmarshal(req.Body, &doc); err != nil {
         return apix.RequestInfo{}, apix.Translation("malformed images request: " + err.Error())
@@ -69,7 +76,7 @@ func (imagesCodec) Accepts(p apix.Protocol) bool {
     return p == ImagesGenerations || p == "gemini.images"
 }
 
-func (imagesCodec) NewExchange(client apix.Protocol, opts apix.ExchangeOptions) (apix.Exchange, *apix.Error) {
+func (imagesCodec) NewExchange(client apix.Protocol, opts apix.ExchangeOptions) (apix.Exchange, error) {
     return image.NewExchange(client, ImagesGenerations, opts) // shared code lives in internal/image
 }
 ```

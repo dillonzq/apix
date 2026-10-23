@@ -61,7 +61,13 @@ func (r *Registry) Spec(p Protocol) (ProtocolSpec, bool) {
 	return s, ok
 }
 
-func (r *Registry) lookup(p Protocol) (Codec, *Error) {
+// Kind returns the Kind registered for p.
+func (r *Registry) Kind(p Protocol) (Kind, bool) {
+	s, ok := r.specs[p]
+	return s.Kind, ok
+}
+
+func (r *Registry) lookup(p Protocol) (Codec, error) {
 	c, ok := r.codecs[p]
 	if !ok {
 		return nil, Unsupported("unregistered protocol: " + string(p))
@@ -69,9 +75,10 @@ func (r *Registry) lookup(p Protocol) (Codec, *Error) {
 	return c, nil
 }
 
-// Inspect reads routing information from a client request in protocol p.
-// The returned Protocol and Kind always match the registered spec.
-func (r *Registry) Inspect(p Protocol, req Payload) (RequestInfo, *Error) {
+// Inspect reads routing information from a client request in protocol p and
+// overlays Payload.Metadata. The returned Protocol and Kind always match the
+// registered spec.
+func (r *Registry) Inspect(p Protocol, req Payload) (RequestInfo, error) {
 	c, err := r.lookup(p)
 	if err != nil {
 		return RequestInfo{}, err
@@ -81,8 +88,7 @@ func (r *Registry) Inspect(p Protocol, req Payload) (RequestInfo, *Error) {
 		return RequestInfo{}, err
 	}
 	info.Protocol, info.Kind = p, r.specs[p].Kind
-	info = req.Metadata.Apply(info)
-	return info, nil
+	return req.Metadata.Apply(info), nil
 }
 
 // CanConvert reports whether a client request in protocol client can be sent
@@ -100,10 +106,35 @@ func (r *Registry) CanConvert(client, upstream Protocol) bool {
 	return client == upstream || r.codecs[upstream].Accepts(client)
 }
 
+// ValidateOptions checks options for exchanges whose upstream speaks
+// protocol upstream: the loss policy, and whatever the codec checks when it
+// implements OptionsValidator. Routers call it when endpoints are configured.
+func (r *Registry) ValidateOptions(upstream Protocol, opts ExchangeOptions) error {
+	c, err := r.lookup(upstream)
+	if err != nil {
+		return err
+	}
+	if !opts.LossPolicy.valid() {
+		return Unsupported("unknown loss policy: " + string(opts.LossPolicy))
+	}
+	if opts.Output != "" {
+		if _, err := r.lookup(opts.Output); err != nil {
+			return err
+		}
+		if !r.CanConvert(opts.Output, upstream) {
+			return Unsupported("no response conversion from " + string(upstream) + " to " + string(opts.Output))
+		}
+	}
+	if v, ok := c.(OptionsValidator); ok {
+		return v.ValidateOptions(opts)
+	}
+	return nil
+}
+
 // NewExchange creates the state for one execution from client to upstream.
 // Responses convert to opts.Output, which defaults to client; the codec then
 // always sees Output set.
-func (r *Registry) NewExchange(client, upstream Protocol, opts ExchangeOptions) (Exchange, *Error) {
+func (r *Registry) NewExchange(client, upstream Protocol, opts ExchangeOptions) (Exchange, error) {
 	if _, err := r.lookup(client); err != nil {
 		return nil, err
 	}
@@ -113,6 +144,9 @@ func (r *Registry) NewExchange(client, upstream Protocol, opts ExchangeOptions) 
 	}
 	if !r.CanConvert(client, upstream) {
 		return nil, Unsupported("no conversion from " + string(client) + " to " + string(upstream))
+	}
+	if !opts.LossPolicy.valid() {
+		return nil, Unsupported("unknown loss policy: " + string(opts.LossPolicy))
 	}
 	if opts.Output == "" {
 		opts.Output = client
@@ -130,13 +164,13 @@ func (r *Registry) NewExchange(client, upstream Protocol, opts ExchangeOptions) 
 
 // EncodeError renders err as an error response in protocol p. Unregistered
 // protocols get a minimal JSON body.
-func (r *Registry) EncodeError(p Protocol, err *Error) Payload {
+func (r *Registry) EncodeError(p Protocol, err error) Payload {
 	if c, ok := r.codecs[p]; ok {
 		return c.EncodeError(err)
 	}
 	msg := ""
-	if err != nil {
-		msg = err.Message
+	if e := AsError(err); e != nil {
+		msg = e.Message
 	}
 	body, _ := json.Marshal(map[string]map[string]string{"error": {"message": msg}})
 	return Payload{Body: body, ContentType: "application/json"}
