@@ -57,7 +57,7 @@ opts := apix.ExchangeOptions{
 }
 ```
 
-`ThinkingBudget` 将档位映射为预算；`ThinkingLevel` 将正数预算映射为档位。未指定时保留客户端控制的形式；0/off 与 -1/auto 保持数字哨兵。`IncludeThoughts` 独立控制推理展示。宿主根据实际模型能力选择模式，本库不按模型名猜能力，也不自动下载模型目录或调整模型上限。`ExchangeOptions.Reasoning` 与 `thinking.ApplySuffixWith` 按同一模式渲染覆盖值。GenerateContent 没有高于 `high` 的档位：`xhigh`、`max` 档位会变为 `high`，并报告为非语义损耗。
+`ThinkingBudget` 将档位映射为预算；`ThinkingLevel` 将正数预算映射为档位。未指定时保留客户端控制的形式；0/off 与 -1/auto 保持数字哨兵。`IncludeThoughts` 独立控制推理展示。宿主根据实际模型能力选择模式，本库不按模型名猜能力，也不自动下载模型目录或调整模型上限。`ExchangeOptions.Reasoning` 与 `reasoning.ApplySuffixWith` 按同一模式渲染覆盖值。GenerateContent 没有高于 `high` 的档位：`xhigh`、`max` 档位会变为 `high`，并报告为非语义损耗。
 
 Gemini 推理控制转向 Messages 时遵循 Messages 推理模式：默认 adaptive，数字预算转换为 effort 档位；使用 `anthropic.ThinkingManual` 时数字预算原样保留，档位按固定预算表转换。宿主仍需选择兼容的 Anthropic 模型并校验预算与输出上限。
 

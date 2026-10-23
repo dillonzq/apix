@@ -57,7 +57,7 @@ opts := apix.ExchangeOptions{
 }
 ```
 
-`ThinkingBudget` maps levels to budgets; `ThinkingLevel` maps positive budgets to levels. With no mode override, the client control keeps its form. Zero/off and -1/auto retain numeric sentinels. `IncludeThoughts` is independent of reasoning amount. The host selects the mode supported by its model; apix does not infer capabilities from model names or clamp against an online model catalog. `ExchangeOptions.Reasoning` and `thinking.ApplySuffixWith` render overrides with the same mode. GenerateContent has no level above `high`: `xhigh` and `max` levels become `high` and are reported as a non-semantic loss.
+`ThinkingBudget` maps levels to budgets; `ThinkingLevel` maps positive budgets to levels. With no mode override, the client control keeps its form. Zero/off and -1/auto retain numeric sentinels. `IncludeThoughts` is independent of reasoning amount. The host selects the mode supported by its model; apix does not infer capabilities from model names or clamp against an online model catalog. `ExchangeOptions.Reasoning` and `reasoning.ApplySuffixWith` render overrides with the same mode. GenerateContent has no level above `high`: `xhigh` and `max` levels become `high` and are reported as a non-semantic loss.
 
 Gemini thinking controls sent to Messages follow the Messages thinking mode: adaptive by default, with numeric budgets converted to an effort level; with `anthropic.ThinkingManual`, numeric budgets stay exact and levels use the fixed budget table. The host remains responsible for selecting a compatible Anthropic model and validating its budget/output limits.
 
