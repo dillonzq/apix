@@ -4,6 +4,8 @@
 
 本文件说明当前实现的映射和限制。覆盖 `apix.KindLLM` 下的 `openai.chat-completions`、`openai.responses` 和 `anthropic.messages`，三者支持请求、普通响应及流式响应的全部六个跨协议方向；协议 ID 和接入示例见 README。
 
+GenerateContent 与原生 Interactions 另见 [Gemini 协议](gemini.zh-CN.md)。
+
 ## 配置
 
 LLM 协议实现支持媒体输入、本地 shell 适配、缓存提示保留和推理历史回传：
@@ -98,7 +100,7 @@ Responses 的流式转换接收 `response.reasoning_summary_text.delta/done` 与
 
 ## 推理控制与后缀
 
-`reasoning_effort` 与 `reasoning.effort` 相互映射。Messages 使用固定 effort/budget 表：
+`reasoning_effort` 与 `reasoning.effort` 相互映射。档位转向 Messages 时默认使用 adaptive：`thinking: {"type": "adaptive"}`，档位写入 `output_config.effort`，并与结构化输出格式合并。`none` 关闭 thinking，`auto` 不设置。不支持 adaptive 的旧 Claude 模型可传入 `anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}`，改为发送 `{"type": "enabled", "budget_tokens": N}`。原生 Messages 推理控制原样透传。手动模式与反向转换使用固定 effort/budget 表：
 
 | effort | budget |
 | --- | --- |
@@ -130,9 +132,9 @@ if err == nil {
 }
 ```
 
-识别到的后缀取代请求体中的推理控制；`none` / `0` 关闭，`auto` / `-1` 采用上游默认。档位使用上表，数值后缀在 Messages 中保留精确 budget；Chat 与 Responses 转为 effort。
+识别到的后缀取代请求体中的推理控制；`none` / `0` 关闭，`auto` / `-1` 采用上游默认。Chat 与 Responses 得到 effort，数值后缀按上表阈值转换。Messages 与 Exchange 使用同样的推理模式：`ApplySuffix` 采用 adaptive 并写入 `output_config.effort`；`thinking.ApplySuffixWith(upstream, out.Body, suffix, thinking.Options{MessagesManual: true})` 发送 enabled thinking，档位按表取预算，数值后缀保留精确预算。Exchange 使用 `anthropic.ThinkingManual` 时应选用后者。
 
-Messages 禁用时移除 `thinking.display`，后缀覆盖 `output_config.effort`；启用时保留可用的 display。Responses 只覆盖 `reasoning.effort`，保留同级字段。
+Messages 禁用时移除 `thinking.display`，并始终覆盖客户端的 `output_config.effort` 与 `budget_tokens`；启用时保留可用的 display。Responses 只覆盖 `reasoning.effort`，保留同级字段。
 
 未知后缀仍可被解析并剥离，但不改变请求体推理参数。`StripSupersededReasoning` 只应在后缀已识别时调用。真实包含括号的模型 ID 是否按字面名称路由，由调用方决定。
 
@@ -209,4 +211,4 @@ logprobs、供应商扩展、历史 compaction 和签名不保证跨协议保留
 
 供应商 Codec 委托给 `internal/llm/translate` 中的引擎，由引擎负责分派、请求策略和流式分帧。`internal/llm/adapter` 下的各协议 adapter 负责直接转换、上游事件分派和目标流式输出。共享协议类型、事件构造、工具身份和字段规则按职责分文件，位于 `internal/llm/adapter/shared`；推理控制与后缀位于 `thinking`。模块与状态约定见[代码结构说明](../architecture.zh-CN.md)。
 
-测试覆盖 27 份请求/响应/流式快照、交错工具、晚到身份、引用分片、搜索失败、终止一致性及本地 shell 恢复/错误路径。fuzz 验证网络分块一致性和失败状态不可恢复；这些测试不替代真实上游的兼容验证。命令见 README。
+测试覆盖 48 份请求/响应/流式快照、交错工具、晚到身份、引用分片、搜索失败、终止一致性及本地 shell 恢复/错误路径。fuzz 验证网络分块一致性和失败状态不可恢复；这些测试不替代真实上游的兼容验证。命令见 README。

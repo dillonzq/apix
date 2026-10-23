@@ -1,0 +1,31 @@
+{
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "hello"
+        }
+      ],
+      "role": "user"
+    }
+  ],
+  "generationConfig": {
+    "maxOutputTokens": 100,
+    "responseJsonSchema": {
+      "type": "object"
+    },
+    "responseMimeType": "application/json"
+  },
+  "tools": [
+    {
+      "functionDeclarations": [
+        {
+          "name": "f",
+          "parametersJsonSchema": {
+            "type": "object"
+          }
+        }
+      ]
+    }
+  ]
+}

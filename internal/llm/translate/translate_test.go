@@ -200,7 +200,7 @@ func TestErrorsAndSuffixPriority(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, err = thinking.ApplySuffix(anthropic.Messages, body, suffix)
+	body, err = thinking.ApplySuffixWith(anthropic.Messages, body, suffix, thinking.Options{MessagesManual: true})
 	if err != nil {
 		t.Fatal(err)
 	}

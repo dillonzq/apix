@@ -13,6 +13,7 @@ const (
 	FormatChatCompletions = "chat-completions"
 	FormatResponses       = "responses"
 	FormatMessages        = "messages"
+	FormatGemini          = "gemini"
 )
 
 // LossPolicy controls request conversions that cannot preserve every field.
@@ -45,7 +46,19 @@ type ConversionOptions struct {
 	// The default omits these blocks. Diagnostics and Safe/Strict rejection
 	// still apply when enabled; native Messages and response display are unchanged.
 	AllowUnsignedThinking bool
+	// MessagesThinkingMode selects adaptive (empty, the default) or manual
+	// budget thinking when a reasoning level converts to Messages.
+	MessagesThinkingMode string
+	// GeminiThinkingMode selects "budget" or "level" explicitly. Empty
+	// preserves the kind of reasoning control requested by the client.
+	GeminiThinkingMode             string
+	GeminiIncludeThoughts          *bool
+	GeminiRequireThoughtSignatures bool
 }
+
+// MessagesThinkingManual selects budget_tokens thinking for Claude models
+// that predate adaptive thinking.
+const MessagesThinkingManual = "manual"
 
 func (s *ConversionContext) Report(from, to, path string, semantic bool) {
 	s.Record(DiagnosticFor(from, to, path, semantic))

@@ -4,6 +4,8 @@ English | [简体中文](llm.zh-CN.md) · [Back to README](../../README.md)
 
 This document describes the current mappings and limitations. It covers the `apix.KindLLM` protocols `openai.chat-completions`, `openai.responses`, and `anthropic.messages`; all six cross-protocol directions support requests, ordinary responses, and streams. See the README for protocol IDs and integration examples.
 
+GenerateContent and native Interactions are documented separately in [Gemini protocols](gemini.md).
+
 ## Configuration
 
 The LLM codecs support media input, local shell adaptation, cache hint retention, and reasoning history replay. Configure native Responses tool normalization with `openai.ResponsesOptions{NormalizeTools: true}` and unsigned thinking replay with `anthropic.MessagesOptions{AllowUnsignedThinking: true}`. Use `sse.Decoder` to decode SSE frames.
@@ -94,7 +96,7 @@ Same-protocol responses generally pass through unchanged and preserve these fiel
 
 ## Reasoning controls and suffixes
 
-`reasoning_effort` and `reasoning.effort` map to each other. Messages uses a fixed effort/budget table:
+`reasoning_effort` and `reasoning.effort` map to each other. A level sent to Messages becomes adaptive thinking by default: `thinking: {"type": "adaptive"}` with the level in `output_config.effort`, merged with any structured output format. `none` disables thinking and `auto` leaves it unset. For Claude models that predate adaptive thinking, pass `anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}` to send `{"type": "enabled", "budget_tokens": N}` instead. Native Messages thinking controls pass through unchanged. Manual mode and reverse mapping use a fixed effort/budget table:
 
 | Effort | Budget |
 | --- | --- |
@@ -126,9 +128,9 @@ if err == nil {
 }
 ```
 
-Recognized suffixes replace body reasoning controls. `none` / `0` disables reasoning; `auto` / `-1` uses upstream defaults. Levels use the table above, while numeric suffixes retain exact budgets in Messages and become efforts in Chat/Responses.
+Recognized suffixes replace body reasoning controls. `none` / `0` disables reasoning; `auto` / `-1` uses upstream defaults. Chat and Responses receive an effort; numeric suffixes map through the thresholds above. Messages follows the same thinking modes as the exchange: `ApplySuffix` uses adaptive thinking with `output_config.effort`, and `thinking.ApplySuffixWith(upstream, out.Body, suffix, thinking.Options{MessagesManual: true})` sends enabled thinking with a table budget or a numeric suffix's exact budget. Use the manual form when the exchange uses `anthropic.ThinkingManual`.
 
-Messages disables `thinking.display` when turning thinking off and supersedes `output_config.effort`; enabled overrides retain applicable display metadata. Responses overrides only `reasoning.effort`, preserving sibling fields.
+Messages disables `thinking.display` when turning thinking off and always supersedes the client's `output_config.effort` and `budget_tokens`; active overrides retain applicable display metadata. Responses overrides only `reasoning.effort`, preserving sibling fields.
 
 Unknown suffixes can still be parsed and stripped, but leave body reasoning controls unchanged. Only call `StripSupersededReasoning` for a recognized suffix. Callers decide whether literal parenthesized model IDs should be routed as-is.
 
@@ -205,4 +207,4 @@ Logprobs, provider extensions, historical compaction, and signatures are not gua
 
 The vendor codecs delegate to the engine in `internal/llm/translate`, which owns dispatch, request policy, and stream framing. Protocol adapters under `internal/llm/adapter` own direct conversion, upstream event dispatch, and target stream output. Shared protocol types, event construction, tool identities, and field rules are organized by responsibility in `internal/llm/adapter/shared`; reasoning controls and suffixes live in `thinking`. See [code structure and maintenance](../architecture.md) for module and state contracts.
 
-Tests cover 27 request/response/stream snapshots, interleaved tools, late identity, citation fragments, search failure, termination consistency, and local shell restoration/error paths. Fuzz tests check network chunking invariance and irreversible errors; they do not replace real-upstream compatibility validation. Commands are in the README.
+Tests cover 48 request/response/stream snapshots, interleaved tools, late identity, citation fragments, search failure, termination consistency, and local shell restoration/error paths. Fuzz tests check network chunking invariance and irreversible errors; they do not replace real-upstream compatibility validation. Commands are in the README.

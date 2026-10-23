@@ -1,0 +1,31 @@
+{
+  "max_tokens": 4096,
+  "messages": [
+    {
+      "content": [
+        {
+          "text": "hello",
+          "type": "text"
+        }
+      ],
+      "role": "user"
+    }
+  ],
+  "model": "m",
+  "output_config": {
+    "format": {
+      "schema": {
+        "type": "object"
+      },
+      "type": "json_schema"
+    }
+  },
+  "tools": [
+    {
+      "input_schema": {
+        "type": "object"
+      },
+      "name": "f"
+    }
+  ]
+}

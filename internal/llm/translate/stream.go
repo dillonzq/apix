@@ -3,6 +3,7 @@ package translate
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/dillonzq/apix/internal/llm/adapter/gemini"
 
 	"github.com/dillonzq/apix/internal/llm/adapter/chatcompletions"
 	"github.com/dillonzq/apix/internal/llm/adapter/messages"
@@ -24,6 +25,19 @@ func NewStreamConverter(upstreamFormat, outputFormat string, state *RequestState
 	if err := validateFormats(upstreamFormat, outputFormat); err != nil {
 		return nil, err
 	}
+	if upstreamFormat == FormatGemini || outputFormat == FormatGemini {
+		converted := gemini.NewStreamConverter(upstreamFormat, outputFormat, conversionContext(state))
+		if upstreamFormat == FormatGemini {
+			return converted, nil
+		}
+		// Reuse source validation and complete source frames. Conversion remains
+		// direct; validation must run before a target terminal can be emitted.
+		validator, err := NewStreamConverter(upstreamFormat, upstreamFormat, nil)
+		if err != nil {
+			return nil, err
+		}
+		return &validatedGeminiStream{converted: converted, validator: validator}, nil
+	}
 	var converter StreamConverter
 	switch upstreamFormat {
 	case FormatChatCompletions:
@@ -37,6 +51,43 @@ func NewStreamConverter(upstreamFormat, outputFormat string, state *RequestState
 		converter = &chatSSEConverter{converter: converter}
 	}
 	return newPublicStreamConverter(converter, upstreamFormat, outputFormat), nil
+}
+
+type validatedGeminiStream struct {
+	converted StreamConverter
+	validator StreamConverter
+	failure   *Error
+}
+
+func (s *validatedGeminiStream) Feed(chunk []byte) ([][]byte, bool, *Error) {
+	if s.failure != nil {
+		return nil, false, s.failure
+	}
+	frames, _, validationErr := s.validator.Feed(chunk)
+	out, done, err := s.converted.Feed(bytes.Join(frames, nil))
+	if err == nil {
+		err = validationErr
+	}
+	s.failure = err
+	return out, done && err == nil, err
+}
+
+func (s *validatedGeminiStream) Finish() ([][]byte, *Error) {
+	if s.failure != nil {
+		return nil, s.failure
+	}
+	frames, validationErr := s.validator.Finish()
+	out, _, err := s.converted.Feed(bytes.Join(frames, nil))
+	if err == nil {
+		err = validationErr
+	}
+	if err == nil {
+		var tail [][]byte
+		tail, err = s.converted.Finish()
+		out = append(out, tail...)
+	}
+	s.failure = err
+	return out, err
 }
 
 // Internal Chat Completions adapters return data payloads. Frame them here so

@@ -25,7 +25,7 @@ route.Endpoint{
   - 精确匹配优先；没有精确匹配时，用 `"*"` 匹配任意模型。
   - 映射值为空表示沿用客户端模型名。
   - Models 为空表示服务所有模型，且模型名不变。
-- **Features**：列出端点支持的能力；为空表示不限制。请求需要的能力由 Codec 的 `Inspect` 给出，例如流式请求需要 `stream`，带工具的请求需要 `tools`。
+- **Features**：列出端点支持的能力；为空表示不限制。请求需要的能力由 Codec 的 `Inspect` 从已知协议字段提取：`stream`、`tools`、`image-input`、`file-input`、`audio-input`、`video-input`、`image-output`、`audio-output`、`video-output`、`structured-output` 和 `web-search`（`apix.Feature*` 常量）。不会扫描工具 schema、参数或结果。列表非空的端点必须声明其请求用到的全部能力。
 - **Options**：每次创建 Exchange 时传给上游 Codec，例如 `anthropic.MessagesOptions`。
 - **Disabled**：端点不参与路由。
 

@@ -37,11 +37,34 @@ func TestApplySuffixSeamBranches(t *testing.T) {
 	if got, eErr := ApplySuffix(responses, []byte(`{"reasoning":{"effort":"low"}}`), ParseSuffix("m(auto)")); eErr != nil || strings.Contains(string(got), "reasoning") {
 		t.Fatalf("auto reasoning = %s, %v", got, eErr)
 	}
-	// Dropping the adaptive effort keeps every sibling field.
+	// Adaptive mode (the default) replaces the client's effort and drops a
+	// manual budget, keeping sibling fields.
 	got, eErr := ApplySuffix(messages,
-		[]byte(`{"thinking":{"type":"enabled","budget_tokens":1},"output_config":{"effort":"low","other":1}}`), ParseSuffix("m(high)"))
-	if eErr != nil || strings.Contains(string(got), `"effort"`) || !strings.Contains(string(got), `"other"`) {
-		t.Fatalf("messages override = %s, %v", got, eErr)
+		[]byte(`{"thinking":{"type":"enabled","budget_tokens":1,"display":"omitted"},"output_config":{"effort":"low","other":1}}`), ParseSuffix("m(high)"))
+	if eErr != nil || string(got) != `{"output_config":{"effort":"high","other":1},"thinking":{"display":"omitted","type":"adaptive"}}` {
+		t.Fatalf("messages adaptive override = %s, %v", got, eErr)
+	}
+	// A numeric suffix becomes the effort its budget maps to.
+	if got, eErr := ApplySuffix(messages, []byte(`{}`), ParseSuffix("m(8192)")); eErr != nil || string(got) != `{"output_config":{"effort":"medium"},"thinking":{"type":"adaptive"}}` {
+		t.Fatalf("messages numeric adaptive = %s, %v", got, eErr)
+	}
+	// Manual mode drops the adaptive effort, keeps every sibling field and
+	// sends a fixed or exact budget.
+	manual := Options{MessagesManual: true}
+	got, eErr = ApplySuffixWith(messages,
+		[]byte(`{"thinking":{"type":"adaptive","display":"omitted"},"output_config":{"effort":"low","other":1}}`), ParseSuffix("m(high)"), manual)
+	if eErr != nil || string(got) != `{"output_config":{"other":1},"thinking":{"budget_tokens":24576,"display":"omitted","type":"enabled"}}` {
+		t.Fatalf("messages manual override = %s, %v", got, eErr)
+	}
+	if got, eErr := ApplySuffixWith(messages, []byte(`{}`), ParseSuffix("m(3000)"), manual); eErr != nil || string(got) != `{"thinking":{"budget_tokens":3000,"type":"enabled"}}` {
+		t.Fatalf("messages numeric manual = %s, %v", got, eErr)
+	}
+	// None disables thinking in either mode and drops display.
+	for _, opts := range []Options{{}, manual} {
+		got, eErr := ApplySuffixWith(messages, []byte(`{"thinking":{"type":"adaptive","display":"omitted"},"output_config":{"effort":"low"}}`), ParseSuffix("m(none)"), opts)
+		if eErr != nil || string(got) != `{"thinking":{"type":"disabled"}}` {
+			t.Fatalf("messages none (%+v) = %s, %v", opts, got, eErr)
+		}
 	}
 	// A superseded control is dropped only for the conversions that read it.
 	if got := StripSupersededReasoning(messages, messages, body); string(got) != string(body) {

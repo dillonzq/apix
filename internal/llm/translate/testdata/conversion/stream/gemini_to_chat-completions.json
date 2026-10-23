@@ -1,0 +1,71 @@
+[
+  {
+    "Name": "",
+    "Data": {
+      "choices": [
+        {
+          "delta": {
+            "content": "",
+            "role": "assistant"
+          },
+          "finish_reason": null,
+          "index": 0
+        }
+      ],
+      "id": "r",
+      "model": "m",
+      "object": "chat.completion.chunk"
+    }
+  },
+  {
+    "Name": "",
+    "Data": {
+      "choices": [
+        {
+          "delta": {
+            "content": "hello"
+          },
+          "finish_reason": null,
+          "index": 0
+        }
+      ],
+      "id": "r",
+      "model": "m",
+      "object": "chat.completion.chunk"
+    }
+  },
+  {
+    "Name": "",
+    "Data": {
+      "choices": [
+        {
+          "delta": {
+            "extra_content": {
+              "google": {
+                "parts": [
+                  {
+                    "text": "hello"
+                  }
+                ]
+              }
+            }
+          },
+          "finish_reason": "stop",
+          "index": 0
+        }
+      ],
+      "id": "r",
+      "model": "m",
+      "object": "chat.completion.chunk",
+      "usage": {
+        "completion_tokens": 0,
+        "prompt_tokens": 0,
+        "total_tokens": 0
+      }
+    }
+  },
+  {
+    "Name": "DONE",
+    "Data": null
+  }
+]

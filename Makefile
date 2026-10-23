@@ -21,7 +21,7 @@ help:
 	  'make ci             All Linux CI checks (requires golangci-lint v2.14.0)' \
 	  'make fmt            Format Go source files' \
 	  'make coverage       Race tests with coverage.out and test.log' \
-	  'make fuzz           Both stream fuzz targets (FUZZTIME=30s by default)' \
+	  'make fuzz           Stream fuzz targets (FUZZTIME=30s by default)' \
 	  'make lint           Run the installed golangci-lint' \
 	  'make workflow-lint  Validate GitHub Actions workflows' \
 	  'make vuln           Scan reachable vulnerabilities'
@@ -63,6 +63,7 @@ workflow-lint:
 fuzz:
 	$(GO) test ./internal/llm/translate -run '^$$' -fuzz '^FuzzStreamChunkBoundaries$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./internal/llm/translate -run '^$$' -fuzz '^FuzzSSEFailureIsTerminal$$' -fuzztime=$(FUZZTIME)
+	$(GO) test ./protocol/gemini -run '^$$' -fuzz '^FuzzGeminiStreamChunkBoundaries$$' -fuzztime=$(FUZZTIME)
 
 vuln:
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...

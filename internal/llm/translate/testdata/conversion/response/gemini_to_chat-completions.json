@@ -1,0 +1,51 @@
+{
+  "choices": [
+    {
+      "finish_reason": "tool_calls",
+      "index": 0,
+      "message": {
+        "content": "hello",
+        "extra_content": {
+          "google": {
+            "parts": [
+              {
+                "text": "plan",
+                "thought": true
+              },
+              {
+                "text": "hello"
+              },
+              {
+                "functionCall": {
+                  "args": {},
+                  "id": "c1",
+                  "name": "f"
+                }
+              }
+            ]
+          }
+        },
+        "reasoning_content": "plan",
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "function": {
+              "arguments": "{}",
+              "name": "f"
+            },
+            "id": "c1",
+            "type": "function"
+          }
+        ]
+      }
+    }
+  ],
+  "id": "r",
+  "model": "m",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 2,
+    "prompt_tokens": 4,
+    "total_tokens": 6
+  }
+}

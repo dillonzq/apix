@@ -1,0 +1,32 @@
+[
+  {
+    "Name": "",
+    "Data": {
+      "candidates": [
+        {
+          "content": {
+            "parts": [
+              {
+                "text": "hello"
+              }
+            ]
+          },
+          "index": 0
+        }
+      ],
+      "modelVersion": "m",
+      "responseId": "r"
+    }
+  },
+  {
+    "Name": "",
+    "Data": {
+      "candidates": [
+        {
+          "finishReason": "STOP",
+          "index": 0
+        }
+      ]
+    }
+  }
+]

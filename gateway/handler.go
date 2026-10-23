@@ -28,7 +28,16 @@ func (g *Gateway) Handler(p apix.Protocol) http.Handler {
 			g.writeError(w, p, &apix.Error{Class: apix.ClassUnsupported, Message: "cannot read request body", StatusCode: status})
 			return
 		}
-		resp, aerr := g.Do(r.Context(), Request{Protocol: p, Payload: apix.Payload{Body: body, ContentType: r.Header.Get("Content-Type")}})
+		payload := apix.Payload{Body: body, ContentType: r.Header.Get("Content-Type")}
+		if spec, ok := g.reg.Spec(p); ok && spec.ParsePath != nil {
+			metadata, err := spec.ParsePath(r.URL.Path)
+			if err != nil {
+				g.writeError(w, p, err)
+				return
+			}
+			payload.Metadata = metadata
+		}
+		resp, aerr := g.Do(r.Context(), Request{Protocol: p, Payload: payload})
 		if aerr != nil {
 			g.writeError(w, p, aerr)
 			return

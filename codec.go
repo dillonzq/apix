@@ -9,7 +9,8 @@ package apix
 // use; exchanges are not.
 type Codec interface {
 	Spec() ProtocolSpec
-	// Inspect reads routing information from a request in this protocol.
+	// Inspect reads routing information and required capabilities. It honors
+	// Payload.Metadata for values supplied outside the body, such as a URI.
 	Inspect(req Payload) (RequestInfo, *Error)
 	// EncodeError renders err as an error response body in this protocol.
 	EncodeError(err *Error) Payload

@@ -10,6 +10,7 @@ import (
 	"github.com/dillonzq/apix/internal/llm/codec"
 	"github.com/dillonzq/apix/internal/llm/translate"
 	"github.com/dillonzq/apix/protocol/anthropic"
+	"github.com/dillonzq/apix/protocol/gemini"
 	"github.com/dillonzq/apix/protocol/openai"
 )
 
@@ -25,6 +26,12 @@ var fixtures = map[apix.Protocol]struct{ request, response, stream string }{
 		`{"id":"r","object":"response","model":"m","status":"completed","output":[{"type":"reasoning","summary":[{"type":"summary_text","text":"plan"}]},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hello"}]},{"type":"function_call","call_id":"c1","name":"f","arguments":"{}"}],"usage":{"input_tokens":4,"output_tokens":2}}`,
 		"event: response.created\ndata: {\"response\":{\"id\":\"r\",\"model\":\"m\"}}\n\nevent: response.output_text.delta\ndata: {\"item_id\":\"m1\",\"content_index\":0,\"delta\":\"hello\"}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"r\",\"model\":\"m\",\"object\":\"response\",\"status\":\"completed\",\"output\":[]}}\n\n",
 	},
+	gemini.GenerateContent: {
+		`{"contents":[{"role":"user","parts":[{"text":"hello"}]}],"tools":[{"functionDeclarations":[{"name":"f","parametersJsonSchema":{"type":"object"}}]}]}`,
+		`{"responseId":"r","modelVersion":"m","candidates":[{"index":0,"content":{"role":"model","parts":[{"text":"plan","thought":true},{"text":"hello"},{"functionCall":{"id":"c1","name":"f","args":{}}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":4,"candidatesTokenCount":2,"totalTokenCount":6}}`,
+		"data: {\"responseId\":\"r\",\"modelVersion\":\"m\",\"candidates\":[{\"index\":0,\"content\":{\"parts\":[{\"text\":\"hello\"}]}}]}\n\ndata: {\"candidates\":[{\"index\":0,\"finishReason\":\"STOP\"}]}\n\n",
+	},
+
 	anthropic.Messages: {
 		`{"model":"m","messages":[{"role":"user","content":"hello"}],"max_tokens":100,"tools":[{"name":"f","strict":true,"input_schema":{"type":"object"}}],"output_config":{"format":{"type":"json_schema","schema":{"type":"object"}}}}`,
 		`{"id":"r","model":"m","content":[{"type":"thinking","thinking":"plan"},{"type":"text","text":"hello"},{"type":"tool_use","id":"c1","name":"f","input":{}}],"stop_reason":"tool_use","usage":{"input_tokens":4,"output_tokens":2}}`,
@@ -36,11 +43,12 @@ var internalFormat = map[apix.Protocol]string{
 	openai.ChatCompletions: translate.FormatChatCompletions,
 	openai.Responses:       translate.FormatResponses,
 	anthropic.Messages:     translate.FormatMessages,
+	gemini.GenerateContent: translate.FormatGemini,
 }
 
 func registry(t *testing.T) *apix.Registry {
 	t.Helper()
-	reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs())...)
+	reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), []apix.Codec{gemini.GenerateContentCodec()})...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +56,7 @@ func registry(t *testing.T) *apix.Registry {
 }
 
 func TestVendorIDsMatchEngine(t *testing.T) {
-	if openai.ChatCompletions != codec.ChatCompletions || openai.Responses != codec.Responses || anthropic.Messages != codec.Messages {
+	if openai.ChatCompletions != codec.ChatCompletions || openai.Responses != codec.Responses || anthropic.Messages != codec.Messages || gemini.GenerateContent != codec.Gemini {
 		t.Fatal("vendor protocol IDs drifted from internal/llm/codec")
 	}
 }

@@ -9,10 +9,10 @@ flowchart TD
     GW[gateway：HTTP 执行、提交点、故障切换] --> RT[route：候选排序、健康统计]
     GW --> REG[apix.Registry：Codec 注册表]
     RT --> REG
-    REG --> VENDOR[protocol/openai、protocol/anthropic：协议常量、ProtocolSpec、选项]
+    REG --> VENDOR[protocol/openai、protocol/anthropic、protocol/gemini：协议常量、ProtocolSpec、选项]
     VENDOR --> CODEC[internal/llm/codec：apix.Codec 实现、协议 ID 映射]
     CODEC --> ENGINE[internal/llm/translate：LLM 转换引擎]
-    ENGINE --> ADAPTERS[internal/llm/adapter：三种协议的直接转换]
+    ENGINE --> ADAPTERS[internal/llm/adapter：四种协议的直接转换]
 ```
 
 - 根包 `apix` 与协议无关，只定义 `Kind`、`Protocol`、`Payload`、`ProtocolSpec`、`Codec`、`Exchange`、`StreamConverter`、`Registry`、错误和诊断类型。根包不 import 任何协议包。
@@ -42,7 +42,7 @@ flowchart TD
 | `errors.go`、`diagnostic.go` | 错误分类别名、`HTTPStatus`、损耗策略与诊断 |
 | `protocol/<vendor>` | 协议常量、Codec 构造函数、厂商选项（`ResponsesOptions`、`MessagesOptions`） |
 | `internal/llm/codec` | LLM 的 `apix.Codec` 实现：Spec 默认值、Inspect、EncodeError、Exchange |
-| `internal/llm/translate` | LLM 请求、响应、流式入口，错误状态锁定，SSE 包装，Responses 序号；27 份转换快照 |
+| `internal/llm/translate` | LLM 请求、响应、流式入口，错误状态锁定，SSE 包装，Responses 序号；48 份转换快照 |
 | `internal/llm/adapter/{chatcompletions,messages,responses}` | 按协议组织的直接转换：`request.go`、`convert.go`、`stream.go` 以及各目标的流式输出 |
 | `internal/llm/adapter/shared` | 协议类型、内容与媒体、事件构造、工具身份、推理、shell、缓存提示、诊断规则 |
 | `route` | `Router`、`NativeFirst`、`Breaker`、热更新 |
@@ -87,8 +87,10 @@ flowchart TD
 ## 验证约定
 
 - 新的协议行为优先通过公开入口测试，内部测试只覆盖解析器和状态组件。
-- `internal/llm/codec` 的测试保证每个 Exchange 方向的输出与引擎逐字节一致，因此公开 API 继承 27 份快照的约束。结构重构不应更新快照。
+- `internal/llm/codec` 的测试保证每个 Exchange 方向的输出与引擎逐字节一致，因此公开 API 继承 48 份快照的约束。结构重构不应更新快照。
 - 流式测试覆盖以下输入：完整输入、逐字节输入、缺少最终分隔符、EOF 前没有终止事件。
 - gateway 用 `httptest` 模拟上游，覆盖同协议优先、各类切换条件、提交点前后的流式失败、熔断和取消。
 
 验证命令见 [CONTRIBUTING.md](../CONTRIBUTING.md)。
+
+Gemini 直接转换位于 `internal/llm/adapter/gemini`，以 Gemini wire 对象作为源或目标，不通过其他协议中转。流式复用源协议的原生验证器。`internal/llm/adapter/interactions` 仅验证/透传原生协议，独立于转换矩阵。HTTP 路径中的模型和模式通过 `Payload.Metadata` 传入，详见 [Gemini](protocols/gemini.zh-CN.md)。

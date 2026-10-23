@@ -24,7 +24,7 @@ route.Endpoint{
   - `"*"` matches any other model;
   - an empty value keeps the client's model;
   - an empty map serves every model unchanged.
-- **Features** lists the capabilities an endpoint supports; empty means unrestricted. A codec's `Inspect` sets the features a request needs, such as `stream` for streaming and `tools` for tool use.
+- **Features** lists the capabilities an endpoint supports; empty means unrestricted. A codec's `Inspect` sets the features a request needs from known protocol fields: `stream`, `tools`, `image-input`, `file-input`, `audio-input`, `video-input`, `image-output`, `audio-output`, `video-output`, `structured-output` and `web-search` (`apix.Feature*` constants). Tool schemas, arguments and results are never scanned. An endpoint with a nonempty list must declare every feature its requests use.
 - **Options** are passed to the upstream codec for each exchange, for example `anthropic.MessagesOptions`.
 - **Disabled** removes an endpoint from routing.
 

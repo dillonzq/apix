@@ -37,8 +37,8 @@ func assertGolden(t *testing.T, name string, value any) {
 		t.Fatalf("protocol snapshot changed: %s; review before updating", path)
 	}
 }
-func TestProtocolGolden(t *testing.T) {
-	fixtures := map[string]struct{ request, response, stream string }{
+func protocolFixtures() map[string]struct{ request, response, stream string } {
+	return map[string]struct{ request, response, stream string }{
 		translate.FormatChatCompletions: {
 			`{"model":"m","messages":[{"role":"user","content":"hello"}],"tools":[{"type":"function","function":{"name":"f","strict":true,"parameters":{"type":"object"}}}],"response_format":{"type":"json_schema","json_schema":{"name":"answer","strict":true,"schema":{"type":"object"}}}}`,
 			`{"id":"r","model":"m","choices":[{"message":{"role":"assistant","content":"hello","reasoning_content":"plan","tool_calls":[{"id":"c1","type":"function","function":{"name":"f","arguments":"{}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":4,"completion_tokens":2}}`,
@@ -55,6 +55,9 @@ func TestProtocolGolden(t *testing.T) {
 			"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"r\",\"model\":\"m\"}}\n\nevent: content_block_start\ndata: {\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hello\"}}\n\nevent: content_block_stop\ndata: {\"index\":0}\n\nevent: message_delta\ndata: {\"delta\":{\"stop_reason\":\"end_turn\"}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
 		},
 	}
+}
+func TestProtocolGolden(t *testing.T) {
+	fixtures := protocolFixtures()
 	for _, from := range formats {
 		for _, to := range formats {
 			t.Run(from+"/"+to, func(t *testing.T) {
@@ -70,6 +73,42 @@ func TestProtocolGolden(t *testing.T) {
 					t.Fatal(err)
 				}
 				doc := object(t, response)
+				normalizeEventTimes([]wireEvent{{Data: doc}})
+				assertGolden(t, "response/"+from+"_to_"+to, doc)
+				stream := streamFrames(t, from, to, fixture.stream, nil)
+				normalizeEventTimes(stream)
+				assertGolden(t, "stream/"+from+"_to_"+to, stream)
+			})
+		}
+	}
+}
+
+func TestGeminiProtocolGolden(t *testing.T) {
+	fixtures := protocolFixtures()
+	fixtures[translate.FormatGemini] = struct{ request, response, stream string }{
+		`{"contents":[{"role":"user","parts":[{"text":"hello"}]}],"tools":[{"functionDeclarations":[{"name":"f","parametersJsonSchema":{"type":"object"}}]}],"generationConfig":{"responseMimeType":"application/json","responseJsonSchema":{"type":"object"}}}`,
+		`{"responseId":"r","modelVersion":"m","candidates":[{"index":0,"content":{"role":"model","parts":[{"text":"plan","thought":true},{"text":"hello"},{"functionCall":{"id":"c1","name":"f","args":{}}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":4,"candidatesTokenCount":2,"totalTokenCount":6}}`,
+		"data: {\"responseId\":\"r\",\"modelVersion\":\"m\",\"candidates\":[{\"index\":0,\"content\":{\"parts\":[{\"text\":\"hello\"}]}}]}\n\ndata: {\"candidates\":[{\"index\":0,\"finishReason\":\"STOP\"}]}\n\n",
+	}
+	ps := append(append([]string(nil), formats...), translate.FormatGemini)
+	for _, from := range ps {
+		for _, to := range ps {
+			if from != translate.FormatGemini && to != translate.FormatGemini {
+				continue
+			}
+			t.Run(from+"/"+to, func(t *testing.T) {
+				fixture := fixtures[from]
+				state := translate.NewRequestState()
+				req, err := translate.ConvertRequest(to, "m", from, []byte(fixture.request), state)
+				if err != nil {
+					t.Fatal(err)
+				}
+				assertGolden(t, "request/"+from+"_to_"+to, object(t, req))
+				resp, err := translate.ConvertResponse(from, to, 200, []byte(fixture.response), state)
+				if err != nil {
+					t.Fatal(err)
+				}
+				doc := object(t, resp)
 				normalizeEventTimes([]wireEvent{{Data: doc}})
 				assertGolden(t, "response/"+from+"_to_"+to, doc)
 				stream := streamFrames(t, from, to, fixture.stream, nil)

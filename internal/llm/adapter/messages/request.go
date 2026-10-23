@@ -3,6 +3,7 @@ package messages
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/dillonzq/apix/internal/errclass"
 	"github.com/dillonzq/apix/internal/llm/adapter/shared"
@@ -149,11 +150,12 @@ func (b *msgBuilder) flush() {
 	b.curKey = ""
 }
 
-// finalize assembles the shared envelope fields, resolves the client
-// reasoning effort to a fixed thinking budget without model validation.
-// Levels with no numeric equivalent fail explicitly, and upstream validates
-// the resulting controls.
-func finalize(req *messagesRequest, system []string, effort string) ([]byte, *errclass.Error) {
+// finalize assembles the shared envelope fields and resolves the client
+// reasoning effort without model validation. Adaptive thinking (the default)
+// carries the level as output_config.effort; manual thinking resolves it to a
+// fixed budget, and levels with no numeric equivalent fail explicitly. Upstream
+// validates the resulting controls.
+func finalize(req *messagesRequest, system []string, effort string, opts shared.ConversionOptions) ([]byte, *errclass.Error) {
 	if req.System == nil {
 		req.System = systemField(system)
 	}
@@ -161,29 +163,46 @@ func finalize(req *messagesRequest, system []string, effort string) ([]byte, *er
 		req.Messages = []anthropicMessage{}
 	}
 	if effort != "" {
-		budget, ok := thinking.BudgetFromEffort(effort)
-		if !ok {
-			return nil, &errclass.Error{Class: errclass.ClassUnsupported,
-				Message: fmt.Sprintf("reasoning effort %q has no Messages budget equivalent", effort)}
+		if eErr := applyThinking(req, effort, opts.MessagesThinkingMode); eErr != nil {
+			return nil, eErr
 		}
-		applyThinking(req, budget)
 	}
 	b, _ := json.Marshal(req) // only marshallable composed types; cannot fail
 	return b, nil
 }
 
-// applyThinking translates explicit off and fixed budgets. Auto leaves thinking
-// unspecified so the upstream chooses its default; enabled requires a budget.
+// applyThinking translates explicit off, adaptive levels and manual budgets.
+// Auto leaves thinking unspecified so the upstream chooses its default.
 // Client output limits and sampling controls stay intact for upstream validation.
-func applyThinking(req *messagesRequest, budget int64) {
+func applyThinking(req *messagesRequest, effort, mode string) *errclass.Error {
+	budget, ok := thinking.BudgetFromEffort(effort)
+	if !ok {
+		return &errclass.Error{Class: errclass.ClassUnsupported,
+			Message: fmt.Sprintf("reasoning effort %q has no Messages equivalent", effort)}
+	}
 	switch {
 	case budget == 0:
 		req.Thinking = &shared.ClaudeThinking{Type: "disabled"}
 	case budget < 0:
-		return
-	default:
+	case mode == shared.MessagesThinkingManual:
 		req.Thinking = &shared.ClaudeThinking{Type: "enabled", BudgetTokens: &budget}
+	default:
+		req.Thinking = &shared.ClaudeThinking{Type: "adaptive"}
+		req.OutputConfig = withEffort(req.OutputConfig, strings.ToLower(strings.TrimSpace(effort)))
 	}
+	return nil
+}
+
+// withEffort adds effort to an output_config object that may already carry a
+// structured output format.
+func withEffort(config json.RawMessage, effort string) json.RawMessage {
+	fields := map[string]json.RawMessage{}
+	if len(config) > 0 {
+		_ = json.Unmarshal(config, &fields) // composed by this package; always an object
+	}
+	fields["effort"], _ = json.Marshal(effort)
+	out, _ := json.Marshal(fields)
+	return out
 }
 
 // fromChatCompletions translates a Chat Completions request into a
@@ -191,7 +210,7 @@ func applyThinking(req *messagesRequest, budget int64) {
 // become the top-level system field, assistant tool_calls become tool_use
 // blocks, tool results become user tool_result blocks, stop becomes
 // stop_sequences, tools become input_schema definitions, reasoning_effort
-// becomes a fixed thinking budget.
+// becomes adaptive thinking or a manual budget.
 //
 // Explicit omission policy: fields with no Messages equivalent
 // (logprobs, frequency_penalty, n, ...) are omitted by struct selection;
@@ -320,7 +339,7 @@ func fromChatCompletions(upstreamModel string, body []byte, ctx ...*shared.Conve
 		return nil, err
 	}
 	req.OutputConfig = format
-	return finalize(req, system, src.ReasoningEffort)
+	return finalize(req, system, src.ReasoningEffort, shared.ContextOrNew(ctx).Options)
 }
 
 // fromResponses translates an OpenAI Responses request into a Messages
@@ -476,7 +495,7 @@ func fromResponses(upstreamModel string, body []byte, tools *shared.ConversionCo
 		return nil, err
 	}
 	req.OutputConfig = format
-	return finalize(req, system, effort)
+	return finalize(req, system, effort, tools.Options)
 }
 
 // applyToolChoiceMessages maps a normalized tool choice onto the outbound

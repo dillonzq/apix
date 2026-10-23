@@ -92,16 +92,18 @@ func TestReasoningConversionControls(t *testing.T) {
 								return
 							}
 							th := req["thinking"].(map[string]any)
-							wantType := "enabled"
+							if req["max_tokens"] != float64(64) {
+								t.Fatalf("limit changed: %v", req)
+							}
 							if effort == "none" {
-								wantType = "disabled"
+								if th["type"] != "disabled" {
+									t.Fatalf("none must disable thinking: %v", req)
+								}
+								break
 							}
-							if th["type"] != wantType || req["max_tokens"] != float64(64) {
-								t.Fatalf("thinking/limit changed: %v", req)
-							}
-							wantBudget := map[string]any{"minimal": float64(512), "xhigh": float64(32768), "max": float64(128000)}[effort]
-							if th["budget_tokens"] != wantBudget {
-								t.Fatalf("budget changed: %v", th)
+							effortOut, _ := req["output_config"].(map[string]any)
+							if th["type"] != "adaptive" || th["budget_tokens"] != nil || effortOut["effort"] != effort {
+								t.Fatalf("level must become adaptive effort: %v", req)
 							}
 						}
 

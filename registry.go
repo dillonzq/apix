@@ -81,6 +81,7 @@ func (r *Registry) Inspect(p Protocol, req Payload) (RequestInfo, *Error) {
 		return RequestInfo{}, err
 	}
 	info.Protocol, info.Kind = p, r.specs[p].Kind
+	info = req.Metadata.Apply(info)
 	return info, nil
 }
 

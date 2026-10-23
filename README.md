@@ -26,7 +26,7 @@ The library is layered. The core converts and decides routes without any network
 | Package | Role |
 | --- | --- |
 | `apix` | Protocol-neutral core: `Kind`, `Protocol`, `Codec`, `Exchange`, `Registry`, errors, diagnostics |
-| `protocol/openai`, `protocol/anthropic` | Codecs for each vendor's protocols |
+| `protocol/openai`, `protocol/anthropic`, `protocol/gemini` | Codecs for each vendor's protocols |
 | `route` | Native-first endpoint selection, priorities, weights, health tracking |
 | `gateway` | Optional HTTP executor and `http.Handler` with failover |
 | `sse` | Server-Sent Events framing and decoding |
@@ -39,8 +39,10 @@ The library is layered. The core converts and decides routes without any network
 | `llm` | `openai.chat-completions` | `openai.ChatCompletions` | `POST /v1/chat/completions` |
 | `llm` | `openai.responses` | `openai.Responses` | `POST /v1/responses` |
 | `llm` | `anthropic.messages` | `anthropic.Messages` | `POST /v1/messages` |
+| `llm` | `gemini.generate-content` | `gemini.GenerateContent` | `POST /v1beta/models/{model}:generateContent` / `:streamGenerateContent` |
+| `llm` | `gemini.interactions` | `gemini.Interactions` | `POST /v1beta/interactions` (native only) |
 
-The three LLM protocols convert directly to one another in all six directions; same-protocol requests only rewrite the model. Conversion covers text, image/file/audio/video input, function and custom tools, local shell adaptation, reasoning and its replay history, usage, structured output, cache hints, and representable citations. See [LLM protocol conversion](docs/protocols/llm.md) for mappings and limits.
+Chat Completions, Responses, Messages, and Gemini GenerateContent convert directly in all twelve directions. Interactions is native-only. Same-protocol requests preserve provider fields; GenerateContent carries model/stream in request metadata. See [Gemini protocols](docs/protocols/gemini.md) for URL handling, thinking options and signed replay. Conversion covers text, image/file/audio/video input, function and custom tools, local shell adaptation, reasoning and its replay history, usage, structured output, cache hints, and representable citations. See [LLM protocol conversion](docs/protocols/llm.md) for mappings and limits.
 
 Image generation, speech, and other kinds plug in through the same interfaces; see [adding protocols and kinds](docs/extending.md).
 
@@ -90,6 +92,7 @@ An `Exchange` holds one execution's state, such as tool identities restored in r
 | `LossPolicy: apix.LossPolicySafe` | any | Reject request conversions that lose semantics |
 | `LossPolicy: apix.LossPolicyStrict` | any | Reject every reported request loss |
 | `Ext: anthropic.MessagesOptions{AllowUnsignedThinking: true}` | Messages | Replay cross-protocol reasoning as unsigned thinking blocks |
+| `Ext: anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}` | Messages | Send reasoning levels as fixed `budget_tokens` for Claude models without adaptive thinking (default: adaptive) |
 | `Ext: openai.ResponsesOptions{NormalizeTools: true}` | Responses | Flatten namespaces, wrap custom tools, and adapt local shell for upstreams that only accept function tools |
 
 `ex.Diagnostics()` lists fields that conversion omitted or approximated, with `Code`, `Path`, `Message`, `Semantic`, `From`, and `To`. Responses and streams report losses but are never rejected because of the policy.
@@ -155,6 +158,7 @@ decoder.Finish() // after all converter output
 - [Architecture](docs/architecture.md): layers, dispatch, and state contracts
 - [Routing](docs/routing.md): endpoint selection, health, and the gateway's failover rules
 - [Adding protocols and kinds](docs/extending.md)
+- [Gemini and native Interactions](docs/protocols/gemini.md)
 - [LLM protocol conversion](docs/protocols/llm.md): field mappings, tools, reasoning, streams, and limits
 - [CONTRIBUTING.md](CONTRIBUTING.md): checks, design rules, and releases
 
@@ -165,10 +169,10 @@ make check # gofmt, vet, module and dependency checks, build, race tests
 make fuzz  # stream fuzz targets
 ```
 
-Conversion behavior is pinned by 27 reviewed snapshots under `internal/llm/translate/testdata/conversion`; update them only after reviewing the output change:
+Conversion behavior is pinned by 48 reviewed snapshots under `internal/llm/translate/testdata/conversion`; update them only after reviewing the output change:
 
 ```sh
-go test ./internal/llm/translate -run TestProtocolGolden -update
+go test ./internal/llm/translate -run 'Test(Protocol|GeminiProtocol)Golden' -update
 ```
 
 Licensed under [MIT](LICENSE).

@@ -26,7 +26,7 @@ apix 在不同供应商的 API 协议之间转换请求、普通响应和流式�
 | 包 | 职责 |
 | --- | --- |
 | `apix` | 与协议无关的核心：`Kind`、`Protocol`、`Codec`、`Exchange`、`Registry`、错误、诊断 |
-| `protocol/openai`、`protocol/anthropic` | 各供应商协议的 Codec |
+| `protocol/openai`、`protocol/anthropic`、`protocol/gemini` | 各供应商协议的 Codec |
 | `route` | 同协议优先的端点选择、优先级、权重、健康统计 |
 | `gateway` | 可选的 HTTP 执行器与 `http.Handler`，支持故障切换 |
 | `sse` | Server-Sent Events 分帧与解码 |
@@ -39,8 +39,10 @@ apix 在不同供应商的 API 协议之间转换请求、普通响应和流式�
 | `llm` | `openai.chat-completions` | `openai.ChatCompletions` | `POST /v1/chat/completions` |
 | `llm` | `openai.responses` | `openai.Responses` | `POST /v1/responses` |
 | `llm` | `anthropic.messages` | `anthropic.Messages` | `POST /v1/messages` |
+| `llm` | `gemini.generate-content` | `gemini.GenerateContent` | `POST /v1beta/models/{model}:generateContent` / `:streamGenerateContent` |
+| `llm` | `gemini.interactions` | `gemini.Interactions` | `POST /v1beta/interactions`（仅原生） |
 
-三种 LLM 协议在全部六个方向上直接互转，同协议请求只改写模型。转换覆盖文本、图片/文件/音频/视频输入、函数与 custom 工具、本地 shell 适配、推理及其历史回传、usage、结构化输出、缓存提示和可表示的引用。映射与限制见 [LLM 协议转换](docs/protocols/llm.zh-CN.md)。
+Chat Completions、Responses、Messages 与 Gemini GenerateContent 在全部十二个方向上直接互转；Interactions 仅支持原生。原生请求保留供应商字段，GenerateContent 的模型和流式模式通过请求元信息传入。URL 处理、推理选项和签名回放见 [Gemini 协议](docs/protocols/gemini.zh-CN.md)。转换覆盖文本、图片/文件/音频/视频输入、函数与 custom 工具、本地 shell 适配、推理及其历史回传、usage、结构化输出、缓存提示和可表示的引用。映射与限制见 [LLM 协议转换](docs/protocols/llm.zh-CN.md)。
 
 图像生成、语音等其他接口类型通过同一套接口接入，见[新增协议与接口类型](docs/extending.zh-CN.md)。
 
@@ -90,6 +92,7 @@ tail, aerr := stream.Finish()                   // 上游 EOF 时调用
 | `LossPolicy: apix.LossPolicySafe` | 任意 | 拒绝影响语义的请求转换损耗 |
 | `LossPolicy: apix.LossPolicyStrict` | 任意 | 拒绝所有已报告的请求损耗 |
 | `Ext: anthropic.MessagesOptions{AllowUnsignedThinking: true}` | Messages | 把跨协议推理历史回传为无签名 thinking 块 |
+| `Ext: anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}` | Messages | 为不支持 adaptive 的旧 Claude 模型发送固定 `budget_tokens`（默认 adaptive） |
 | `Ext: openai.ResponsesOptions{NormalizeTools: true}` | Responses | 为只接受函数工具的上游展开 namespace、包装 custom 工具并适配本地 shell |
 
 `ex.Diagnostics()` 列出转换省略或近似的字段，包含 `Code`、`Path`、`Message`、`Semantic`、`From`、`To`。响应和流式响应只报告损耗，不会因策略被拒绝。
@@ -155,6 +158,7 @@ decoder.Finish() // 处理完所有转换输出后调用
 - [架构](docs/architecture.zh-CN.md)：分层、分派与状态约定
 - [路由](docs/routing.zh-CN.md)：端点选择、健康统计与网关的切换规则
 - [新增协议与接口类型](docs/extending.zh-CN.md)
+- [Gemini 与原生 Interactions](docs/protocols/gemini.zh-CN.md)
 - [LLM 协议转换](docs/protocols/llm.zh-CN.md)：字段映射、工具、推理、流式与限制
 - [CONTRIBUTING.md](CONTRIBUTING.md)：检查、设计规则与发布流程
 
@@ -165,10 +169,10 @@ make check # gofmt、vet、模块与依赖检查、构建、竞态测试
 make fuzz  # 流式 fuzz
 ```
 
-转换行为由 `internal/llm/translate/testdata/conversion` 下 27 份经过审阅的快照固定。确认输出变化符合预期后才更新：
+转换行为由 `internal/llm/translate/testdata/conversion` 下 48 份经过审阅的快照固定。确认输出变化符合预期后才更新：
 
 ```sh
-go test ./internal/llm/translate -run TestProtocolGolden -update
+go test ./internal/llm/translate -run 'Test(Protocol|GeminiProtocol)Golden' -update
 ```
 
 本库采用 [MIT 许可证](LICENSE)。

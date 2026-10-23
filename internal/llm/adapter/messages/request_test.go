@@ -199,63 +199,63 @@ func TestChatCompletionsDataURLImage(t *testing.T) {
 	}
 }
 
-func TestChatCompletionsThinkingBudget(t *testing.T) {
-	// Levels use fixed table budgets.
+// manualChatReq converts with manual budget thinking, for Claude models that
+// predate adaptive thinking.
+func manualChatReq(t *testing.T, body string) (map[string]any, *errclass.Error) {
+	t.Helper()
+	ctx := shared.NewConversionContext()
+	ctx.Options.MessagesThinkingMode = shared.MessagesThinkingManual
+	out, eErr := BuildRequest("minimax", "chat-completions", []byte(body), ctx)
+	if eErr != nil {
+		return nil, eErr
+	}
+	return decodeReq(t, out), nil
+}
 
-	for _, effort := range []string{"low", "medium", "high"} {
-		m, eErr := chatReq(t, `{"messages":[{"role":"user","content":"a"}],"reasoning_effort":"`+effort+`"}`)
+func TestChatCompletionsThinkingAdaptive(t *testing.T) {
+	// Levels default to adaptive thinking with the level as effort, merged
+	// with any structured output format.
+	for _, effort := range []string{"minimal", "low", "medium", "high", "xhigh", "max"} {
+		m, eErr := chatReq(t, `{"messages":[{"role":"user","content":"a"}],"reasoning_effort":"`+effort+`","response_format":{"type":"json_schema","json_schema":{"name":"a","schema":{"type":"object"}}}}`)
 		if eErr != nil {
 			t.Fatalf("%s: unexpected error: %v", effort, eErr)
 		}
 		th := m["thinking"].(map[string]any)
-		budget := th["budget_tokens"].(float64)
-		if th["type"] != "enabled" || budget != float64(map[string]int64{"low": 1024, "medium": 8192, "high": 24576}[effort]) {
-			t.Errorf("%s thinking = %v (want enabled with fixed table budget)", effort, th)
+		if th["type"] != "adaptive" || th["budget_tokens"] != nil {
+			t.Errorf("%s thinking = %v (want adaptive without a budget)", effort, th)
+		}
+		cfg := m["output_config"].(map[string]any)
+		if cfg["effort"] != effort || cfg["format"] == nil {
+			t.Errorf("%s output_config = %v (want effort and format)", effort, cfg)
 		}
 		if m["max_tokens"] != float64(4096) {
 			t.Errorf("%s max_tokens must stay at the client/default limit: %v", effort, m)
 		}
 	}
-	// High maps to the exact table value 24576.
-	m, eErr := chatReq(t, `{"messages":[{"role":"user","content":"a"}],"reasoning_effort":"high"}`)
-	if eErr != nil {
-		t.Fatalf("unexpected error: %v", eErr)
-	}
-	if m["thinking"].(map[string]any)["budget_tokens"] != float64(24576) {
-		t.Errorf("high budget = %v", m["thinking"])
-	}
+}
 
-	// xhigh/max remain enabled even when budgets exceed max_tokens.
-
-	for _, effort := range []string{"xhigh", "max"} {
-		m, eErr := chatReq(t, `{"messages":[{"role":"user","content":"a"}],"reasoning_effort":"`+effort+`"}`)
+func TestChatCompletionsThinkingManualBudget(t *testing.T) {
+	// Manual mode resolves levels to fixed table budgets without clamping;
+	// upstream decides whether a budget above max_tokens is valid.
+	for effort, want := range map[string]int64{"minimal": 512, "low": 1024, "medium": 8192, "high": 24576, "xhigh": 32768, "max": 128000} {
+		m, eErr := manualChatReq(t, `{"messages":[{"role":"user","content":"a"}],"reasoning_effort":"`+effort+`"}`)
 		if eErr != nil {
 			t.Fatalf("%s: unexpected error: %v", effort, eErr)
 		}
-		if m["thinking"] == nil {
-			t.Errorf("%s: thinking missing", effort)
+		th := m["thinking"].(map[string]any)
+		if th["type"] != "enabled" || th["budget_tokens"] != float64(want) {
+			t.Errorf("%s thinking = %v (want enabled with budget %d)", effort, th, want)
+		}
+		if _, has := m["output_config"]; has {
+			t.Errorf("%s manual thinking must not send effort: %v", effort, m)
+		}
+		if m["max_tokens"] != float64(4096) {
+			t.Errorf("%s max_tokens must stay at the client/default limit: %v", effort, m)
 		}
 	}
-
-	// Verify exact table values.
-	for effort, want := range map[string]int64{"low": 1024, "high": 24576} {
-		m, eErr := chatReq(t, `{"messages":[{"role":"user","content":"a"}],"reasoning_effort":"`+effort+`"}`)
-		if eErr != nil {
-			t.Fatalf("%s default: unexpected error: %v", effort, eErr)
-		}
-		if got := m["thinking"].(map[string]any)["budget_tokens"]; got != float64(want) {
-			t.Errorf("%s default budget = %v, want %d", effort, got, want)
-		}
-	}
-
-	// A budget above max_tokens does not change the client's output limit;
-	// upstream decides whether the combination is valid.
-	m, eErr = chatReq(t, `{"messages":[{"role":"user","content":"a"}],"reasoning_effort":"high"}`)
-	if eErr != nil {
-		t.Fatalf("unexpected error: %v", eErr)
-	}
-	if m["max_tokens"].(float64) != float64(4096) {
-		t.Errorf("max_tokens changed: %v", m["max_tokens"])
+	m, eErr := manualChatReq(t, `{"messages":[{"role":"user","content":"a"}],"reasoning_effort":"none"}`)
+	if eErr != nil || m["thinking"].(map[string]any)["type"] != "disabled" {
+		t.Fatalf("manual none must disable thinking: %v %v", m, eErr)
 	}
 }
 
@@ -437,8 +437,8 @@ func TestResponsesItems(t *testing.T) {
 		t.Errorf("reasoning block = %v", th)
 	}
 	thb := m["thinking"].(map[string]any)
-	if thb["budget_tokens"] != float64(1024) { // low maps to its fixed budget
-		t.Errorf("thinking budget = %v", thb)
+	if thb["type"] != "adaptive" || m["output_config"].(map[string]any)["effort"] != "low" {
+		t.Errorf("thinking = %v, output_config = %v", thb, m["output_config"])
 	}
 	tool := m["tools"].([]any)[0].(map[string]any)
 	if tool["name"] != "f" || tool["description"] != "fd" {
@@ -521,7 +521,7 @@ func TestChatCompletionsUnknownEffort(t *testing.T) {
 	if eErr != nil {
 		t.Fatal(eErr)
 	}
-	if m["thinking"].(map[string]any)["budget_tokens"] != float64(128000) {
+	if m["output_config"].(map[string]any)["effort"] != "max" {
 		t.Fatalf("max must survive without clamping: %v", m)
 	}
 }

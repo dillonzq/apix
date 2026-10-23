@@ -1,0 +1,44 @@
+[
+  {
+    "Name": "",
+    "Data": {
+      "candidates": [
+        {
+          "content": {
+            "parts": [
+              {
+                "text": "hello"
+              }
+            ],
+            "role": "model"
+          },
+          "index": 0
+        }
+      ],
+      "modelVersion": "m",
+      "responseId": "r"
+    }
+  },
+  {
+    "Name": "",
+    "Data": {
+      "candidates": [
+        {
+          "content": {
+            "parts": [],
+            "role": "model"
+          },
+          "finishReason": "STOP",
+          "index": 0
+        }
+      ],
+      "modelVersion": "m",
+      "responseId": "r",
+      "usageMetadata": {
+        "candidatesTokenCount": 0,
+        "promptTokenCount": 0,
+        "totalTokenCount": 0
+      }
+    }
+  }
+]

@@ -1,0 +1,34 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "plan",
+            "thought": true
+          },
+          {
+            "text": "hello"
+          },
+          {
+            "functionCall": {
+              "args": {},
+              "id": "c1",
+              "name": "f"
+            }
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "modelVersion": "m",
+  "responseId": "r",
+  "usageMetadata": {
+    "candidatesTokenCount": 2,
+    "promptTokenCount": 4,
+    "totalTokenCount": 6
+  }
+}

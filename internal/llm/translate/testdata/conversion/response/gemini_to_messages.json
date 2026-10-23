@@ -1,0 +1,60 @@
+{
+  "content": [
+    {
+      "extra_content": {
+        "google": {
+          "parts": [
+            {
+              "text": "plan",
+              "thought": true
+            }
+          ]
+        }
+      },
+      "thinking": "plan",
+      "type": "thinking"
+    },
+    {
+      "extra_content": {
+        "google": {
+          "parts": [
+            {
+              "text": "hello"
+            }
+          ]
+        }
+      },
+      "text": "hello",
+      "type": "text"
+    },
+    {
+      "extra_content": {
+        "google": {
+          "parts": [
+            {
+              "functionCall": {
+                "args": {},
+                "id": "c1",
+                "name": "f"
+              }
+            }
+          ]
+        }
+      },
+      "id": "c1",
+      "input": {},
+      "name": "f",
+      "type": "tool_use"
+    }
+  ],
+  "id": "r",
+  "model": "m",
+  "role": "assistant",
+  "stop_reason": "tool_use",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+    "input_tokens": 4,
+    "output_tokens": 2
+  }
+}

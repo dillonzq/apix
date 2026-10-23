@@ -17,6 +17,7 @@ const (
 	chatCompletions apix.Protocol = "openai.chat-completions"
 	responses       apix.Protocol = "openai.responses"
 	messages        apix.Protocol = "anthropic.messages"
+	gemini          apix.Protocol = "gemini.generate-content"
 )
 
 // StripSupersededReasoning removes the client's own reasoning control from the
@@ -27,10 +28,11 @@ const (
 // request passes the control through without validating it, and its siblings
 // (display) are preserved by the override.
 func StripSupersededReasoning(target, source apix.Protocol, body []byte) []byte {
-	dropThinking := source == messages && (target == chatCompletions || target == responses)
-	dropEffort := target == messages && source == chatCompletions
-	dropNestedEffort := target == messages && source == responses
-	if !dropThinking && !dropEffort && !dropNestedEffort {
+	dropThinking := source == messages && (target == chatCompletions || target == responses || target == gemini)
+	dropEffort := (target == messages || target == gemini) && source == chatCompletions
+	dropNestedEffort := (target == messages || target == gemini) && source == responses
+	dropGemini := source == gemini && (target == chatCompletions || target == responses || target == messages)
+	if !dropThinking && !dropEffort && !dropNestedEffort && !dropGemini {
 		return body
 	}
 	var req map[string]json.RawMessage
@@ -39,6 +41,14 @@ func StripSupersededReasoning(target, source apix.Protocol, body []byte) []byte 
 		return body
 	}
 	switch {
+	case dropGemini:
+		cfg := nestedObject(req, "generationConfig")
+		tc := nestedObject(cfg, "thinkingConfig")
+		for _, k := range []string{"thinkingLevel", "thinkingBudget", "thinking_level", "thinking_budget"} {
+			delete(tc, k)
+		}
+		cfg["thinkingConfig"] = jsonObject(tc)
+		req["generationConfig"] = jsonObject(cfg)
 	case dropThinking:
 		// Chat Completions and Responses derive their control from the
 		// Messages thinking object and reject an unknown type.
@@ -46,7 +56,7 @@ func StripSupersededReasoning(target, source apix.Protocol, body []byte) []byte 
 	case dropEffort:
 		delete(req, "reasoning_effort")
 	default:
-		// Messages converts the effort through the fixed budget table and
+		// Messages converts the effort to adaptive or manual thinking and
 		// reports a level with no equivalent; the other reasoning fields
 		// (summary, and any future sibling) stay untouched.
 		deleteNested(req, "reasoning", "effort")
@@ -58,11 +68,25 @@ func StripSupersededReasoning(target, source apix.Protocol, body []byte) []byte 
 	return out
 }
 
-// ApplySuffix rewrites the reasoning control of an upstream body the
+// Options select how ApplySuffixWith renders a suffix for an upstream.
+type Options struct {
+	// MessagesManual renders Messages suffixes as enabled thinking with
+	// budget_tokens, for Claude models that predate adaptive thinking. Set it
+	// when the exchange uses anthropic.ThinkingManual.
+	MessagesManual bool
+}
+
+// ApplySuffix is ApplySuffixWith with zero Options: Messages suffixes use
+// adaptive thinking, matching the default Messages exchange.
+func ApplySuffix(target apix.Protocol, body []byte, suffix Suffix) ([]byte, *Error) {
+	return ApplySuffixWith(target, body, suffix, Options{})
+}
+
+// ApplySuffixWith rewrites the reasoning control of an upstream body the
 // route adapter already built, so the requested model's suffix takes priority
 // over the control the client sent. It runs only for a recognized suffix value:
 // absent or unrecognized suffixes leave the body byte-identical.
-func ApplySuffix(target apix.Protocol, body []byte, suffix Suffix) ([]byte, *Error) {
+func ApplySuffixWith(target apix.Protocol, body []byte, suffix Suffix, opts Options) ([]byte, *Error) {
 	if suffix.Effort == "" {
 		return body, nil
 	}
@@ -77,9 +101,11 @@ func ApplySuffix(target apix.Protocol, body []byte, suffix Suffix) ([]byte, *Err
 	case chatCompletions:
 		applyChatEffort(req, suffix.Effort)
 	case messages:
-		applyMessagesEffort(req, suffix)
+		applyMessagesEffort(req, suffix, opts.MessagesManual)
 	case responses:
 		applyResponsesEffort(req, suffix.Effort)
+	case gemini:
+		applyGeminiSuffix(req, suffix)
 	default:
 		return body, nil
 	}
@@ -102,30 +128,40 @@ func applyChatEffort(req map[string]json.RawMessage, effort string) {
 }
 
 // applyMessagesEffort overrides the Anthropic thinking control: none disables
-// thinking, a level becomes an enabled budget from the fixed table, a numeric
-// suffix keeps its exact budget, and auto removes the
-// control so the upstream picks its default. Sibling fields the client sent
-// (display) survive the enabled override; display is dropped when thinking is
-// disabled, because display only applies to an active block. An adaptive
-// output_config.effort is always superseded.
-func applyMessagesEffort(req map[string]json.RawMessage, suffix Suffix) {
+// thinking and auto removes the control so the upstream picks its default.
+// Adaptive mode sends the level as output_config.effort, deriving it from a
+// numeric suffix with the fixed thresholds; manual mode sends an enabled budget
+// from the fixed table, or a numeric suffix's exact budget. Sibling fields the
+// client sent (display) survive an active override; display is dropped when
+// thinking is disabled, because it only applies to an active block.
+func applyMessagesEffort(req map[string]json.RawMessage, suffix Suffix, manual bool) {
+	budget, ok := messagesBudget(suffix)
+	if suffix.Effort != "auto" && !ok {
+		return
+	}
 	deleteNested(req, "output_config", "effort")
 	if suffix.Effort == "auto" {
 		delete(req, "thinking")
 		return
 	}
-	budget, ok := messagesBudget(suffix)
-	if !ok {
-		return
-	}
 	thinkingObj := nestedObject(req, "thinking")
-	if budget == 0 {
-		delete(thinkingObj, "budget_tokens")
+	delete(thinkingObj, "budget_tokens")
+	switch {
+	case budget == 0:
 		delete(thinkingObj, "display")
 		thinkingObj["type"] = jsonRaw("disabled")
-	} else {
+	case manual:
 		thinkingObj["type"] = jsonRaw("enabled")
 		thinkingObj["budget_tokens"] = jsonRaw(budget)
+	default:
+		effort := suffix.Effort
+		if suffix.Budget != nil {
+			effort, _ = EffortFromBudget(budget)
+		}
+		thinkingObj["type"] = jsonRaw("adaptive")
+		cfg := nestedObject(req, "output_config")
+		cfg["effort"] = jsonRaw(effort)
+		req["output_config"] = jsonObject(cfg)
 	}
 	req["thinking"] = jsonObject(thinkingObj)
 }
@@ -196,4 +232,27 @@ func jsonObject(obj map[string]json.RawMessage) json.RawMessage {
 func jsonRaw(v any) json.RawMessage {
 	b, _ := json.Marshal(v)
 	return b
+}
+
+// applyGeminiSuffix preserves visibility independently of the requested amount.
+func applyGeminiSuffix(req map[string]json.RawMessage, suffix Suffix) {
+	cfg := nestedObject(req, "generationConfig")
+	tc := nestedObject(cfg, "thinkingConfig")
+	for _, k := range []string{"thinkingBudget", "thinkingLevel", "thinking_budget", "thinking_level"} {
+		delete(tc, k)
+	}
+	if suffix.Budget != nil {
+		tc["thinkingBudget"] = jsonRaw(*suffix.Budget)
+	} else {
+		switch suffix.Effort {
+		case "auto":
+			tc["thinkingBudget"] = jsonRaw(-1)
+		case "none":
+			tc["thinkingBudget"] = jsonRaw(0)
+		default:
+			tc["thinkingLevel"] = jsonRaw(suffix.Effort)
+		}
+	}
+	cfg["thinkingConfig"] = jsonObject(tc)
+	req["generationConfig"] = jsonObject(cfg)
 }

@@ -119,7 +119,9 @@ jobs:
           # go test writes a crashing input to internal/llm/translate/testdata/fuzz/<Target>/; keeping
           # it lets the failure become a permanent regression case.
           name: fuzz-failures
-          path: internal/llm/translate/testdata/fuzz/**
+          path: |
+            internal/llm/translate/testdata/fuzz/**
+            protocol/gemini/testdata/fuzz/**
           if-no-files-found: ignore
           retention-days: 14
 

@@ -1,6 +1,6 @@
 // Package openai provides codecs for OpenAI wire protocols: Chat Completions
 // and Responses. Both belong to apix.KindLLM and convert directly to and from
-// every other LLM protocol in this module.
+// the other generation protocols in this module (excluding Interactions).
 package openai
 
 import (

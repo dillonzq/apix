@@ -31,12 +31,54 @@ type Protocol string
 type Payload struct {
 	Body        []byte
 	ContentType string
+	// Metadata carries request information that may live outside the body,
+	// for example the model and operation in a Gemini URL. It is ignored on
+	// responses. Metadata takes precedence over body fields when supplied.
+	Metadata RequestMetadata
+}
+
+// RequestMetadata supplements a request body without coupling codecs to HTTP.
+// Empty Model and nil Stream leave the corresponding body values unchanged.
+type RequestMetadata struct {
+	Model  string
+	Stream *bool
+}
+
+// Apply overlays routing values while retaining all non-stream requirements.
+// It does not mutate the input Features slice and is safe to apply twice.
+func (m RequestMetadata) Apply(info RequestInfo) RequestInfo {
+	if m.Model != "" {
+		info.Model = m.Model
+	}
+	if m.Stream != nil {
+		info.Stream = *m.Stream
+		features := make([]string, 0, len(info.Features)+1)
+		if info.Stream {
+			features = append(features, FeatureStream)
+		}
+		for _, f := range info.Features {
+			if f != FeatureStream {
+				features = append(features, f)
+			}
+		}
+		info.Features = features
+	}
+	return info
 }
 
 // Feature names a capability a request needs and an endpoint may support.
 const (
-	FeatureStream = "stream"
-	FeatureTools  = "tools"
+	FeatureStream           = "stream"
+	FeatureTools            = "tools"
+	FeatureImageInput       = "image-input"
+	FeatureFileInput        = "file-input"
+	FeatureAudioInput       = "audio-input"
+	FeatureVideoInput       = "video-input"
+	FeatureImageOutput      = "image-output"
+	FeatureAudioOutput      = "audio-output"
+	FeatureVideoOutput      = "video-output"
+	FeatureStructuredOutput = "structured-output"
+	FeatureWebSearch        = "web-search"
 )
 
 // RequestInfo describes a client request for routing. Codecs fill it from the
@@ -92,6 +134,9 @@ type ProtocolSpec struct {
 	// Path returns the request path for an upstream call. It receives the
 	// upstream model so protocols that carry the model in the path can use it.
 	Path func(info RequestInfo, upstreamModel string) string
+	// ParsePath optionally extracts request metadata from an HTTP URL path.
+	// Handler calls it before Inspect. Codecs themselves perform no I/O.
+	ParsePath func(path string) (RequestMetadata, *Error)
 	// Auth is the default API key scheme; endpoints may override it.
 	Auth AuthScheme
 	// Headers are fixed headers every request carries, such as a version.

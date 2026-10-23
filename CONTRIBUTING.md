@@ -83,7 +83,7 @@ The weekly run catches new vulnerability database findings even when there are n
 | Path | Contents |
 | --- | --- |
 | Root package (`apix`) | Protocol-neutral API: `Kind`, `Protocol`, `Codec`, `Exchange`, `Registry`, errors, diagnostics. |
-| `protocol/openai`, `protocol/anthropic` | Vendor codecs: protocol IDs, specs, and vendor exchange options. |
+| `protocol/openai`, `protocol/anthropic`, `protocol/gemini` | Vendor codecs: protocol IDs, specs, and vendor exchange options. |
 | `route` | Endpoint selection, the native-first strategy, health tracking. |
 | `gateway` | Optional HTTP executor and handler with failover. |
 | `sse` | SSE framing and decoding. |
@@ -118,7 +118,7 @@ Work through this list; reviewers will check it against the diff.
 4. **Preserve what the current path preserves.** Paths that use `json.RawMessage` keep unknown fields and exact numbers; do not add a full re-encode through modeled types.
 5. **Keep tool identities intact.** Register declarations and history references through the existing transaction helpers so a failed conversion leaves the registry unchanged.
 6. **Streams have their own contract.** Preserve event order, emit `[DONE]` only for Chat output, keep `sequence_number` monotonic for synthesized Responses events, validate termination in `Finish`, and never discard events that were produced before an error.
-7. **Update snapshots deliberately.** `go test ./internal/llm/translate -run TestProtocolGolden -update` rewrites the 27 snapshots under `internal/llm/translate/testdata/conversion/`. Read every changed line and explain it in the pull request. Never regenerate snapshots to make a red test green; if you cannot explain a diff, that is the bug.
+7. **Update snapshots deliberately.** `go test ./internal/llm/translate -run 'Test(Protocol|GeminiProtocol)Golden' -update` rewrites the 48 snapshots under `internal/llm/translate/testdata/conversion/`. Read every changed line and explain it in the pull request. Never regenerate snapshots to make a red test green; if you cannot explain a diff, that is the bug.
 8. **Update the documentation.** Behavior, limits, and direction matrices live in [LLM protocol conversion](docs/protocols/llm.md); module responsibilities live in [code structure](docs/architecture.md); routing and failover rules live in [routing](docs/routing.md). Each document has a `.zh-CN.md` counterpart that must be updated in the same pull request, as does the README pair when the public API or installation changes.
 
 ## Tests

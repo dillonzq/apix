@@ -1,0 +1,33 @@
+{
+  "input": [
+    {
+      "content": [
+        {
+          "text": "hello",
+          "type": "input_text"
+        }
+      ],
+      "role": "user",
+      "type": "message"
+    }
+  ],
+  "model": "m",
+  "text": {
+    "format": {
+      "name": "response",
+      "schema": {
+        "type": "object"
+      },
+      "type": "json_schema"
+    }
+  },
+  "tools": [
+    {
+      "name": "f",
+      "parameters": {
+        "type": "object"
+      },
+      "type": "function"
+    }
+  ]
+}

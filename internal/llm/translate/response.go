@@ -2,6 +2,7 @@ package translate
 
 import (
 	"github.com/dillonzq/apix/internal/llm/adapter/chatcompletions"
+	"github.com/dillonzq/apix/internal/llm/adapter/gemini"
 	"github.com/dillonzq/apix/internal/llm/adapter/messages"
 	"github.com/dillonzq/apix/internal/llm/adapter/responses"
 )
@@ -10,6 +11,9 @@ import (
 func ConvertResponse(upstreamFormat, outputFormat string, status int, body []byte, state *RequestState) ([]byte, *Error) {
 	if err := validateFormats(upstreamFormat, outputFormat); err != nil {
 		return nil, err
+	}
+	if upstreamFormat == FormatGemini || outputFormat == FormatGemini {
+		return gemini.ConvertResponse(upstreamFormat, outputFormat, status, body, conversionContext(state))
 	}
 	switch upstreamFormat {
 	case FormatChatCompletions:
