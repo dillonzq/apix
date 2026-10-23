@@ -70,6 +70,23 @@ func TestSpecs(t *testing.T) {
 	}
 }
 
+// A successful ParsePath must return a nil interface, not a nil *apix.Error.
+func TestGeminiParsePath(t *testing.T) {
+	spec, ok := registry(t).Spec(gemini.GenerateContent)
+	if !ok || spec.ParsePath == nil {
+		t.Fatal("GenerateContent has no ParsePath")
+	}
+	md, err := spec.ParsePath("/v1beta/models/m:streamGenerateContent")
+	if err != nil || md.Model != "m" || md.Stream == nil || !*md.Stream {
+		t.Fatalf("metadata %+v, err %v", md, err)
+	}
+	for _, path := range []string{"/v1beta/models/m:countTokens", "/v1beta/models/:generateContent", "/other"} {
+		if _, err := spec.ParsePath(path); apix.AsError(err) == nil || apix.AsError(err).Class != apix.ClassUnsupported {
+			t.Fatalf("%s: %v", path, err)
+		}
+	}
+}
+
 func drainEngine(t *testing.T, sc translate.StreamConverter, wire string) []byte {
 	t.Helper()
 	events, _, err := sc.Feed([]byte(wire))

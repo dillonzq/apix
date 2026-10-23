@@ -19,7 +19,7 @@ func geminiPath(info apix.RequestInfo, model string) string {
 }
 
 // parseGeminiPath reads the model and streaming mode from a client URL path.
-func parseGeminiPath(path string) (apix.RequestMetadata, *apix.Error) {
+func parseGeminiPath(path string) (apix.RequestMetadata, error) {
 	suffix, ok := strings.CutPrefix(path, "/v1beta/models/")
 	if !ok {
 		suffix, ok = strings.CutPrefix(path, "/v1/models/")

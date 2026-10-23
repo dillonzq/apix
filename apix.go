@@ -158,8 +158,9 @@ type ProtocolSpec struct {
 	// upstream model so protocols that carry the model in the path can use it.
 	Path func(info RequestInfo, upstreamModel string) string
 	// ParsePath optionally extracts request metadata from an HTTP URL path.
-	// Handler calls it before Inspect. Codecs themselves perform no I/O.
-	ParsePath func(path string) (RequestMetadata, *Error)
+	// Handler calls it before Inspect and replies with a returned *Error in
+	// the protocol's envelope. Codecs themselves perform no I/O.
+	ParsePath func(path string) (RequestMetadata, error)
 	// Auth is the default API key scheme; endpoints may override it.
 	Auth AuthScheme
 	// Headers are fixed headers every request carries, such as a version.
