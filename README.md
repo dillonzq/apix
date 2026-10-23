@@ -135,7 +135,7 @@ http.Handle("/v1/messages", g.Handler(anthropic.Messages))
 http.Handle("/v1/chat/completions", g.Handler(openai.ChatCompletions))
 ```
 
-`Do` returns at the commit point: once an ordinary response converted, or once a stream produced its first event. Before that point, retryable failures (rate limits, server errors, network errors, unusable upstream output) and rejected conversions move to the next candidate. After it, nothing is retried, because the client may already have output; a failure surfaces from `Response.Body.Read`. Authentication headers follow each protocol's scheme (`Authorization: Bearer` for OpenAI, `x-api-key` plus `anthropic-version` for Anthropic). Client credentials are never forwarded.
+`Do` returns at the commit point: once an ordinary response converted, or once a stream produced its first event. Before that point, retryable failures (rate limits, server errors, network errors, unusable upstream output) and rejected conversions move to the next candidate. After it, nothing is retried, because the client may already have output; a failure surfaces from `Response.Body.Read`. Authentication headers follow each protocol's scheme (`Authorization: Bearer` for OpenAI, `x-api-key` plus `anthropic-version` for Anthropic, `x-goog-api-key` for Gemini). Client credentials are never forwarded.
 
 | `gateway.Config` field | Effect |
 | --- | --- |

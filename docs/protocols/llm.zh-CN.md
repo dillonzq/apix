@@ -156,7 +156,7 @@ Messages 禁用时移除 `thinking.display`，并始终覆盖客户端的 `outpu
 | 结束原因 | `stop` ↔ `end_turn`、`length` ↔ `max_tokens`、`tool_calls` ↔ `tool_use`、`content_filter` ↔ `refusal`。未知原因回退到普通结束；`stop_sequence` 的具体值不复制 |
 | 工具调用与截断并存 | 转 Chat Completions / Messages 时实际工具调用优先于截断原因；转 Responses 时仍以 `length/max_tokens` 映射 `incomplete`，工具信号放在 output items 中 |
 | 基础 usage | 输入/输出 token 映射；Chat Completions/Responses 的 total 按输入+输出重算；缺省 usage 合成零值 |
-| 缓存提示 | Chat Completions / Responses → Messages 保留内容块和工具上的 `cache_control`（包括 `ttl` 等扩展字段）；系统与 assistant 文本有提示时保留块边界。消息/输入项级提示映射到该项最后生成的块，已有块级提示优先；Chat 工具外层提示优先于 function 内层。同协议原样保留，转向其他协议报告提示丢失，不自动添加缓存断点  工具结果只将原末尾子块的提示迁移到父级 `tool_result`，已有末尾提示优先于消息/项级提示；非末尾子块、reasoning 和 additional_tools 项的提示不可表示，按丢失策略省略或在 strict 模式拒绝。namespace 工具去重保留首次声明，被删除声明上的缓存提示按原始字段路径报告丢失。 |
+| 缓存提示 | Chat Completions / Responses → Messages 保留内容块和工具上的 `cache_control`（包括 `ttl` 等扩展字段）；系统与 assistant 文本有提示时保留块边界。消息/输入项级提示映射到该项最后生成的块，已有块级提示优先；Chat 工具外层提示优先于 function 内层。同协议原样保留，转向其他协议报告提示丢失，不自动添加缓存断点。工具结果只将原末尾子块的提示迁移到父级 `tool_result`，已有末尾提示优先于消息/项级提示；非末尾子块、reasoning 和 additional_tools 项的提示不可表示，按丢失策略省略或在 strict 模式拒绝。namespace 工具去重保留首次声明，被删除声明上的缓存提示按原始字段路径报告丢失。 |
 | 缓存 usage | Messages 的 input 不含缓存，转 Chat Completions/Responses 时加上 cache read+creation；反向转 Messages 时扣掉可表示的缓存量并限制为非负。cache read 保留；cache creation 在三个协议间映射为 cache_creation_input_tokens / cache_write_tokens，缺省细项保持缺省，显式零值保留，不额外重复计入输入总量 |
 | 推理 token usage | Chat Completions ↔ Responses 保留 `reasoning_tokens`；转 Messages 没有独立细项，仍计入输出总量 |
 | 身份与时间 | 响应 id/model 保留；合成 message/reasoning item 的 id 由响应 id 派生。普通跨协议 Chat Completions 的 created 使用当前时间；Responses 流转 Chat Completions 可使用上游 created_at；其他未建模身份/时间字段不复制 |
@@ -210,6 +210,6 @@ logprobs、供应商扩展、历史 compaction 和签名不保证跨协议保留
 
 ## 实现与验证
 
-供应商 Codec 委托给 `internal/llm/translate` 中的引擎，由引擎负责分派、请求策略和流式分帧。`internal/llm/adapter` 下的各协议 adapter 负责直接转换、上游事件分派和目标流式输出。共享协议类型、事件构造、工具身份和字段规则按职责分文件，位于 `internal/llm/adapter/shared`；推理控制与后缀位于 `reasoning`。模块与状态约定见[代码结构说明](../architecture.zh-CN.md)。
+供应商 Codec 委托给 `internal/llm/translate` 中的引擎，由引擎负责分派、请求策略和流式分帧。`internal/llm/adapter` 下的各协议 adapter 负责直接转换、上游事件分派和目标流式输出。共享协议类型、事件构造、工具身份和字段规则按职责分文件，位于 `internal/llm/adapter/shared`；推理档位表与覆盖渲染位于 `internal/llm/reasoning`，公开的 `reasoning` 包负责解析模型后缀。模块与状态约定见[代码结构说明](../architecture.zh-CN.md)。
 
 测试覆盖 48 份请求/响应/流式快照、交错工具、晚到身份、引用分片、搜索失败、终止一致性及本地 shell 恢复/错误路径。fuzz 验证网络分块一致性和失败状态不可恢复；这些测试不替代真实上游的兼容验证。命令见 README。

@@ -72,7 +72,7 @@ Linux runs race tests and coverage; macOS and Windows check their native product
 - Module files: run `go mod tidy`, inspect the diff, then retry `make tidy-check deps`. The dependency check includes test imports and fails if package loading itself fails.
 - Tests: download the `test-output` artifact for `test.log` and `coverage.out`, or use `make coverage` locally. The Actions summary includes package results and total coverage. Generated logs and coverage are ignored by Git.
 - Shuffled tests: copy the printed seed and reproduce with `go test -race -shuffle=<seed> -count=1 ./...`. Use `-run '<TestName>'` for a focused regression.
-- Fuzzing: download `fuzz-failures`, preserve the input under `internal/llm/translate/testdata/fuzz/<TargetName>/`, then run `go test ./internal/llm/translate -run '<TargetName>/<hash>'` to replay it. `make fuzz FUZZTIME=2m` runs both targets for longer.
+- Fuzzing: download `fuzz-failures`, preserve the input under `testdata/fuzz/<TargetName>/` of the target's package (`internal/llm/translate` or `protocol/gemini`), then run `go test ./<package> -run '<TargetName>/<hash>'` to replay it. `make fuzz FUZZTIME=2m` runs all three targets for longer.
 - Workflow changes: run `make workflow-lint`. Changes to check commands must update the Makefile and this guide together.
 - Vulnerabilities: reproduce with `make vuln`, inspect the affected call path, and update the Go patch version or code as appropriate. Follow [SECURITY.md](SECURITY.md) for private reports.
 
@@ -88,11 +88,15 @@ The weekly run catches new vulnerability database findings even when there are n
 | `gateway` | Optional HTTP executor and handler with failover. |
 | `sse` | SSE framing and decoding. |
 | `reasoning` | Optional reasoning controls and model-name suffixes. Not part of the default conversion path. |
-| `internal/llm/codec` | The `apix.Codec` implementation for LLM protocols and the protocol ID mapping. |
+| `internal/llm/ids` | Public protocol IDs, internal format names, and the mapping between them. |
+| `internal/llm/codec` | The `apix.Codec` implementations for LLM protocols: the protocol table, routing inspection, state capture, error envelopes. |
 | `internal/llm/translate` | The LLM conversion engine entry points and execution state. |
 | `internal/llm/adapter/chatcompletions`, `messages`, `responses` | Per-protocol request, response, and stream conversion. |
+| `internal/llm/adapter/gemini` | Every GenerateContent path, in both directions. |
+| `internal/llm/adapter/interactions` | Native Interactions response and stream validation. |
+| `internal/llm/reasoning` | Reasoning level/budget tables and override rendering per protocol. |
 | `internal/llm/adapter/shared` | Shared LLM pieces: decode types, content and media mapping, tool identity, diagnostics, usage. |
-| `internal/errclass` | Error classification, status mapping, and secret redaction. |
+| `internal/errclass` | Short aliases of `apix.Error` and its constructors; classification, status mapping, and redaction live in the root `errors.go`. |
 | `internal/llm/translate/testdata/conversion/{request,response,stream}` | The reviewed conversion snapshots, named `<from>_to_<to>.json` with internal format names. |
 
 [Code structure and maintenance](docs/architecture.md) describes dispatch rules and state contracts in more detail.
@@ -101,9 +105,9 @@ The weekly run catches new vulnerability database findings even when there are n
 
 1. **No dependencies.** The `lint` job uses `scripts/check-dependencies.sh` to resolve production and test package graphs and checks module ownership. It rejects any external module, including similarly named sibling modules, and propagates package-loading errors. Discuss an import in an issue before proposing it.
 2. **Public packages are the API.** Everything under `internal/` may change at any time; do not re-export internals unless a caller genuinely needs the value. Codecs are registered explicitly; never add `init()` registration or package-level registries.
-3. **Keep all six LLM cross-protocol directions working.** A mapping added to one direction usually needs its counterpart; same-protocol requests only rewrite the model.
-4. **Requests dispatch by target protocol; responses and streams dispatch by upstream protocol.** An exchange from client X to upstream Y is implemented by Y's codec. Do not collapse the direct paths into a shared intermediate representation.
-5. **State is per execution.** An `Exchange` carries tool identities, options, and diagnostics for one request. Registries, codecs, routers, and gateways are safe for concurrent use. No package-level mutable state, no shared caches, no goroutines that outlive a call.
+3. **Keep all twelve LLM cross-protocol directions working.** Chat Completions, Responses, Messages, and GenerateContent each convert to the other three. A mapping added to one direction usually needs its counterpart; same-protocol requests only rewrite the model.
+4. **Requests dispatch by target protocol; responses and streams dispatch by upstream protocol.** An exchange from client X to upstream Y is implemented by Y's adapter; any path with GenerateContent at either end belongs to the Gemini adapter. Do not collapse the direct paths into a shared intermediate representation.
+5. **State is per execution.** An `Exchange` carries tool identities, options, and diagnostics for one request. Registries, codecs, routers, and gateways are safe for concurrent use. No package-level mutable state or caches, and no goroutines that outlive a call; long-lived state such as the affinity cache belongs to a router instance.
 6. **The core decides; the gateway executes.** Conversion and routing never perform I/O. Failover happens only before the commit point; after it, failures surface to the caller. Report what happened through `*apix.Error` and diagnostics instead of guessing.
 7. **Never emit secrets.** Error messages are logged by callers; wrap your own text with `apix.Redact`. Code under `internal/` calls `errclass.Redact`. The gateway never forwards client credentials.
 8. **Decode errors are handled, not discarded.** Output-producing decodes must check the error. A genuine best-effort probe goes through `shared.DecodeProbe`, whose doc comment states the contract: the target can be partially modified on a shape mismatch, so the helper provides no validation or rollback guarantee. Use it only for non-authoritative inspection, never to rebuild required output from possibly partial values. `shared.StringField` performs a checked read of a single string field and reports `ok=false` so callers can stop instead of substituting an empty string.
@@ -128,7 +132,7 @@ Work through this list; reviewers will check it against the diff.
 - Prefer table-driven tests with a name per case, and add one regression case per fixed bug.
 - Cover the shapes a hostile or buggy upstream can send, not only the happy path: a field carrying the wrong JSON type (a non-string `arguments`, a `citations` object where an array is expected, a query that is a number), an integer beyond 2^53, and a literal outside the `float64` range such as `1e400`. These are the cases where a discarded decode error becomes wrong output, and `DecodeProbe` must never be the reason a value reaches the caller as an empty string.
 - Every stream change should cover: whole input, bytewise input, a missing final separator, and EOF without a terminal event.
-- Fuzz targets must not depend on randomness or state beyond the input bytes they are handed. If fuzzing finds a crash, keep the finding: add the input to `internal/llm/translate/testdata/fuzz/<TargetName>/` and a focused regression test alongside it.
+- Fuzz targets must not depend on randomness or state beyond the input bytes they are handed. If fuzzing finds a crash, keep the finding: add the input to the target package's `testdata/fuzz/<TargetName>/` and a focused regression test alongside it.
 - Benchmarks (`Benchmark*` in `internal/llm/adapter/...`) are informative, not gated. Run them with `go test -run '^$' -bench . ./internal/llm/adapter/...` when you touch hot paths.
 - Tests must pass with `-race`. Do not add shared state to make a test convenient.
 

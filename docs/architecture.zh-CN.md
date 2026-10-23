@@ -40,7 +40,7 @@ GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/gemini` �
 
 ## 协议 ID
 
-公开协议 ID 带命名空间，例如 `openai.chat-completions`、`anthropic.messages`。LLM 引擎内部仍使用旧格式名（`chat-completions`、`responses`、`messages`、`gemini`、`interactions`）。两者及其映射只在 `internal/llm/ids` 中定义一次。供应商包重新导出这些 ID（`const ChatCompletions = ids.ChatCompletions`），Codec、引擎和 `internal/llm/reasoning` 使用同一组常量，诊断的 `From/To` 也在这里映射回公开 ID。适配器和快照不需要改动。
+公开协议 ID 带命名空间，例如 `openai.chat-completions`、`anthropic.messages`。LLM 引擎内部仍使用旧格式名（`chat-completions`、`responses`、`messages`、`gemini`、`interactions`）。两者及其映射只在 `internal/llm/ids` 中定义一次。供应商包重新导出这些 ID（`const ChatCompletions = ids.ChatCompletions`），Codec、引擎和 `internal/llm/reasoning` 使用同一组常量，诊断的 `From/To` 也在这里映射回公开 ID。
 
 ## 文件职责
 

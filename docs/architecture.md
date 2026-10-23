@@ -40,7 +40,7 @@ The four generation protocols share one codec type whose per-protocol difference
 
 ## Protocol IDs
 
-Public protocol IDs are namespaced: `openai.chat-completions`, `anthropic.messages`. The LLM engine keeps its historical internal names (`chat-completions`, `responses`, `messages`, `gemini`, `interactions`). Both, and the mapping between them, have a single definition in `internal/llm/ids`. The vendor packages re-export the IDs (`const ChatCompletions = ids.ChatCompletions`); the codecs, the engine, and `internal/llm/reasoning` use the same constants, and diagnostic `From`/`To` values are mapped back to public IDs there. Adapters and snapshots are unchanged.
+Public protocol IDs are namespaced: `openai.chat-completions`, `anthropic.messages`. The LLM engine keeps its historical internal names (`chat-completions`, `responses`, `messages`, `gemini`, `interactions`). Both, and the mapping between them, have a single definition in `internal/llm/ids`. The vendor packages re-export the IDs (`const ChatCompletions = ids.ChatCompletions`); the codecs, the engine, and `internal/llm/reasoning` use the same constants, and diagnostic `From`/`To` values are mapped back to public IDs there.
 
 ## Responsibilities
 

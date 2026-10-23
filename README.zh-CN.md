@@ -134,7 +134,7 @@ http.Handle("/v1/messages", g.Handler(anthropic.Messages))
 http.Handle("/v1/chat/completions", g.Handler(openai.ChatCompletions))
 ```
 
-`Do` 在提交点返回：普通响应转换成功之后，或流式响应产出第一个事件之后。提交点之前，可重试的失败（限流、服务端错误、网络错误、上游输出无法使用）以及被拒绝的转换会切换到下一个候选；提交点之后不再重试，因为客户端可能已经收到输出，失败通过 `Response.Body.Read` 返回。鉴权头按各协议的方案注入（OpenAI 用 `Authorization: Bearer`，Anthropic 用 `x-api-key` 加 `anthropic-version`），客户端凭据不会被转发。
+`Do` 在提交点返回：普通响应转换成功之后，或流式响应产出第一个事件之后。提交点之前，可重试的失败（限流、服务端错误、网络错误、上游输出无法使用）以及被拒绝的转换会切换到下一个候选；提交点之后不再重试，因为客户端可能已经收到输出，失败通过 `Response.Body.Read` 返回。鉴权头按各协议的方案注入（OpenAI 用 `Authorization: Bearer`，Anthropic 用 `x-api-key` 加 `anthropic-version`，Gemini 用 `x-goog-api-key`），客户端凭据不会被转发。
 
 | `gateway.Config` 字段 | 作用 |
 | --- | --- |

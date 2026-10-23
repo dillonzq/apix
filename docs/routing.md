@@ -100,12 +100,12 @@ Before the commit point:
 | --- | --- |
 | Request conversion failed (e.g. the loss policy rejected it) | Next candidate; nothing was sent, so health is not affected |
 | The endpoint is half-open with a trial in flight | Next candidate; nothing was sent |
-| Network error, commit timeout, 401/403, 404, 429, 5xx, or another `Retryable` error | Reported to health tracking; next candidate |
+| Network error, commit timeout, 401, 402, 403, 404, 429, 5xx, or another `Retryable` error | Reported to health tracking; next candidate |
 | 400 or another non-retryable error | Stop and return it in the client's protocol |
 | 2xx, but the response or stream does not decode or convert, or exceeds `MaxResponseBytes` | Treated as a retryable upstream error; next candidate |
 | Request canceled | Stop immediately; health is not affected. The error matches `errors.Is(err, context.Canceled)` |
 
-A 404 is retryable because model catalogs and stored state differ between upstreams; it no longer counts against the endpoint's health.
+A 404 is retryable because model catalogs and stored state differ between upstreams; it does not count against the endpoint's health.
 
 After the commit point nothing is retried, because the client may already have output. A failure surfaces from `Response.Body.Read` as an `*apix.Error` and is reported to health tracking.
 

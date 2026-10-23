@@ -39,6 +39,13 @@ body:
         - openai.responses -> anthropic.messages
         - anthropic.messages -> openai.chat-completions
         - anthropic.messages -> openai.responses
+        - gemini.generate-content -> openai.chat-completions
+        - gemini.generate-content -> openai.responses
+        - gemini.generate-content -> anthropic.messages
+        - openai.chat-completions -> gemini.generate-content
+        - openai.responses -> gemini.generate-content
+        - anthropic.messages -> gemini.generate-content
+        - gemini.interactions (native only)
         - same protocol (model rewrite or passthrough)
         - native Responses normalization only
         - routing or gateway (no conversion problem)
