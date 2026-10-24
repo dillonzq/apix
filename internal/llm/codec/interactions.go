@@ -7,6 +7,7 @@ import (
 	"github.com/dillonzq/apix/internal/llm/adapter/interactions"
 	"github.com/dillonzq/apix/internal/llm/adapter/shared"
 	"github.com/dillonzq/apix/internal/llm/ids"
+	"github.com/dillonzq/apix/internal/vendorerr"
 )
 
 // InteractionsCodec implements the native Gemini Interactions protocol. It
@@ -59,7 +60,7 @@ func inspectInteractions(body []byte) (apix.RequestInfo, *apix.Error) {
 
 // EncodeError renders err in the Google error envelope.
 func (*InteractionsCodec) EncodeError(err error) apix.Payload {
-	return envelope(googleEnvelope).encode(err)
+	return vendorerr.Envelope(vendorerr.Google).Encode(err)
 }
 
 // ValidateOptions accepts only a loss policy, which has no effect on a

@@ -15,6 +15,7 @@ import (
 	"github.com/dillonzq/apix/internal/llm/ids"
 	"github.com/dillonzq/apix/internal/llm/reasoning"
 	"github.com/dillonzq/apix/internal/llm/translate"
+	"github.com/dillonzq/apix/internal/vendorerr"
 )
 
 // protocol describes how one generation protocol differs at the codec
@@ -27,18 +28,18 @@ type protocol struct {
 	// urlModel marks protocols that carry the model and streaming mode in the
 	// request URL rather than the body (GenerateContent).
 	urlModel bool
-	envelope envelope
+	envelope vendorerr.Envelope
 	// validate checks protocol requirements Inspect enforces beyond JSON shape.
 	validate func(root map[string]json.RawMessage) *apix.Error
 }
 
 var protocols = map[apix.Protocol]protocol{
-	ids.ChatCompletions: {format: ids.FormatChatCompletions, path: "/v1/chat/completions", auth: apix.AuthBearer, envelope: openAIEnvelope},
-	ids.Responses:       {format: ids.FormatResponses, path: "/v1/responses", auth: apix.AuthBearer, envelope: openAIEnvelope},
+	ids.ChatCompletions: {format: ids.FormatChatCompletions, path: "/v1/chat/completions", auth: apix.AuthBearer, envelope: vendorerr.OpenAI},
+	ids.Responses:       {format: ids.FormatResponses, path: "/v1/responses", auth: apix.AuthBearer, envelope: vendorerr.OpenAI},
 	ids.Messages: {format: ids.FormatMessages, path: "/v1/messages", auth: apix.AuthScheme{Header: "x-api-key"},
-		headers: map[string]string{"anthropic-version": "2023-06-01"}, envelope: anthropicEnvelope},
+		headers: map[string]string{"anthropic-version": "2023-06-01"}, envelope: vendorerr.Anthropic},
 	ids.GenerateContent: {format: ids.FormatGemini, auth: apix.AuthScheme{Header: "x-goog-api-key"}, urlModel: true,
-		envelope: googleEnvelope, validate: validateGemini},
+		envelope: vendorerr.Google, validate: validateGemini},
 }
 
 // Options are the engine options an upstream protocol's package may set.
@@ -124,7 +125,7 @@ func (c *Codec) Inspect(req apix.Payload) (apix.RequestInfo, error) {
 
 // EncodeError renders err in the vendor's error envelope.
 func (c *Codec) EncodeError(err error) apix.Payload {
-	return c.proto.envelope.encode(err)
+	return c.proto.envelope.Encode(err)
 }
 
 // ValidateOptions checks options the way NewExchange does, for routers that
