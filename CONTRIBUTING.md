@@ -188,11 +188,12 @@ Versioning is [Semantic Versioning](https://semver.org/), tagged `vX.Y.Z` from `
 The release workflow gates the GitHub Release, not the module version: once a tag is pushed, the Go toolchain can already resolve it. Cut releases only from commits that are on `main` and already green.
 
 1. Confirm `CI passed` is green on the exact `main` commit you intend to tag.
-2. Land the release preparation as a normal pull request: the version in both READMEs (the `go get` snippet and the release badge), any "unreleased behavior" notes that the release makes obsolete, and the version/location tables in `docs/`.
+2. Land the release preparation as a normal pull request: the version in both READMEs (the `go get` snippet and the release badge), any "unreleased behavior" notes that the release makes obsolete, and the version/location tables in `docs/`. Release notes live in `docs/releases/vX.Y.Z.md` in English, with a `vX.Y.Z.zh-CN.md` translation; the GitHub Release always uses the English notes.
 3. Merge to `main`, then confirm the commit to tag: `git fetch origin && git log --oneline -1 origin/main`.
-4. Tag and push:
+4. Create a draft release from the English notes, with relative links rewritten to absolute `blob/vX.Y.Z/` URLs and the title line dropped, then tag and push. The release workflow publishes the draft and keeps its notes:
 
    ```sh
+   gh release create vX.Y.Z --draft --title vX.Y.Z --notes-file notes.md --target "$(git rev-parse origin/main)"
    git tag -a vX.Y.Z origin/main -m "Release vX.Y.Z"
    git push origin vX.Y.Z
    ```
