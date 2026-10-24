@@ -41,10 +41,14 @@ The library is layered. The core converts and decides routes without any network
 | `llm` | `anthropic.messages` | `anthropic.Messages` | `POST /v1/messages` |
 | `llm` | `gemini.generate-content` | `gemini.GenerateContent` | `POST /v1beta/models/{model}:generateContent` / `:streamGenerateContent` |
 | `llm` | `gemini.interactions` | `gemini.Interactions` | `POST /v1beta/interactions` (native only) |
+| `image` | `openai.images.generations` | `openai.ImagesGenerations` | `POST /v1/images/generations` |
+| `image` | `openai.images.edits` | `openai.ImagesEdits` | `POST /v1/images/edits` (multipart or JSON) |
+| `image` | `gemini.generate-content.image` | `gemini.GenerateContentImage` | `POST /v1beta/models/{model}:generateContent` to an image model |
+| `image` | `gemini.imagen` | `gemini.Imagen` | `POST /v1beta/models/{model}:predict` |
 
 Chat Completions, Responses, Messages, and Gemini GenerateContent convert directly in all twelve directions. Interactions is native-only. Same-protocol requests preserve provider fields; GenerateContent carries model/stream in request metadata. See [Gemini protocols](docs/protocols/gemini.md) for URL handling, thinking options and signed replay. Conversion covers text, image/file/audio/video input, function and custom tools, local shell adaptation, reasoning and its replay history, usage, structured output, cache hints, and representable citations. See [LLM protocol conversion](docs/protocols/llm.md) for mappings and limits.
 
-Image generation, speech, and other kinds plug in through the same interfaces; see [adding protocols and kinds](docs/extending.md).
+Image generation and editing convert between OpenAI Images, GenerateContent with image models (such as `gemini-2.5-flash-image`), and Imagen: prompts, input images, counts, sizes and aspect ratios, output formats, and usage. Generations and Imagen take no input image, so edits route only to edits and GenerateContent endpoints. Cross-protocol streams are emulated as one complete event stream. See [image protocol conversion](docs/protocols/image.md). Speech and other kinds plug in through the same interfaces; see [adding protocols and kinds](docs/extending.md).
 
 ## Installation
 
@@ -96,6 +100,7 @@ An `Exchange` holds one execution's state, such as tool identities restored in r
 | `Ext: anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}` | Messages | Send reasoning levels as fixed `budget_tokens` for Claude models without adaptive thinking (default: adaptive) |
 | `Ext: openai.ResponsesOptions{NormalizeTools: true}` | Responses | Flatten namespaces, wrap custom tools, and adapt local shell for upstreams that only accept function tools |
 | `Ext: gemini.GenerateContentOptions{ThinkingMode: gemini.ThinkingBudget}` | GenerateContent | Send reasoning as `thinkingBudget` (or `ThinkingLevel` for `thinkingLevel`), for the model in use |
+| `Ext: gemini.GenerateContentImageOptions{ResponseModalities: []gemini.Modality{gemini.ModalityText, gemini.ModalityImage}}` | GenerateContentImage | Set `responseModalities` on every image request the upstream receives, converted (default `["IMAGE"]`) or native, for models that need text alongside images |
 
 `ex.Diagnostics()` lists fields that conversion omitted or approximated, with `Code`, `Path`, `Message`, `Semantic`, `From`, and `To`. Responses and streams report losses but are never rejected because of the policy.
 
@@ -174,13 +179,14 @@ decoder.Finish() // after all converter output
 - [Adding protocols and kinds](docs/extending.md)
 - [Gemini and native Interactions](docs/protocols/gemini.md)
 - [LLM protocol conversion](docs/protocols/llm.md): field mappings, tools, reasoning, streams, and limits
+- [Image protocol conversion](docs/protocols/image.md): generation and editing paths, sizes, losses, and emulated streams
 - [CONTRIBUTING.md](CONTRIBUTING.md): checks, design rules, and releases
 
 ## Development
 
 ```sh
 make check # gofmt, vet, module and dependency checks, build, race tests
-make fuzz  # stream fuzz targets
+make fuzz  # stream and image conversion fuzz targets
 ```
 
 Conversion behavior is pinned by 48 reviewed snapshots under `internal/llm/translate/testdata/conversion`; update them only after reviewing the output change:

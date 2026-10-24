@@ -18,11 +18,14 @@ flowchart TD
     ADAPTERS --> RS[internal/llm/reasoning：档位、预算、推理覆盖]
     CODEC --> IDS[internal/llm/ids：协议 ID 与内部格式名]
     RS --> IDS
+    VENDOR --> IMAGE[internal/image：图像 Codec 与直接转换]
+    CODEC --> VE[internal/vendorerr：错误信封、上游错误体]
+    IMAGE --> VE
 ```
 
 - 根包 `apix` 与协议无关，定义 `Kind`、`Protocol`、`Payload`、`ProtocolSpec`、`Codec`、`Exchange`、`StreamConverter`、`Registry`、可选扩展 `OptionsValidator` 与 `StateReporter`、`Error` 类型和诊断类型。根包不 import 本模块的任何其他包；内部包通过 `internal/errclass` 的别名使用它的错误类型。
 - 公开函数返回 `error`，其值为 `*apix.Error`，用 `apix.AsError` 或 `errors.As` 读取。内部包仍返回 `*apix.Error`，每个公开边界都显式地把 nil 指针转换为 nil 接口。
-- 供应商包按厂商组织，重新导出协议 ID，放构造函数和厂商专属选项，实际转换委托给 `internal/llm`。
+- 供应商包按厂商组织，重新导出协议 ID，放构造函数和厂商专属选项，实际转换委托给 `internal/llm`（LLM）或 `internal/image`（图像生成与编辑）。
 - `route` 只做决策，不做 I/O；`gateway` 是唯一执行网络请求的包，可以不用。
 - 依赖仅限标准库，CI 用 `scripts/check-dependencies.sh` 检查。
 
@@ -48,15 +51,17 @@ GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/gemini` �
 | --- | --- |
 | `apix.go`、`codec.go`、`registry.go` | 核心类型、接口、可选扩展与注册表 |
 | `errors.go`、`diagnostic.go` | `Error`、错误分类与构造函数、脱敏、`HTTPStatus`、损耗策略与诊断 |
-| `protocol/<vendor>` | 重新导出的协议 ID、Codec 构造函数、厂商选项（`ResponsesOptions`、`MessagesOptions`、`GenerateContentOptions`） |
+| `protocol/<vendor>` | 重新导出的协议 ID、Codec 构造函数、厂商选项（`ResponsesOptions`、`MessagesOptions`、`GenerateContentOptions`）；图像协议在 `images.go` |
 | `internal/llm/ids` | 公开协议 ID、内部格式名及两者的映射 |
-| `internal/llm/codec` | `codec.go`：协议表、生成协议 Codec 及其 Exchange；`inspect.go`、`scan.go`：路由字段、能力、亲和键；`state.go`：新建状态的捕获与流式错误边界；`envelope.go`：错误信封；`interactions.go`：Interactions Codec |
+| `internal/llm/codec` | `codec.go`：协议表、生成协议 Codec 及其 Exchange；`inspect.go`、`scan.go`：路由字段、能力、亲和键；`state.go`：新建状态的捕获与流式错误边界；`interactions.go`：Interactions Codec |
 | `internal/llm/translate` | LLM 请求、响应、流式入口，推理覆盖，错误状态锁定，SSE 包装，Responses 序号；48 份转换快照 |
 | `internal/llm/adapter/{chatcompletions,messages,responses}` | 按协议组织的直接转换：`request.go`、`convert.go`、`stream.go` 以及各目标的流式输出 |
 | `internal/llm/adapter/gemini` | GenerateContent 的全部双向路径：请求、配置、媒体、引用、响应、流 |
 | `internal/llm/adapter/interactions` | 原生 Interactions 响应与流的校验 |
 | `internal/llm/adapter/shared` | 协议类型、内容与媒体、事件构造、工具身份、推理、shell、缓存提示、诊断规则 |
 | `internal/llm/reasoning` | 档位/预算表、Gemini 档位上限、按协议渲染推理覆盖、剥离被取代的推理控制 |
+| `internal/image` | `KindImage` 的 Codec：OpenAI generations 与 edits、图像模型的 GenerateContent、Imagen；直接的请求与响应转换、原生流校验、模拟流 |
+| `internal/vendorerr` | 各厂商错误信封与上游错误体分类，所有 Kind 共用 |
 | `internal/errclass` | 供内部包使用的 `apix.Error` 及构造函数短别名 |
 | `route` | `Router`、`NativeFirst`、带半开试探的 `Breaker`、`Affinity`、热更新 |
 | `gateway` | `Gateway.Do`、`Handler`、鉴权注入、提交点与超时、Retry-After、响应头透传、状态记录 |
@@ -109,4 +114,4 @@ GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/gemini` �
 - 流式测试覆盖以下输入：完整输入、逐字节输入、缺少最终分隔符、EOF 前没有终止事件。
 - gateway 用 `httptest` 模拟上游，覆盖同协议优先、各类切换条件、提交点前后的流式失败、熔断、提交超时、亲和性和取消。
 
-验证命令见 [CONTRIBUTING.md](../CONTRIBUTING.md)。GenerateContent 与 Interactions 的细节见 [Gemini](protocols/gemini.zh-CN.md)。
+验证命令见 [CONTRIBUTING.md](../CONTRIBUTING.md)。GenerateContent 与 Interactions 的细节见 [Gemini](protocols/gemini.zh-CN.md)，`KindImage` 见[图像协议转换](protocols/image.zh-CN.md)。

@@ -1,6 +1,7 @@
-// Package openai provides codecs for OpenAI wire protocols: Chat Completions
-// and Responses. Both belong to apix.KindLLM and convert directly to and from
-// the other generation protocols in this module (excluding Interactions).
+// Package openai provides codecs for OpenAI wire protocols. Chat Completions
+// and Responses belong to apix.KindLLM and convert directly to and from the
+// other generation protocols in this module (excluding Interactions). Image
+// generations and edits belong to apix.KindImage; see images.go.
 package openai
 
 import (
@@ -46,4 +47,6 @@ func ResponsesCodec() apix.Codec {
 }
 
 // Codecs returns every OpenAI codec, for apix.NewRegistry.
-func Codecs() []apix.Codec { return []apix.Codec{ChatCompletionsCodec(), ResponsesCodec()} }
+func Codecs() []apix.Codec {
+	return []apix.Codec{ChatCompletionsCodec(), ResponsesCodec(), ImagesGenerationsCodec(), ImagesEditsCodec()}
+}

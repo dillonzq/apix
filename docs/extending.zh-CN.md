@@ -45,43 +45,27 @@ type Codec interface {
 - `NewStreamConverter()`：不支持流式时返回 `ClassUnsupported`；Spec 应同时声明 `Stream: apix.FramingNone`。
 - 流式转换器的输出是字节事件：SSE 协议输出完整的 SSE 帧，二进制流（如音频）直接输出数据块。
 
-## 示例：图像生成协议（接口层示意）
+## 示例：图像 Kind
+
+`apix.KindImage` 就是这样实现的，可以作为 `internal/llm` 之外新增 Kind 的完整示例。具体行为见[图像协议转换](protocols/image.zh-CN.md)。
+
+- `internal/image/codec.go`：四个图像协议共用一个 `Codec` 类型，路径、鉴权、错误信封、流式与可接受协议等差异是 `protocols` 表中的行。错误信封来自 `internal/vendorerr`，与 LLM codec 共用。
+- `openai.go`、`gemini.go`、`imagen.go`：各线格式的请求解码（JSON 与 multipart 表单）、响应类型和原生请求改写。
+- `exchange.go`、`response.go`：直连转换，每个源与目标一个函数，不经过中间表示。`stream.go` 校验原生流；跨协议的流在 `ConvertResponse` 中模拟。
+- `protocol/openai/images.go`、`protocol/gemini/images.go` 导出 ID 和构造函数，各供应商的 `Codecs()` 已包含它们。`gemini.GenerateContentImageOptions` 由传给 `image.New` 的 `ExtFunc` 转换为 `image.Options`，与 LLM codec 的做法一致。
 
 ```go
-package openai
-
-const ImagesGenerations apix.Protocol = "openai.images.generations"
-
-type imagesCodec struct{}
-
-func (imagesCodec) Spec() apix.ProtocolSpec {
-    return apix.ProtocolSpec{
-        ID: ImagesGenerations, Kind: apix.KindImage, Method: "POST",
-        Path:   func(apix.RequestInfo, string) string { return "/v1/images/generations" },
-        Auth:   apix.AuthBearer,
-        Stream: apix.FramingNone,
-    }
+func (c *Codec) Spec() apix.ProtocolSpec {
+    spec := apix.ProtocolSpec{ID: c.id, Kind: apix.KindImage, Method: "POST", Auth: c.proto.auth, Stream: c.proto.stream}
+    // Path 与 ParsePath 取决于协议族。
+    return spec
 }
 
-func (imagesCodec) Inspect(req apix.Payload) (apix.RequestInfo, error) {
-    var doc struct{ Model string `json:"model"` }
-    if err := json.Unmarshal(req.Body, &doc); err != nil {
-        return apix.RequestInfo{}, apix.Translation("malformed images request: " + err.Error())
-    }
-    return apix.RequestInfo{Model: doc.Model}, nil // Registry 会补上 Protocol 和 Kind
-}
-
-// 只声明已经实现的直连路径，例如以后的 gemini.images。
-func (imagesCodec) Accepts(p apix.Protocol) bool {
-    return p == ImagesGenerations || p == "gemini.images"
-}
-
-func (imagesCodec) NewExchange(client apix.Protocol, opts apix.ExchangeOptions) (apix.Exchange, error) {
-    return image.NewExchange(client, ImagesGenerations, opts) // 共用实现放在 internal/image
-}
+// 只声明已经实现的直连路径。
+func (c *Codec) Accepts(p apix.Protocol) bool { return p == c.id || slices.Contains(c.proto.accepts, p) }
 ```
 
-注册以后，路由会按同样的规则处理图像请求：先选同协议的图像端点，再选可转换的图像端点。LLM 端点属于不同的 Kind，永远不会被选中。
+注册以后，图像请求按与 LLM 相同的规则路由：先选同协议的图像端点，再选可转换的图像端点。LLM 端点属于不同的 Kind，永远不会被选中。
 
 ```go
 reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), gemini.Codecs())...)

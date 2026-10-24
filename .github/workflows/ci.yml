@@ -110,7 +110,7 @@ jobs:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: go.mod # No go.sum in this standard-library-only module.
-      - name: Fuzz stream boundaries and terminal failures
+      - name: Fuzz stream boundaries, terminal failures and image conversion
         run: make fuzz
       - name: Upload failing inputs
         if: failure()
@@ -122,6 +122,7 @@ jobs:
           path: |
             internal/llm/translate/testdata/fuzz/**
             protocol/gemini/testdata/fuzz/**
+            internal/image/testdata/fuzz/**
           if-no-files-found: ignore
           retention-days: 14
 

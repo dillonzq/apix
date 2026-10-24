@@ -16,11 +16,12 @@ package apix
 type Kind string
 
 const (
-	// KindLLM is text and multimodal generation; the built-in codecs belong to it.
+	// KindLLM is text and multimodal generation.
 	KindLLM Kind = "llm"
-	// KindImage and KindAudio are reserved for image and speech protocols.
-	// No built-in codec implements them yet.
+	// KindImage is image generation and editing.
 	KindImage Kind = "image"
+	// KindAudio is reserved for speech protocols; no built-in codec
+	// implements it yet.
 	KindAudio Kind = "audio"
 )
 

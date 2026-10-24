@@ -41,10 +41,14 @@ apix 在不同供应商的 API 协议之间转换请求、普通响应和流式�
 | `llm` | `anthropic.messages` | `anthropic.Messages` | `POST /v1/messages` |
 | `llm` | `gemini.generate-content` | `gemini.GenerateContent` | `POST /v1beta/models/{model}:generateContent` / `:streamGenerateContent` |
 | `llm` | `gemini.interactions` | `gemini.Interactions` | `POST /v1beta/interactions`（仅原生） |
+| `image` | `openai.images.generations` | `openai.ImagesGenerations` | `POST /v1/images/generations` |
+| `image` | `openai.images.edits` | `openai.ImagesEdits` | `POST /v1/images/edits`（multipart 或 JSON） |
+| `image` | `gemini.generate-content.image` | `gemini.GenerateContentImage` | 发往图像模型的 `POST /v1beta/models/{model}:generateContent` |
+| `image` | `gemini.imagen` | `gemini.Imagen` | `POST /v1beta/models/{model}:predict` |
 
 Chat Completions、Responses、Messages 与 Gemini GenerateContent 在全部十二个方向上直接互转；Interactions 仅支持原生。原生请求保留供应商字段，GenerateContent 的模型和流式模式通过请求元信息传入。URL 处理、推理选项和签名回放见 [Gemini 协议](docs/protocols/gemini.zh-CN.md)。转换覆盖文本、图片/文件/音频/视频输入、函数与 custom 工具、本地 shell 适配、推理及其历史回传、usage、结构化输出、缓存提示和可表示的引用。映射与限制见 [LLM 协议转换](docs/protocols/llm.zh-CN.md)。
 
-图像生成、语音等其他接口类型通过同一套接口接入，见[新增协议与接口类型](docs/extending.zh-CN.md)。
+图像生成与编辑在 OpenAI Images、图像模型（如 `gemini-2.5-flash-image`）的 GenerateContent 与 Imagen 之间转换：提示词、输入图像、数量、尺寸与宽高比、输出格式和用量。generations 与 Imagen 不接受输入图像，因此编辑请求只会路由到 edits 和 GenerateContent 端点。跨协议的流以一次完整的事件流模拟。详见[图像协议转换](docs/protocols/image.zh-CN.md)。语音等其他接口类型通过同一套接口接入，见[新增协议与接口类型](docs/extending.zh-CN.md)。
 
 ## 安装
 
@@ -96,6 +100,7 @@ tail, err := stream.Finish()                   // 上游 EOF 时调用
 | `Ext: anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}` | Messages | 为不支持 adaptive 的旧 Claude 模型发送固定 `budget_tokens`（默认 adaptive） |
 | `Ext: openai.ResponsesOptions{NormalizeTools: true}` | Responses | 为只接受函数工具的上游展开 namespace、包装 custom 工具并适配本地 shell |
 | `Ext: gemini.GenerateContentOptions{ThinkingMode: gemini.ThinkingBudget}` | GenerateContent | 按所用模型把推理发送为 `thinkingBudget`（`ThinkingLevel` 则为 `thinkingLevel`） |
+| `Ext: gemini.GenerateContentImageOptions{ResponseModalities: []gemini.Modality{gemini.ModalityText, gemini.ModalityImage}}` | GenerateContentImage | 设置该上游收到的所有图像请求的 `responseModalities`，包括转换后（默认 `["IMAGE"]`）和原生请求，用于需要同时输出文本的模型 |
 
 `ex.Diagnostics()` 列出转换省略或近似的字段，包含 `Code`、`Path`、`Message`、`Semantic`、`From`、`To`。响应和流式响应只报告损耗，不会因策略被拒绝。
 
@@ -173,13 +178,14 @@ decoder.Finish() // 处理完所有转换输出后调用
 - [新增协议与接口类型](docs/extending.zh-CN.md)
 - [Gemini 与原生 Interactions](docs/protocols/gemini.zh-CN.md)
 - [LLM 协议转换](docs/protocols/llm.zh-CN.md)：字段映射、工具、推理、流式与限制
+- [图像协议转换](docs/protocols/image.zh-CN.md)：生成与编辑路径、尺寸、损耗与模拟流
 - [CONTRIBUTING.md](CONTRIBUTING.md)：检查、设计规则与发布流程
 
 ## 开发
 
 ```sh
 make check # gofmt、vet、模块与依赖检查、构建、竞态测试
-make fuzz  # 流式 fuzz
+make fuzz  # 流式与图像转换 fuzz
 ```
 
 转换行为由 `internal/llm/translate/testdata/conversion` 下 48 份经过审阅的快照固定。确认输出变化符合预期后才更新：

@@ -18,11 +18,14 @@ flowchart TD
     ADAPTERS --> RS[internal/llm/reasoning: levels, budgets, overrides]
     CODEC --> IDS[internal/llm/ids: protocol IDs and format names]
     RS --> IDS
+    VENDOR --> IMAGE[internal/image: image codecs and direct conversion]
+    CODEC --> VE[internal/vendorerr: error envelopes, upstream error bodies]
+    IMAGE --> VE
 ```
 
 - The root package `apix` is protocol neutral. It defines `Kind`, `Protocol`, `Payload`, `ProtocolSpec`, `Codec`, `Exchange`, `StreamConverter`, `Registry`, the optional `OptionsValidator` and `StateReporter` extensions, the `Error` type, and diagnostics. It imports no other package of this module; internal packages refer to its error type through `internal/errclass` aliases.
 - Public functions return `error`. Values are `*apix.Error`; read them with `apix.AsError` or `errors.As`. Internal packages keep returning `*apix.Error`, and every public boundary converts a nil pointer to a nil interface explicitly.
-- Vendor packages are organized by vendor. They re-export protocol IDs and hold constructors and vendor options, and delegate conversion to `internal/llm`.
+- Vendor packages are organized by vendor. They re-export protocol IDs and hold constructors and vendor options, and delegate conversion to `internal/llm` (LLM) or `internal/image` (image generation and editing).
 - `route` decides and never performs I/O. `gateway` is the only package that makes network calls, and it is optional.
 - Dependencies are the standard library only; `scripts/check-dependencies.sh` enforces this in CI.
 
@@ -48,15 +51,17 @@ Public protocol IDs are namespaced: `openai.chat-completions`, `anthropic.messag
 | --- | --- |
 | `apix.go`, `codec.go`, `registry.go` | Core types, interfaces, optional extensions, and the registry |
 | `errors.go`, `diagnostic.go` | `Error`, classes and constructors, redaction, `HTTPStatus`, loss policy, diagnostics |
-| `protocol/<vendor>` | Re-exported protocol IDs, codec constructors, vendor options (`ResponsesOptions`, `MessagesOptions`, `GenerateContentOptions`) |
+| `protocol/<vendor>` | Re-exported protocol IDs, codec constructors, vendor options (`ResponsesOptions`, `MessagesOptions`, `GenerateContentOptions`); `images.go` for the image protocols |
 | `internal/llm/ids` | Public protocol IDs, internal format names, and the mapping between them |
-| `internal/llm/codec` | `codec.go`: the protocol table, the generation codec and its exchange; `inspect.go`, `scan.go`: routing fields, features, affinity keys; `state.go`: created-state capture and the stream error boundary; `envelope.go`: error envelopes; `interactions.go`: the Interactions codec |
+| `internal/llm/codec` | `codec.go`: the protocol table, the generation codec and its exchange; `inspect.go`, `scan.go`: routing fields, features, affinity keys; `state.go`: created-state capture and the stream error boundary; `interactions.go`: the Interactions codec |
 | `internal/llm/translate` | LLM request, response, and stream entry points; reasoning overrides; terminal error state; SSE framing; Responses sequence numbers; the 48 conversion snapshots |
 | `internal/llm/adapter/{chatcompletions,messages,responses}` | Direct conversion per protocol: `request.go`, `convert.go`, `stream.go`, and target stream output |
 | `internal/llm/adapter/gemini` | Every GenerateContent path in both directions: requests, configuration, media, citations, responses, streams |
 | `internal/llm/adapter/interactions` | Native Interactions response and stream validation |
 | `internal/llm/adapter/shared` | Protocol types, content and media, events, tool identities, reasoning, shell, cache hints, diagnostic rules |
 | `internal/llm/reasoning` | Level/budget tables, Gemini level limits, override rendering per protocol, superseded-control stripping |
+| `internal/image` | The `KindImage` codecs: OpenAI generations and edits, GenerateContent with image models, Imagen; direct request and response converters, native stream validation, emulated streams |
+| `internal/vendorerr` | Vendor error envelopes and upstream error-body classification, shared by every Kind |
 | `internal/errclass` | Short aliases of `apix.Error` and its constructors for internal packages |
 | `route` | `Router`, `NativeFirst`, `Breaker` with half-open trials, `Affinity`, atomic updates |
 | `gateway` | `Gateway.Do`, `Handler`, authentication, commit point and timeout, Retry-After, header forwarding, state recording |
@@ -109,4 +114,4 @@ After the commit point nothing is retried. Failures surface from `Body.Read` and
 - Stream tests cover whole input, bytewise input, a missing final separator, and EOF without a terminal event.
 - Gateway tests use `httptest` upstreams to cover native preference, each failover condition, stream failures before and after the commit point, the breaker, commit timeouts, affinity, and cancellation.
 
-Validation commands are in [CONTRIBUTING.md](../CONTRIBUTING.md). See [Gemini](protocols/gemini.md) for GenerateContent and Interactions specifics.
+Validation commands are in [CONTRIBUTING.md](../CONTRIBUTING.md). See [Gemini](protocols/gemini.md) for GenerateContent and Interactions specifics, and [image protocol conversion](protocols/image.md) for `KindImage`.

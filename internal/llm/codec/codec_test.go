@@ -47,7 +47,7 @@ var internalFormat = map[apix.Protocol]string{
 
 func registry(t *testing.T) *apix.Registry {
 	t.Helper()
-	reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), []apix.Codec{gemini.GenerateContentCodec()})...)
+	reg, err := apix.NewRegistry(openai.ChatCompletionsCodec(), openai.ResponsesCodec(), anthropic.MessagesCodec(), gemini.GenerateContentCodec())
 	if err != nil {
 		t.Fatal(err)
 	}

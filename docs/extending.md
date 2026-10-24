@@ -45,43 +45,27 @@ An `Exchange` must follow these rules:
 - `NewStreamConverter()` returns `ClassUnsupported` when the protocol does not stream; the spec should then declare `Stream: apix.FramingNone`.
 - Stream converters emit byte events. SSE protocols emit complete SSE frames; binary streams, such as audio, emit raw chunks.
 
-## Example: an image protocol (interface sketch)
+## Example: the image Kind
+
+`apix.KindImage` is implemented this way; read it as a worked example of a Kind outside `internal/llm`. See [image protocol conversion](protocols/image.md) for its behavior.
+
+- `internal/image/codec.go` holds one `Codec` type for all four image protocols. Their differences, such as path, authentication, error envelope, streaming and accepted protocols, are rows of a `protocols` table. Error envelopes come from `internal/vendorerr`, which the LLM codecs share.
+- `openai.go`, `gemini.go` and `imagen.go` hold each wire format: request decoding (JSON and multipart forms), response types, and the native request rewrite.
+- `exchange.go` and `response.go` hold the direct converters, one function per source and target, with no intermediate representation. `stream.go` validates native streams; cross-protocol streams are emulated in `ConvertResponse`.
+- `protocol/openai/images.go` and `protocol/gemini/images.go` export the IDs and constructors, and each vendor's `Codecs()` includes them. `gemini.GenerateContentImageOptions` is converted to `image.Options` by an `ExtFunc` passed to `image.New`, the same pattern the LLM codecs use.
 
 ```go
-package openai
-
-const ImagesGenerations apix.Protocol = "openai.images.generations"
-
-type imagesCodec struct{}
-
-func (imagesCodec) Spec() apix.ProtocolSpec {
-    return apix.ProtocolSpec{
-        ID: ImagesGenerations, Kind: apix.KindImage, Method: "POST",
-        Path:   func(apix.RequestInfo, string) string { return "/v1/images/generations" },
-        Auth:   apix.AuthBearer,
-        Stream: apix.FramingNone,
-    }
+func (c *Codec) Spec() apix.ProtocolSpec {
+    spec := apix.ProtocolSpec{ID: c.id, Kind: apix.KindImage, Method: "POST", Auth: c.proto.auth, Stream: c.proto.stream}
+    // Path and ParsePath depend on the protocol family.
+    return spec
 }
 
-func (imagesCodec) Inspect(req apix.Payload) (apix.RequestInfo, error) {
-    var doc struct{ Model string `json:"model"` }
-    if err := json.Unmarshal(req.Body, &doc); err != nil {
-        return apix.RequestInfo{}, apix.Translation("malformed images request: " + err.Error())
-    }
-    return apix.RequestInfo{Model: doc.Model}, nil // the Registry fills in Protocol and Kind
-}
-
-// Declare only the direct paths that exist, such as a future gemini.images.
-func (imagesCodec) Accepts(p apix.Protocol) bool {
-    return p == ImagesGenerations || p == "gemini.images"
-}
-
-func (imagesCodec) NewExchange(client apix.Protocol, opts apix.ExchangeOptions) (apix.Exchange, error) {
-    return image.NewExchange(client, ImagesGenerations, opts) // shared code lives in internal/image
-}
+// Accepts declares only the direct paths that exist.
+func (c *Codec) Accepts(p apix.Protocol) bool { return p == c.id || slices.Contains(c.proto.accepts, p) }
 ```
 
-Once the codec is registered, image requests route by the same rules: native image endpoints first, then convertible ones. LLM endpoints belong to a different Kind and are never chosen.
+Once registered, image requests route by the same rules as LLM requests: native image endpoints first, then convertible ones. LLM endpoints belong to a different Kind and are never chosen.
 
 ```go
 reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), gemini.Codecs())...)
