@@ -13,7 +13,7 @@ import (
 func checkProtocolFailureDecoded(body []byte, format string) *errclass.Error {
 	var doc map[string]json.RawMessage
 	if json.Unmarshal(body, &doc) != nil {
-		return nil
+		return nil //nolint:nilerr // an undecodable body carries no protocol error envelope
 	}
 	if raw := doc["error"]; len(raw) > 0 && string(raw) != "null" && string(raw) != `""` {
 		var e ProtocolError

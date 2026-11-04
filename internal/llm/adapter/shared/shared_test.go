@@ -1567,3 +1567,20 @@ func TestDecodeClaudeMessages(t *testing.T) {
 		}
 	}
 }
+
+// An edited upstream payload keeps its whitespace; a line break inside it
+// must not end the data field early.
+func TestSSEFrameMultilineData(t *testing.T) {
+	payload := []byte("{\n  \"type\": \"response.function_call_arguments.delta\",\r\n  \"name\": \"ns__f\",\n  \"delta\": \"a\\nb\"\n}")
+	frame := SSEFrame("response.function_call_arguments.delta", payload)
+	want := "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"name\":\"ns__f\",\"delta\":\"a\\nb\"}\n\n"
+	if string(frame) != want {
+		t.Fatalf("frame = %q\nwant    %q", frame, want)
+	}
+	framer := NewSSEFramer(false)
+	framer.Push([]byte("event: x\ndata: {\"a\":\ndata: 1}\n\n"))
+	_, data, _, _ := framer.Next()
+	if got := SSEFrame("x", []byte(data)); string(got) != "event: x\ndata: {\"a\":1}\n\n" {
+		t.Fatalf("framed multi-line data = %q", got)
+	}
+}
