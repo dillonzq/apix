@@ -74,9 +74,6 @@ func (sc *StreamConverter) passthroughEvent(eventType, payload string, raw []byt
 				return [][]byte{rewritten}, false, nil
 			}
 		}
-		if doc, changed := shared.RestoreToolEventIdentity([]byte(payload), sc.context); changed && (eventType == "response.function_call_arguments.delta" || eventType == "response.function_call_arguments.done") {
-			return [][]byte{shared.SSEEvent(eventType, doc)}, false, nil
-		}
 		return [][]byte{raw}, false, nil
 	case "response.function_call_arguments.delta":
 		var ev argsDeltaEvent
@@ -107,8 +104,8 @@ func (sc *StreamConverter) passthroughEvent(eventType, payload string, raw []byt
 			doc["delta"], _ = json.Marshal(tail)
 			return [][]byte{shared.SSEEvent("response.custom_tool_call_input.delta", doc)}, false, nil
 		}
-		if doc, changed := shared.RestoreToolEventIdentity([]byte(payload), sc.context); changed && (eventType == "response.function_call_arguments.delta" || eventType == "response.function_call_arguments.done") {
-			return [][]byte{shared.SSEEvent(eventType, doc)}, false, nil
+		if out, changed := shared.RestoreToolEventIdentity([]byte(payload), sc.context); changed {
+			return [][]byte{shared.SSEFrame(eventType, out)}, false, nil
 		}
 		return [][]byte{raw}, false, nil
 	case "response.function_call_arguments.done":
@@ -132,14 +129,13 @@ func (sc *StreamConverter) passthroughEvent(eventType, payload string, raw []byt
 				return [][]byte{rewritten}, false, nil
 			}
 		}
-		if doc, changed := shared.RestoreToolEventIdentity([]byte(payload), sc.context); changed && (eventType == "response.function_call_arguments.delta" || eventType == "response.function_call_arguments.done") {
-			return [][]byte{shared.SSEEvent(eventType, doc)}, false, nil
+		if out, changed := shared.RestoreToolEventIdentity([]byte(payload), sc.context); changed {
+			return [][]byte{shared.SSEFrame(eventType, out)}, false, nil
 		}
 		return [][]byte{raw}, false, nil
 	default:
-		if doc, changed := shared.RestoreToolEventIdentity([]byte(payload), sc.context); changed && (eventType == "response.function_call_arguments.delta" || eventType == "response.function_call_arguments.done") {
-			return [][]byte{shared.SSEEvent(eventType, doc)}, false, nil
-		}
+		// Only function-call argument events carry a restorable tool name;
+		// every other event passes through as sent.
 		return [][]byte{raw}, false, nil
 	}
 }

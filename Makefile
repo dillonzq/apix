@@ -74,6 +74,7 @@ fuzz:
 	$(GO) test ./internal/llm/reasoning -run '^$$' -fuzz '^FuzzEditsMatchDecoded$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./internal/llm/codec -run '^$$' -fuzz '^FuzzInspectMatchesDecoded$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./internal/llm/codec -run '^$$' -fuzz '^FuzzFeatureHelpers$$' -fuzztime=$(FUZZTIME)
+	$(GO) test ./internal/llm/adapter/shared -run '^$$' -fuzz '^FuzzCheckProtocolFailure$$' -fuzztime=$(FUZZTIME)
 
 bench:
 	$(GO) test ./... -run '^$$' -bench . -benchmem -count=$(BENCHCOUNT)

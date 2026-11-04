@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/dillonzq/apix/internal/errclass"
+	"github.com/dillonzq/apix/internal/jsonedit"
 )
 
 // ProtocolError is an upstream error carried inside a successful HTTP body.
@@ -41,7 +42,10 @@ func ProtocolFailure(e *ProtocolError, fallback string) *errclass.Error {
 
 func CheckProtocolFailure(body []byte, format string) *errclass.Error {
 	var doc map[string]json.RawMessage
-	if json.Unmarshal(body, &doc) != nil {
+	if f, ok := jsonedit.Fields(body, "error", "status"); ok {
+		// Read only the two members instead of decoding a large response.
+		doc = map[string]json.RawMessage{"error": jsonedit.Raw(f[0]), "status": jsonedit.Raw(f[1])}
+	} else if json.Unmarshal(body, &doc) != nil {
 		return nil //nolint:nilerr // an undecodable body carries no protocol error envelope
 	}
 	if raw := doc["error"]; len(raw) > 0 && string(raw) != "null" && string(raw) != `""` {

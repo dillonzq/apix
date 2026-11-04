@@ -1,6 +1,10 @@
 package shared
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/dillonzq/apix/internal/jsonedit"
+)
 
 // RestoreToolItem preserves unmodeled fields and numeric JSON values while
 // restoring a flattened function's namespace, original name, and custom input.
@@ -118,23 +122,47 @@ func RestoreResponseTools(body []byte, tools *ConversionContext, shellItemIDs ..
 
 // RestoreToolEventIdentity rewrites optional event names without changing the
 // event's argument delta, sequence number, or other unmodeled fields.
-func RestoreToolEventIdentity(payload []byte, tools *ConversionContext) (map[string]json.RawMessage, bool) {
-	var doc map[string]json.RawMessage
-	if json.Unmarshal(payload, &doc) != nil {
-		return nil, false
-	}
+//
+// It returns the rewritten payload, which keeps the upstream member order,
+// and false when the event names no tool or its name is already the
+// client's.
+func RestoreToolEventIdentity(payload []byte, tools *ConversionContext) ([]byte, bool) {
 	var name string
-	DecodeProbe(doc["name"], &name)
+	f, fast := jsonedit.Fields(payload, "name")
+	var doc map[string]json.RawMessage
+	if fast {
+		name, _ = jsonedit.String(f[0])
+	} else {
+		if json.Unmarshal(payload, &doc) != nil {
+			return nil, false
+		}
+		DecodeProbe(doc["name"], &name)
+	}
 	if name == "" {
-		return doc, false
+		return nil, false
 	}
 	identity := tools.Identity(name)
 	if identity.name == name && identity.namespace == "" {
-		return doc, false
+		return nil, false
 	}
-	doc["name"], _ = json.Marshal(identity.name)
+	nameJSON, _ := json.Marshal(identity.name)
+	namespaceJSON, _ := json.Marshal(identity.namespace)
+	if fast {
+		ops := []jsonedit.Op{jsonedit.Set(nameJSON, "name")}
+		if identity.namespace != "" {
+			ops = append(ops, jsonedit.Set(namespaceJSON, "namespace"))
+		}
+		if out, ok := jsonedit.Apply(payload, ops...); ok {
+			return out, true
+		}
+		if json.Unmarshal(payload, &doc) != nil {
+			return nil, false
+		}
+	}
+	doc["name"] = nameJSON
 	if identity.namespace != "" {
-		doc["namespace"], _ = json.Marshal(identity.namespace)
+		doc["namespace"] = namespaceJSON
 	}
-	return doc, true
+	out, _ := json.Marshal(doc)
+	return out, true
 }

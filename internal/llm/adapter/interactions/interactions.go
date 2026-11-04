@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/dillonzq/apix/internal/errclass"
+	"github.com/dillonzq/apix/internal/jsonedit"
 	"github.com/dillonzq/apix/internal/llm/adapter/shared"
 	"github.com/dillonzq/apix/internal/llm/ids"
 )
@@ -21,7 +22,10 @@ func ConvertResponse(status int, body []byte) ([]byte, *errclass.Error) {
 		return nil, shared.UpstreamStatusError(status, body)
 	}
 	var root map[string]json.RawMessage
-	if json.Unmarshal(body, &root) != nil || root == nil {
+	if f, ok := jsonedit.Fields(body, "error", "id", "status"); ok {
+		// Read only the members checked below.
+		root = map[string]json.RawMessage{"error": jsonedit.Raw(f[0]), "id": jsonedit.Raw(f[1]), "status": jsonedit.Raw(f[2])}
+	} else if json.Unmarshal(body, &root) != nil || root == nil {
 		return nil, errclass.Translation("malformed Interactions response")
 	}
 	if shared.HasContent(root["error"]) {

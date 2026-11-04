@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/dillonzq/apix"
+	"github.com/dillonzq/apix/internal/jsonedit"
 	"github.com/dillonzq/apix/internal/llm/adapter/shared"
 )
 
@@ -25,6 +26,11 @@ func (r *recorder) keys() []string {
 // body records the top-level id of an ordinary response.
 func (r *recorder) body(b []byte) {
 	if r == nil || r.id != "" {
+		return
+	}
+	if f, ok := jsonedit.Fields(b, "id"); ok {
+		// A missing, null or non-string id records nothing, as below.
+		r.id, _ = jsonedit.String(f[0])
 		return
 	}
 	var doc struct {
