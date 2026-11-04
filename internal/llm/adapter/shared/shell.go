@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"maps"
 	"strings"
 
 	"github.com/dillonzq/apix/internal/errclass"
@@ -334,12 +335,16 @@ func NormalizeShellRequest(body []byte, state *ConversionContext) ([]byte, *errc
 	if json.Unmarshal(body, &doc) != nil || doc == nil {
 		return nil, errclass.Translation("Responses request requires a JSON object")
 	}
+	orig := maps.Clone(doc)
 	changed, err := normalizeShellDocument(doc, state)
 	if err != nil {
 		return nil, err
 	}
 	if !changed {
 		return body, nil
+	}
+	if out, ok := patchMembers(body, orig, doc); ok {
+		return out, nil
 	}
 	out, _ := json.Marshal(doc)
 	return out, nil

@@ -8,8 +8,11 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/MoeForge/moego/ojson"
+
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/internal/errclass"
+	"github.com/dillonzq/apix/internal/jsonedit"
 	"github.com/dillonzq/apix/internal/llm/ids"
 )
 
@@ -106,6 +109,15 @@ func Apply(target string, body []byte, r apix.Reasoning, opts Options) ([]byte, 
 	if err != nil {
 		return nil, nil, err
 	}
+	if out, approximated, ok := applyEdits(target, body, r, opts); ok {
+		return out, approximated, nil
+	}
+	return applyDecoded(target, body, r, opts)
+}
+
+// applyDecoded is Apply through encoding/json, for bodies applyEdits refuses.
+// Its output has sorted keys.
+func applyDecoded(target string, body []byte, r apix.Reasoning, opts Options) ([]byte, []string, *errclass.Error) {
 	var req map[string]json.RawMessage
 	if err := json.Unmarshal(body, &req); err != nil {
 		return nil, nil, errclass.Translation("malformed upstream request JSON: " + err.Error())
@@ -148,6 +160,32 @@ func Strip(target, source string, body []byte) []byte {
 	if !dropThinking && !dropEffort && !dropNestedEffort && !dropGemini {
 		return body
 	}
+	var ops []jsonedit.Op
+	switch {
+	case dropGemini:
+		// The decoded path below always leaves a thinkingConfig object.
+		if !ojson.GetBytes(body, "generationConfig.thinkingConfig").Exists() {
+			ops = append(ops, jsonedit.SetString("{}", "generationConfig", "thinkingConfig"))
+		}
+		for _, k := range geminiThinkingKeys {
+			ops = append(ops, jsonedit.Delete("generationConfig", "thinkingConfig", k))
+		}
+	case dropThinking:
+		ops = append(ops, jsonedit.Delete("thinking"))
+	case dropEffort:
+		ops = append(ops, jsonedit.Delete("reasoning_effort"))
+	default:
+		ops = append(ops, jsonedit.DeletePrune("reasoning", "effort"))
+	}
+	if out, ok := jsonedit.Apply(body, ops...); ok {
+		return out
+	}
+	return stripDecoded(body, dropThinking, dropEffort, dropGemini)
+}
+
+// stripDecoded is Strip through encoding/json, for bodies the edits refuse.
+// Its output has sorted keys.
+func stripDecoded(body []byte, dropThinking, dropEffort, dropGemini bool) []byte {
 	var req map[string]json.RawMessage
 	if err := json.Unmarshal(body, &req); err != nil || req == nil {
 		// Malformed input stays the adapter's to classify and report.
@@ -157,7 +195,7 @@ func Strip(target, source string, body []byte) []byte {
 	case dropGemini:
 		cfg := nestedObject(req, "generationConfig")
 		tc := nestedObject(cfg, "thinkingConfig")
-		for _, k := range []string{"thinkingLevel", "thinkingBudget", "thinking_level", "thinking_budget"} {
+		for _, k := range geminiThinkingKeys {
 			delete(tc, k)
 		}
 		cfg["thinkingConfig"] = jsonObject(tc)
@@ -261,27 +299,102 @@ func applyResponsesEffort(req map[string]json.RawMessage, effort string) {
 func applyGemini(req map[string]json.RawMessage, r apix.Reasoning, mode string) []string {
 	cfg := nestedObject(req, "generationConfig")
 	tc := nestedObject(cfg, "thinkingConfig")
-	for _, k := range []string{"thinkingBudget", "thinkingLevel", "thinking_budget", "thinking_level"} {
+	for _, k := range geminiThinkingKeys {
 		delete(tc, k)
 	}
-	var approximated []string
+	key, value, approximated := geminiControl(r, mode)
+	tc[key] = value
+	cfg["thinkingConfig"] = jsonObject(tc)
+	req["generationConfig"] = jsonObject(cfg)
+	return approximated
+}
+
+// geminiThinkingKeys are the thinkingConfig controls an override replaces,
+// in both spellings GenerateContent accepts.
+var geminiThinkingKeys = []string{"thinkingBudget", "thinkingLevel", "thinking_budget", "thinking_level"}
+
+// geminiControl picks the thinkingConfig member that renders r.
+func geminiControl(r apix.Reasoning, mode string) (key string, value json.RawMessage, approximated []string) {
 	budget, _ := BudgetFromEffort(r.Effort)
 	if r.Budget != nil {
 		budget = *r.Budget
 	}
-	switch {
-	case r.Effort == "auto" || r.Effort == "none" || mode == "budget" || (mode == "" && r.Budget != nil):
-		tc["thinkingBudget"] = jsonRaw(budget)
-	default:
-		level, exact := GeminiLevel(r.Effort)
-		if !exact {
-			approximated = append(approximated, "generationConfig.thinkingConfig.thinkingLevel")
-		}
-		tc["thinkingLevel"] = jsonRaw(level)
+	if r.Effort == "auto" || r.Effort == "none" || mode == "budget" || (mode == "" && r.Budget != nil) {
+		return "thinkingBudget", jsonRaw(budget), nil
 	}
-	cfg["thinkingConfig"] = jsonObject(tc)
-	req["generationConfig"] = jsonObject(cfg)
-	return approximated
+	level, exact := GeminiLevel(r.Effort)
+	if !exact {
+		approximated = []string{"generationConfig.thinkingConfig.thinkingLevel"}
+	}
+	return "thinkingLevel", jsonRaw(level), approximated
+}
+
+// applyEdits is Apply as edits of the body's own bytes, which keeps the
+// client's member order and skips decoding and re-encoding the request. It
+// renders exactly what the decoding functions below render, and reports ok
+// false for bodies it cannot edit unambiguously, which then take that path.
+func applyEdits(target string, body []byte, r apix.Reasoning, opts Options) ([]byte, []string, bool) {
+	var ops []jsonedit.Op
+	var approximated []string
+	switch target {
+	case ids.FormatChatCompletions:
+		if r.Effort == "auto" {
+			ops = append(ops, jsonedit.Delete("reasoning_effort"))
+		} else {
+			ops = append(ops, jsonedit.Set(jsonRaw(r.Effort), "reasoning_effort"))
+		}
+	case ids.FormatMessages:
+		ops = messagesEffortEdits(r, opts.MessagesManual)
+	case ids.FormatResponses:
+		if r.Effort == "auto" {
+			ops = append(ops, jsonedit.DeletePrune("reasoning", "effort"))
+		} else {
+			ops = append(ops, jsonedit.Set(jsonRaw(r.Effort), "reasoning", "effort"))
+		}
+	case ids.FormatGemini:
+		for _, k := range geminiThinkingKeys {
+			ops = append(ops, jsonedit.Delete("generationConfig", "thinkingConfig", k))
+		}
+		var key string
+		var value json.RawMessage
+		key, value, approximated = geminiControl(r, opts.GeminiMode)
+		ops = append(ops, jsonedit.Set(value, "generationConfig", "thinkingConfig", key))
+	}
+	if len(ops) == 0 {
+		// No control to change; the body only has to be a request object.
+		if _, ok := jsonedit.Object(body); ok {
+			return body, nil, true
+		}
+		return nil, nil, false
+	}
+	out, ok := jsonedit.Apply(body, ops...)
+	return out, approximated, ok
+}
+
+// messagesEffortEdits is applyMessagesEffort as edits.
+func messagesEffortEdits(r apix.Reasoning, manual bool) []jsonedit.Op {
+	budget, ok := messagesBudget(r)
+	if r.Effort != "auto" && !ok {
+		return nil
+	}
+	ops := []jsonedit.Op{jsonedit.DeletePrune("output_config", "effort")}
+	if r.Effort == "auto" {
+		return append(ops, jsonedit.Delete("thinking"))
+	}
+	ops = append(ops, jsonedit.Delete("thinking", "budget_tokens"))
+	switch {
+	case budget == 0:
+		ops = append(ops, jsonedit.Delete("thinking", "display"), jsonedit.Set(jsonRaw("disabled"), "thinking", "type"))
+	case manual:
+		ops = append(ops, jsonedit.Set(jsonRaw("enabled"), "thinking", "type"), jsonedit.Set(jsonRaw(budget), "thinking", "budget_tokens"))
+	default:
+		effort := r.Effort
+		if r.Budget != nil {
+			effort, _ = EffortFromBudget(budget)
+		}
+		ops = append(ops, jsonedit.Set(jsonRaw("adaptive"), "thinking", "type"), jsonedit.Set(jsonRaw(effort), "output_config", "effort"))
+	}
+	return ops
 }
 
 // deleteNested removes parent.child, dropping the parent object when it holds
