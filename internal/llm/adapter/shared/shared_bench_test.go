@@ -2,6 +2,7 @@ package shared
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -108,6 +109,37 @@ func TestSSEDoneHelpers(t *testing.T) {
 	for _, in := range []string{"", "[done]", "[DONE ]", "{\"x\":1}", "[DONEX]"} {
 		if IsSSEDone(in) {
 			t.Fatalf("IsSSEDone(%q) = true, want false", in)
+		}
+	}
+}
+
+// benchLargeBody is a 1 MiB request: one inline image after a short history.
+var benchLargeBody = []byte(`{"model":"gpt-5.6-luna","stream":true,"messages":[{"role":"user","content":[{"type":"text","text":"Describe this."},{"type":"image_url","image_url":{"url":"data:image/png;base64,` + strings.Repeat("iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB", 1<<15) + `"}}]}],"max_tokens":4096}`)
+
+func BenchmarkRewriteModelID(b *testing.B) {
+	for _, c := range []struct {
+		name string
+		body []byte
+	}{{"small", benchBody}, {"large", benchLargeBody}} {
+		b.Run(c.name, func(b *testing.B) {
+			b.SetBytes(int64(len(c.body)))
+			b.ReportAllocs()
+			for b.Loop() {
+				if _, eErr := RewriteModelID("upstream-model", c.body, "chat-completions"); eErr != nil {
+					b.Fatal(eErr)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkCheckProtocolFailure(b *testing.B) {
+	body := []byte(`{"id":"resp_1","object":"response","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"` + strings.Repeat("lorem ipsum ", 1<<14) + `"}]}]}`)
+	b.SetBytes(int64(len(body)))
+	b.ReportAllocs()
+	for b.Loop() {
+		if err := CheckProtocolFailure(body, FormatResponses); err != nil {
+			b.Fatal(err)
 		}
 	}
 }

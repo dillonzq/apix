@@ -33,15 +33,14 @@ func BenchmarkDeltaDecodeTyped(b *testing.B) {
 }
 
 // BenchmarkStreamFeed measures a full representative conversion pass:
-// created, 256 text deltas, an argument fragment, completion.
+// created, 256 text deltas, completion.
 func BenchmarkStreamFeed(b *testing.B) {
 	var sb strings.Builder
 	sb.WriteString("event: response.created\ndata: {\"response\":{\"id\":\"resp_1\",\"model\":\"gpt-5.6-luna\",\"created_at\":1700000000}}\n\n")
 	for i := 0; i < 256; i++ {
 		sb.WriteString("event: response.output_text.delta\ndata: {\"delta\":\"hej\"}\n\n")
 	}
-	sb.WriteString("event: response.function_call_arguments.delta\ndata: {\"item_id\":\"fc_1\",\"delta\":\"{\\\"a\\\":\"}\n\n")
-	sb.WriteString("event: response.completed\ndata: {\"response\":{\"usage\":{\"input_tokens\":4,\"output_tokens\":9}}}\n\n")
+	sb.WriteString("event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"object\":\"response\",\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":4,\"output_tokens\":9}}}\n\n")
 	stream := []byte(sb.String())
 
 	b.ReportAllocs()
