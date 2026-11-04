@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve `apix`. This library converts requests, non-streaming responses, and streams between provider API protocols, and routes requests across providers. It uses only the Go standard library. The core packages (`apix`, `protocol/*`, `route`, `sse`, `reasoning`) perform no network I/O; only the optional `gateway` package sends requests. Wire output is the product, so behavior changes are reviewed as protocol changes rather than as ordinary refactors.
+Thanks for helping improve `apix`. This library converts requests, non-streaming responses, and streams between provider API protocols, and routes requests across providers. Besides the Go standard library it depends only on `github.com/MoeForge/moego`. The core packages (`apix`, `protocol/*`, `route`, `sse`, `reasoning`) perform no network I/O; only the optional `gateway` package sends requests. Wire output is the product, so behavior changes are reviewed as protocol changes rather than as ordinary refactors.
 
 By taking part you agree to keep discussion technical and respectful, and to license your contribution under the [MIT License](LICENSE).
 
@@ -21,7 +21,7 @@ The following deliberately stay outside this repository. Changes that pull them 
 - Provider account policy beyond protocol defaults: billing, model capability checks, and model-name validation.
 - Lossy conveniences that silently invent data the upstream never sent.
 - A shared intermediate representation. Conversion paths stay direct; a codec lists the client protocols it accepts.
-- Third-party dependencies. CI checks the production and test dependency graphs for packages outside the standard library and this module (see [Design rules](#design-rules)).
+- Third-party dependencies. CI checks the production and test dependency graphs for packages outside the standard library, this module and moego (see [Design rules](#design-rules)).
 
 ## Requirements
 
@@ -53,7 +53,7 @@ make check # Fast pre-push checks, including race tests; no extra tools needed
 make ci    # Full Linux CI checks; requires the pinned golangci-lint
 ```
 
-Both Make and CI export `GOFLAGS=-mod=readonly`, so builds cannot silently add missing requirements, and `GOWORK=off`, so local workspaces cannot change the module under review. Coverage is informational and has no threshold. CI caches Go downloads and build results using `go.mod` as the dependency key because this module has no `go.sum`. The pinned actionlint and govulncheck versions live in the Makefile; their tool dependencies are downloaded outside this module and do not change `go.mod`.
+Both Make and CI export `GOFLAGS=-mod=readonly`, so builds cannot silently add missing requirements, and `GOWORK=off`, so local workspaces cannot change the module under review. Coverage is informational and has no threshold. CI caches Go downloads and build results using `go.sum` as the dependency key. The pinned actionlint and govulncheck versions live in the Makefile; their tool dependencies are downloaded outside this module and do not change `go.mod`.
 
 | CI job | Local check |
 | --- | --- |
@@ -103,7 +103,7 @@ The weekly run catches new vulnerability database findings even when there are n
 
 ## Design rules
 
-1. **No dependencies.** The `lint` job uses `scripts/check-dependencies.sh` to resolve production and test package graphs and checks module ownership. It rejects any external module, including similarly named sibling modules, and propagates package-loading errors. Discuss an import in an issue before proposing it.
+1. **One dependency.** The only module outside the standard library is `github.com/MoeForge/moego`: its `base64` package checks and encodes inline media with SIMD, and its `ojson` package reads and edits request and stream fields without decoding and re-encoding the whole body. moego itself depends only on the standard library. Its allocator uses `//go:linkname runtime.mallocgc`, a target the Go runtime keeps for compatibility; build with `-tags moego_zeroalloc` (or `purego`) to use ordinary allocation. The `lint` job uses `scripts/check-dependencies.sh` to resolve production and test package graphs and checks module ownership. It rejects every other external module, including similarly named sibling modules, and propagates package-loading errors. Discuss an import in an issue before proposing it.
 2. **Public packages are the API.** Everything under `internal/` may change at any time; do not re-export internals unless a caller genuinely needs the value. Codecs are registered explicitly; never add `init()` registration or package-level registries.
 3. **Keep all twelve LLM cross-protocol directions working.** Chat Completions, Responses, Messages, and GenerateContent each convert to the other three. A mapping added to one direction usually needs its counterpart; same-protocol requests only rewrite the model.
 4. **Requests dispatch by target protocol; responses and streams dispatch by upstream protocol.** An exchange from client X to upstream Y is implemented by Y's adapter; any path with GenerateContent at either end belongs to the Gemini adapter. Do not collapse the direct paths into a shared intermediate representation.

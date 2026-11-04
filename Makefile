@@ -69,6 +69,7 @@ fuzz:
 	$(GO) test ./internal/image -run '^$$' -fuzz '^FuzzImageStreamChunkBoundaries$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./internal/image -run '^$$' -fuzz '^FuzzImageRequest$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./internal/image -run '^$$' -fuzz '^FuzzImageResponse$$' -fuzztime=$(FUZZTIME)
+	$(GO) test ./internal/llm/adapter/shared -run '^$$' -fuzz '^FuzzBase64Parity$$' -fuzztime=$(FUZZTIME)
 
 bench:
 	$(GO) test ./... -run '^$$' -bench . -benchmem -count=$(BENCHCOUNT)

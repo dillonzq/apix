@@ -27,7 +27,7 @@ flowchart TD
 - 公开函数返回 `error`，其值为 `*apix.Error`，用 `apix.AsError` 或 `errors.As` 读取。内部包仍返回 `*apix.Error`，每个公开边界都显式地把 nil 指针转换为 nil 接口。
 - 供应商包按厂商组织，重新导出协议 ID，放构造函数和厂商专属选项，实际转换委托给 `internal/llm`（LLM）或 `internal/image`（图像生成与编辑）。
 - `route` 只做决策，不做 I/O；`gateway` 是唯一执行网络请求的包，可以不用。
-- 依赖仅限标准库，CI 用 `scripts/check-dependencies.sh` 检查。
+- 依赖仅限标准库和 `github.com/MoeForge/moego`（SIMD Base64 与保序 JSON），CI 用 `scripts/check-dependencies.sh` 检查。
 
 ## 注册与分派
 

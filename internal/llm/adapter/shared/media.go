@@ -1,10 +1,11 @@
 package shared
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/MoeForge/moego/base64"
 
 	"github.com/dillonzq/apix/internal/errclass"
 )
@@ -151,7 +152,15 @@ func (m *MediaPart) Claude() (map[string]any, *errclass.Error) {
 			}
 			mime, data = parts[0], parts[1]
 		}
-		decoded, err := base64.StdEncoding.DecodeString(data)
+		// Only text is rendered decoded; other media is checked without
+		// producing the decoded bytes and forwarded as sent.
+		var decoded []byte
+		var err error
+		if mime == "text/plain" {
+			decoded, err = base64.StdEncoding.DecodeString(data)
+		} else {
+			_, err = base64.StdEncoding.ValidateString(data)
+		}
 		if err != nil {
 			return nil, errclass.Translation("malformed base64 file data")
 		}
@@ -200,7 +209,7 @@ func decodeClaudeDocument(raw json.RawMessage) (*MediaPart, *errclass.Error) {
 		if src.Data == "" {
 			return nil, errclass.Translation("document source missing data")
 		}
-		if _, err := base64.StdEncoding.DecodeString(src.Data); err != nil {
+		if _, err := base64.StdEncoding.ValidateString(src.Data); err != nil {
 			return nil, errclass.Translation("malformed base64 document data")
 		}
 		mime := src.MediaType
@@ -217,7 +226,7 @@ func decodeClaudeDocument(raw json.RawMessage) (*MediaPart, *errclass.Error) {
 		if src.Data == "" {
 			return nil, errclass.Translation("document source missing data")
 		}
-		m.Data = "data:text/plain;base64," + base64.StdEncoding.EncodeToString([]byte(src.Data))
+		m.Data = base64.EncodeDataURL("text/plain", []byte(src.Data))
 	default:
 		return nil, UnsupportedPartType("document source "+src.Type, "OpenAI")
 	}

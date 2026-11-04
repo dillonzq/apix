@@ -1,12 +1,13 @@
 package image
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"mime"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/MoeForge/moego/base64"
 
 	"github.com/dillonzq/apix"
 )

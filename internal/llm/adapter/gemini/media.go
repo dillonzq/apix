@@ -1,9 +1,10 @@
 package gemini
 
 import (
-	"encoding/base64"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/MoeForge/moego/base64"
 )
 
 func (c *conversion) toParts(value any, role string) []any {
@@ -58,7 +59,8 @@ func (c *conversion) toParts(value any, role string) []any {
 			case "url":
 				part = c.file(mime, c.text(source["url"], "source.url"))
 			case "text":
-				part = c.inline("text/plain", base64.StdEncoding.EncodeToString([]byte(c.text(source["data"], "source.data"))))
+				// Freshly encoded text is valid Base64 by construction.
+				part = c.inlineEncoded("text/plain", base64.StdEncoding.EncodeToString([]byte(c.text(source["data"], "source.data"))))
 			default:
 				c.reject("unsupported Gemini media source")
 			}
@@ -150,11 +152,18 @@ func audioMIME(format string) string {
 }
 
 func (c *conversion) inline(mime, data string) object {
+	part := c.inlineEncoded(mime, data)
+	if _, err := base64.StdEncoding.ValidateString(data); err != nil {
+		c.fail("invalid inline media base64")
+	}
+	return part
+}
+
+// inlineEncoded builds an inlineData part from data already known to be
+// valid Base64.
+func (c *conversion) inlineEncoded(mime, data string) object {
 	if mime == "" || data == "" {
 		c.fail("inline media requires MIME type and data")
-	}
-	if _, err := base64.StdEncoding.DecodeString(data); err != nil {
-		c.fail("invalid inline media base64")
 	}
 	return object{"inlineData": object{"mimeType": mime, "data": data}}
 }
@@ -196,11 +205,20 @@ func (c *conversion) fromMedia(part object) object {
 	mime := c.text(first(source, "mimeType", "mime_type"), "mimeType")
 	uri := c.text(first(source, "fileUri", "file_uri"), "fileUri")
 	data := str(source["data"])
+	// text holds the decoded bytes of an inline text document for Messages,
+	// the only target that renders it decoded; other data is only checked.
+	var text []byte
 	if inline != nil {
 		if mime == "" || data == "" {
 			c.fail("inlineData requires MIME type and data")
 		}
-		if _, err := base64.StdEncoding.DecodeString(data); err != nil {
+		var err error
+		if c.to == messages && mime == "text/plain" {
+			text, err = base64.StdEncoding.DecodeString(data)
+		} else {
+			_, err = base64.StdEncoding.ValidateString(data)
+		}
+		if err != nil {
 			c.fail("invalid inlineData base64")
 		}
 		uri = "data:" + mime + ";base64," + data
@@ -224,11 +242,10 @@ func (c *conversion) fromMedia(part object) object {
 				if mime == "application/pdf" {
 					s = object{"type": "base64", "media_type": mime, "data": data}
 				} else {
-					b, _ := base64.StdEncoding.DecodeString(data)
-					if !utf8.Valid(b) {
+					if !utf8.Valid(text) {
 						c.fail("text document is not UTF-8")
 					}
-					s = object{"type": "text", "media_type": "text/plain", "data": string(b)}
+					s = object{"type": "text", "media_type": "text/plain", "data": string(text)}
 				}
 			}
 			return object{"type": "document", "source": s}

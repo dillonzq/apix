@@ -27,7 +27,7 @@ flowchart TD
 - Public functions return `error`. Values are `*apix.Error`; read them with `apix.AsError` or `errors.As`. Internal packages keep returning `*apix.Error`, and every public boundary converts a nil pointer to a nil interface explicitly.
 - Vendor packages are organized by vendor. They re-export protocol IDs and hold constructors and vendor options, and delegate conversion to `internal/llm` (LLM) or `internal/image` (image generation and editing).
 - `route` decides and never performs I/O. `gateway` is the only package that makes network calls, and it is optional.
-- Dependencies are the standard library only; `scripts/check-dependencies.sh` enforces this in CI.
+- Dependencies are the standard library and `github.com/MoeForge/moego` (SIMD Base64 and order-preserving JSON) only; `scripts/check-dependencies.sh` enforces this in CI.
 
 ## Registration and dispatch
 

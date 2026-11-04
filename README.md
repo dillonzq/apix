@@ -13,13 +13,13 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-64748b?style=flat-square)](LICENSE)
 [![Release: v0.1.0](https://img.shields.io/badge/release-v0.1.0-6366f1?style=flat-square)](https://github.com/dillonzq/apix/releases/tag/v0.1.0)
 [![Go: 1.26.10+](https://img.shields.io/badge/Go-1.26.10%2B-0891b2?style=flat-square&logo=go&logoColor=white)](go.mod)
-[![Dependencies: standard library](https://img.shields.io/badge/dependencies-standard_library-0d9488?style=flat-square)](go.mod)
+[![Dependencies: standard library + moego](https://img.shields.io/badge/dependencies-stdlib_%2B_moego-0d9488?style=flat-square)](go.mod)
 
 </div>
 
 ---
 
-apix converts requests, responses, and streams between provider API protocols, and routes each request to the best available provider: one that speaks the client's own protocol first, then one it can convert to. It uses only the Go standard library and requires Go **1.26.10+**.
+apix converts requests, responses, and streams between provider API protocols, and routes each request to the best available provider: one that speaks the client's own protocol first, then one it can convert to. Besides the Go standard library it depends only on [moego](https://github.com/MoeForge/moego), for SIMD Base64 and order-preserving JSON edits, and requires Go **1.26.10+**.
 
 The library is layered. The core converts and decides routes without any network I/O; an optional gateway executes requests over HTTP with failover.
 
