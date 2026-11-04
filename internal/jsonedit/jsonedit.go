@@ -12,8 +12,12 @@
 package jsonedit
 
 import (
+	"bytes"
+	"encoding/json"
 	"slices"
 	"strings"
+	"unicode/utf8"
+	"unsafe"
 
 	"github.com/MoeForge/moego/ojson"
 )
@@ -55,13 +59,98 @@ func (o Op) Compare(p Op) int {
 }
 
 // Object reports whether body is valid JSON whose root is an object, and
-// returns the parsed root.
+// returns the parsed root. The root and every Result read from it alias
+// body, which must not change while they are in use; copy what is kept.
 func Object(body []byte) (ojson.Result, bool) {
-	if !ojson.ValidBytes(body) {
+	if !ojson.ValidBytes(body) || tooDeep(body) {
 		return ojson.Result{}, false
 	}
-	root := ojson.ParseBytes(body)
+	root := ojson.Parse(view(body))
 	return root, root.IsObject()
+}
+
+// maxDepth is the deepest nesting encoding/json accepts.
+const maxDepth = 10000
+
+// tooDeep reports whether body nests deeper than encoding/json allows, which
+// ojson would accept. Fewer brackets than the limit cannot nest that deep,
+// so only a body with more of them is walked.
+func tooDeep(body []byte) bool {
+	if bytes.Count(body, []byte{'{'})+bytes.Count(body, []byte{'['}) <= maxDepth {
+		return false
+	}
+	depth, inString, escaped := 0, false, false
+	for _, c := range body {
+		switch {
+		case inString:
+			switch {
+			case escaped:
+				escaped = false
+			case c == '\\':
+				escaped = true
+			case c == '"':
+				inString = false
+			}
+		case c == '"':
+			inString = true
+		case c == '{' || c == '[':
+			if depth++; depth > maxDepth {
+				return true
+			}
+		case c == '}' || c == ']':
+			depth--
+		}
+	}
+	return false
+}
+
+// String decodes a JSON string value exactly as encoding/json would, with
+// invalid UTF-8 and lone surrogates replaced. ok is false for other types.
+// The result never aliases the document.
+func String(r ojson.Result) (string, bool) {
+	s, alias, ok := decodeString(r)
+	if alias {
+		s = strings.Clone(s)
+	}
+	return s, ok
+}
+
+// decodeString is String, but a plain ASCII string is returned as a view
+// of the document, which alias reports.
+func decodeString(r ojson.Result) (s string, alias, ok bool) {
+	if r.Type != ojson.String || len(r.Raw) < 2 {
+		return "", false, false
+	}
+	inner := r.Raw[1 : len(r.Raw)-1]
+	for i := 0; i < len(inner); i++ {
+		if c := inner[i]; c == '\\' || c >= utf8.RuneSelf {
+			var out string
+			if json.Unmarshal([]byte(r.Raw), &out) != nil {
+				return "", false, false
+			}
+			return out, false, true
+		}
+	}
+	return inner, true, true
+}
+
+// Raw returns the raw text of r as a json.RawMessage that aliases the
+// document r was read from; callers must not modify it.
+func Raw(r ojson.Result) json.RawMessage {
+	if r.Raw == "" {
+		return nil
+	}
+	return unsafe.Slice(unsafe.StringData(r.Raw), len(r.Raw))
+}
+
+// Parse parses JSON text the caller has already validated, without copying
+// it. The Result aliases raw.
+func Parse(raw []byte) ojson.Result {
+	return ojson.Parse(view(raw))
+}
+
+func view(b []byte) string {
+	return unsafe.String(unsafe.SliceData(b), len(b))
 }
 
 // Fields returns the members of body named by keys, as encoding/json would
@@ -81,7 +170,7 @@ func Members(obj ojson.Result, keys ...string) ([]ojson.Result, bool) {
 	counts := make([]int, len(keys))
 	exact := true
 	obj.ForEach(func(key, value ojson.Result) bool {
-		k := key.String()
+		k, _, _ := decodeString(key)
 		for i, want := range keys {
 			if strings.EqualFold(k, want) {
 				counts[i]++

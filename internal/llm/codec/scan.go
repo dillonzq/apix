@@ -4,28 +4,52 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/MoeForge/moego/ojson"
+
 	"github.com/dillonzq/apix"
+	"github.com/dillonzq/apix/internal/jsonedit"
 	"github.com/dillonzq/apix/internal/llm/ids"
 )
 
 type featureSet map[string]bool
 type featureObject map[string]json.RawMessage
 
+// The feature helpers read raw values that come from a request Inspect has
+// already checked as JSON, so they parse with ojson without validating or
+// copying: the values they return alias the request body. Each returns what
+// decoding with encoding/json would, and the zero value for another type.
+
+// featureMap returns the members of an object; of duplicate keys the last
+// wins, as with encoding/json.
 func featureMap(raw json.RawMessage) featureObject {
-	var out featureObject
-	_ = json.Unmarshal(raw, &out)
+	r := jsonedit.Parse(raw)
+	if !r.IsObject() {
+		return nil
+	}
+	out := featureObject{}
+	r.ForEach(func(key, value ojson.Result) bool {
+		k, _ := jsonedit.String(key)
+		out[k] = jsonedit.Raw(value)
+		return true
+	})
 	return out
 }
 
 func featureList(raw json.RawMessage) []json.RawMessage {
-	var out []json.RawMessage
-	_ = json.Unmarshal(raw, &out)
+	r := jsonedit.Parse(raw)
+	if !r.IsArray() {
+		return nil
+	}
+	out := []json.RawMessage{}
+	r.ForEach(func(_, value ojson.Result) bool {
+		out = append(out, jsonedit.Raw(value))
+		return true
+	})
 	return out
 }
 
 func featureString(raw json.RawMessage) string {
-	var out string
-	_ = json.Unmarshal(raw, &out)
+	out, _ := jsonedit.String(jsonedit.Parse(raw))
 	return out
 }
 
@@ -78,8 +102,7 @@ func (s *scan) state(kind string, raw json.RawMessage) {
 // scanRequest follows protocol content paths, not arbitrary JSON keys. A
 // tool's schema or result JSON can contain identical words without requiring
 // media support. The fixed ordering makes Inspect output reproducible.
-func scanRequest(id apix.Protocol, body []byte, stream bool) scan {
-	root := featureMap(body)
+func scanRequest(id apix.Protocol, root featureObject, stream bool) scan {
 	s := scan{set: featureSet{}}
 	if stream {
 		s.set[apix.FeatureStream] = true
