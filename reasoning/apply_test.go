@@ -48,14 +48,14 @@ func TestApplySuffixSeamBranches(t *testing.T) {
 		t.Fatalf("auto reasoning = %s, %v", got, eErr)
 	}
 	// Adaptive mode (the default) replaces the client's effort and drops a
-	// manual budget, keeping sibling fields.
+	// manual budget, keeping sibling fields and the client's member order.
 	got, eErr := reasoning.ApplySuffix(messages,
 		[]byte(`{"thinking":{"type":"enabled","budget_tokens":1,"display":"omitted"},"output_config":{"effort":"low","other":1}}`), reasoning.ParseSuffix("m(high)"))
-	if eErr != nil || string(got) != `{"output_config":{"effort":"high","other":1},"thinking":{"display":"omitted","type":"adaptive"}}` {
+	if eErr != nil || string(got) != `{"thinking":{"type":"adaptive","display":"omitted"},"output_config":{"other":1,"effort":"high"}}` {
 		t.Fatalf("messages adaptive override = %s, %v", got, eErr)
 	}
 	// A numeric suffix becomes the effort its budget maps to.
-	if got, eErr := reasoning.ApplySuffix(messages, []byte(`{}`), reasoning.ParseSuffix("m(8192)")); eErr != nil || string(got) != `{"output_config":{"effort":"medium"},"thinking":{"type":"adaptive"}}` {
+	if got, eErr := reasoning.ApplySuffix(messages, []byte(`{}`), reasoning.ParseSuffix("m(8192)")); eErr != nil || string(got) != `{"thinking":{"type":"adaptive"},"output_config":{"effort":"medium"}}` {
 		t.Fatalf("messages numeric adaptive = %s, %v", got, eErr)
 	}
 	// Manual mode drops the adaptive effort, keeps every sibling field and
@@ -63,10 +63,10 @@ func TestApplySuffixSeamBranches(t *testing.T) {
 	manual := reasoning.Options{MessagesManual: true}
 	got, eErr = reasoning.ApplySuffixWith(messages,
 		[]byte(`{"thinking":{"type":"adaptive","display":"omitted"},"output_config":{"effort":"low","other":1}}`), reasoning.ParseSuffix("m(high)"), manual)
-	if eErr != nil || string(got) != `{"output_config":{"other":1},"thinking":{"budget_tokens":24576,"display":"omitted","type":"enabled"}}` {
+	if eErr != nil || string(got) != `{"thinking":{"type":"enabled","display":"omitted","budget_tokens":24576},"output_config":{"other":1}}` {
 		t.Fatalf("messages manual override = %s, %v", got, eErr)
 	}
-	if got, eErr := reasoning.ApplySuffixWith(messages, []byte(`{}`), reasoning.ParseSuffix("m(3000)"), manual); eErr != nil || string(got) != `{"thinking":{"budget_tokens":3000,"type":"enabled"}}` {
+	if got, eErr := reasoning.ApplySuffixWith(messages, []byte(`{}`), reasoning.ParseSuffix("m(3000)"), manual); eErr != nil || string(got) != `{"thinking":{"type":"enabled","budget_tokens":3000}}` {
 		t.Fatalf("messages numeric manual = %s, %v", got, eErr)
 	}
 	// None disables thinking in either mode and drops display.

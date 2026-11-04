@@ -1,11 +1,15 @@
 package shared
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/dillonzq/apix/internal/errclass"
+	"github.com/dillonzq/apix/internal/jsonedit"
 )
 
 type rawObject map[string]json.RawMessage
@@ -31,6 +35,7 @@ func normalizeResponsesRequest(body []byte, work *ConversionContext) ([]byte, *e
 	if json.Unmarshal(body, &doc) != nil || doc == nil {
 		return nil, errclass.Translation("Responses normalization requires a JSON object")
 	}
+	orig := maps.Clone(doc)
 	if _, err := normalizeShellDocument(doc, work); err != nil {
 		return nil, err
 	}
@@ -191,9 +196,35 @@ func normalizeResponsesRequest(body []byte, work *ConversionContext) ([]byte, *e
 		}
 		doc["tool_choice"], _ = json.Marshal(choice)
 	}
+	if out, ok := patchMembers(body, orig, doc); ok {
+		return out, nil
+	}
 	out, err := json.Marshal(doc)
 	if err != nil {
 		return nil, errclass.Translation("cannot encode normalized Responses request")
 	}
 	return out, nil
+}
+
+// patchMembers writes the top-level members that differ between orig, the
+// decoded body, and doc into body itself, keeping the order and bytes of the
+// rest. ok is false when the edit is refused; the caller then encodes doc.
+func patchMembers(body []byte, orig, doc rawObject) ([]byte, bool) {
+	var ops []jsonedit.Op
+	for k, v := range doc {
+		if before, ok := orig[k]; !ok || !bytes.Equal(before, v) {
+			ops = append(ops, jsonedit.Set(v, k))
+		}
+	}
+	for k := range orig {
+		if _, ok := doc[k]; !ok {
+			ops = append(ops, jsonedit.Delete(k))
+		}
+	}
+	if len(ops) == 0 {
+		return body, true
+	}
+	// Map order is random; sort so new members are appended reproducibly.
+	slices.SortFunc(ops, jsonedit.Op.Compare)
+	return jsonedit.Apply(body, ops...)
 }

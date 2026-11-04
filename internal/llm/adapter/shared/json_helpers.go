@@ -4,23 +4,40 @@ import (
 	"encoding/json"
 
 	"github.com/dillonzq/apix/internal/errclass"
+	"github.com/dillonzq/apix/internal/jsonedit"
 )
 
 // RewriteModelID rewrites the top-level model field of a native-format
-// request body to the bare upstream ID. The body decodes ONCE one level
-// into json.RawMessage values, so every nested value passes through
-// byte-exact — notably large integers that a float64 roundtrip would
-// mangle (fidelity). When the decoded model field's raw bytes
-// already equal the quoted upstream ID (the common bare-ID/prefix client
-// case), the original body is returned untouched before any mutation —
-// a pure no-op that skips the remarshal. The comparison target mirrors
-// the rewrite quoting below, and a decoded RawMessage always holds a
-// valid JSON value, so an upstream id that cannot be represented
-// (quotes/backslashes/control characters) can never match here and still
-// reaches the rewrite's error. Duplicate keys follow encoding/json
-// semantics: the LAST occurrence wins. formatLabel names the source
-// protocol in the malformed-JSON error.
+// request body to the bare upstream ID. Only the model value changes: every
+// other byte, including member order and large integers that a float64
+// roundtrip would mangle, passes through as sent. When the model field's raw
+// bytes already equal the quoted upstream ID (the common bare-ID/prefix client
+// case), the original body is returned untouched. An upstream id that cannot
+// be represented as a JSON string (quotes, control characters, a stray
+// backslash) never matches and is rejected. Duplicate keys follow
+// encoding/json semantics: the LAST occurrence wins, and the rewrite then
+// collapses them. formatLabel names the source protocol in the malformed-JSON
+// error.
 func RewriteModelID(upstreamModel string, body []byte, formatLabel string) ([]byte, *errclass.Error) {
+	quoted := `"` + upstreamModel + `"`
+	if f, ok := jsonedit.Fields(body, "model"); ok {
+		if f[0].Raw == quoted {
+			return body, nil
+		}
+		if !json.Valid([]byte(quoted)) {
+			return nil, errclass.Translation("model id cannot be represented as JSON")
+		}
+		if out, ok := jsonedit.Apply(body, jsonedit.SetString(quoted, "model")); ok {
+			return out, nil
+		}
+	}
+	return rewriteModelIDDecoded(quoted, body, formatLabel)
+}
+
+// rewriteModelIDDecoded is RewriteModelID through encoding/json, for bodies
+// the order-preserving edit refuses: malformed JSON, a non-object root, and
+// ambiguous model keys.
+func rewriteModelIDDecoded(quoted string, body []byte, formatLabel string) ([]byte, *errclass.Error) {
 	var req map[string]json.RawMessage
 	if err := json.Unmarshal(body, &req); err != nil {
 		return nil, errclass.Translation("malformed " + formatLabel + " request JSON: " + err.Error())
@@ -30,10 +47,10 @@ func RewriteModelID(upstreamModel string, body []byte, formatLabel string) ([]by
 	if req == nil {
 		return nil, errclass.Translation("malformed request body: JSON null is not a valid request")
 	}
-	if raw, ok := req["model"]; ok && string(raw) == `"`+upstreamModel+`"` {
+	if raw, ok := req["model"]; ok && string(raw) == quoted {
 		return body, nil
 	}
-	req["model"] = json.RawMessage(`"` + upstreamModel + `"`)
+	req["model"] = json.RawMessage(quoted)
 	b, err := json.Marshal(req)
 	if err != nil {
 		// A catalog model id containing quotes/backslashes/control

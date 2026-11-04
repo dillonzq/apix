@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 
 	"github.com/dillonzq/apix"
+	"github.com/dillonzq/apix/internal/jsonedit"
 	"github.com/dillonzq/apix/internal/llm/ids"
 	"github.com/dillonzq/apix/internal/llm/reasoning"
 	"github.com/dillonzq/apix/internal/llm/translate"
@@ -322,6 +323,13 @@ func (e *exchange) CreatedState() []string { return e.recorder.keys() }
 func applyStreamMetadata(body []byte, stream *bool) ([]byte, *apix.Error) {
 	if stream == nil {
 		return body, nil
+	}
+	value := "false"
+	if *stream {
+		value = "true"
+	}
+	if out, ok := jsonedit.Apply(body, jsonedit.SetString(value, "stream")); ok {
+		return out, nil
 	}
 	var root map[string]json.RawMessage
 	if json.Unmarshal(body, &root) != nil || root == nil {

@@ -22,7 +22,7 @@ help:
 	  'make ci             All Linux CI checks (requires golangci-lint v2.14.0)' \
 	  'make fmt            Format Go source files' \
 	  'make coverage       Race tests with coverage.out and test.log' \
-	  'make fuzz           Stream and image fuzz targets (FUZZTIME=30s by default)' \
+	  'make fuzz           Stream, image and JSON edit fuzz targets (FUZZTIME=30s)' \
 	  'make bench          Benchmarks for benchstat (BENCHCOUNT=6 by default)' \
 	  'make lint           Run the installed golangci-lint' \
 	  'make workflow-lint  Validate GitHub Actions workflows' \
@@ -70,6 +70,8 @@ fuzz:
 	$(GO) test ./internal/image -run '^$$' -fuzz '^FuzzImageRequest$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./internal/image -run '^$$' -fuzz '^FuzzImageResponse$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./internal/llm/adapter/shared -run '^$$' -fuzz '^FuzzBase64Parity$$' -fuzztime=$(FUZZTIME)
+	$(GO) test ./internal/jsonedit -run '^$$' -fuzz '^FuzzApply$$' -fuzztime=$(FUZZTIME)
+	$(GO) test ./internal/llm/reasoning -run '^$$' -fuzz '^FuzzEditsMatchDecoded$$' -fuzztime=$(FUZZTIME)
 
 bench:
 	$(GO) test ./... -run '^$$' -bench . -benchmem -count=$(BENCHCOUNT)
