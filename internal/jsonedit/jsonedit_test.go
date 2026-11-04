@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -170,4 +171,40 @@ func reference(body []byte, ops []Op) (any, bool) {
 		}
 	}
 	return any(root), true
+}
+
+func TestObjectRefusesWhatEncodingJSONRejectsAsTooDeep(t *testing.T) {
+	deep := func(n int) []byte {
+		return []byte(`{"a":` + strings.Repeat("[", n) + strings.Repeat("]", n) + `}`)
+	}
+	for _, n := range []int{maxDepth - 1, maxDepth, maxDepth + 5} {
+		body := deep(n)
+		_, ok := Object(body)
+		var v any
+		if want := json.Unmarshal(body, &v) == nil; ok != want {
+			t.Fatalf("depth %d: Object ok = %v, encoding/json ok = %v", n+1, ok, want)
+		}
+	}
+	// Brackets inside strings do not nest.
+	if _, ok := Object([]byte(`{"a":"` + strings.Repeat("[{", maxDepth) + `\"]"}`)); !ok {
+		t.Fatal("brackets in a string counted as nesting")
+	}
+}
+
+func TestString(t *testing.T) {
+	for _, raw := range []string{`"plain"`, `"café"`, `"esc\"aped\\"`, "\"bad\xffutf8\"", `"\ud800lone"`, `""`, `"é"`} {
+		var want string
+		if err := json.Unmarshal([]byte(raw), &want); err != nil {
+			t.Fatal(err)
+		}
+		got, ok := String(Parse([]byte(raw)))
+		if !ok || got != want {
+			t.Fatalf("String(%s) = %q, %v; want %q", raw, got, ok, want)
+		}
+	}
+	for _, raw := range []string{`1`, `null`, `{}`, `true`} {
+		if _, ok := String(Parse([]byte(raw))); ok {
+			t.Fatalf("String(%s) accepted a non-string", raw)
+		}
+	}
 }

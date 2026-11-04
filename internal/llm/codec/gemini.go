@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/dillonzq/apix"
+	"github.com/dillonzq/apix/internal/jsonedit"
 )
 
 // geminiPath builds the GenerateContent URL path, which carries the model and
@@ -40,8 +41,9 @@ func parseGeminiPath(path string) (apix.RequestMetadata, error) {
 }
 
 func validateGemini(root map[string]json.RawMessage) *apix.Error {
-	var contents []json.RawMessage
-	if json.Unmarshal(root["contents"], &contents) != nil || len(contents) == 0 {
+	// root holds checked JSON; contents must be a non-empty array.
+	contents := jsonedit.Parse(root["contents"])
+	if !contents.IsArray() || !contents.Get("0").Exists() {
 		return apix.Translation("Gemini request requires contents")
 	}
 	return nil

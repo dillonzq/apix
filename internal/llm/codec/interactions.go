@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/dillonzq/apix"
+	"github.com/dillonzq/apix/internal/jsonedit"
 	"github.com/dillonzq/apix/internal/llm/adapter/interactions"
 	"github.com/dillonzq/apix/internal/llm/adapter/shared"
 	"github.com/dillonzq/apix/internal/llm/ids"
@@ -29,33 +30,41 @@ func (*InteractionsCodec) Accepts(p apix.Protocol) bool { return p == ids.Intera
 
 // Inspect requires exactly one of model or agent; an agent routes as the model.
 func (*InteractionsCodec) Inspect(req apix.Payload) (apix.RequestInfo, error) {
-	info, err := inspectInteractions(req.Body)
+	info, _, err := inspectInteractions(req.Body, true)
 	if err != nil {
 		return apix.RequestInfo{}, err
 	}
 	return info, nil
 }
 
-func inspectInteractions(body []byte) (apix.RequestInfo, *apix.Error) {
-	info, err := inspect(ids.Interactions, body)
+// inspectInteractions also reports whether the body names an agent: an agent
+// member that is present and not null.
+func inspectInteractions(body []byte, features bool) (apix.RequestInfo, bool, *apix.Error) {
+	info, err := inspectRequest(ids.Interactions, body, features)
 	if err != nil {
-		return info, err
+		return info, false, err
 	}
-	var root map[string]json.RawMessage
-	if json.Unmarshal(body, &root) != nil || root == nil {
-		return info, apix.Translation("request must be a JSON object")
+	var raw json.RawMessage
+	if f, ok := jsonedit.Fields(body, "agent"); ok {
+		raw = jsonedit.Raw(f[0])
+	} else {
+		var root map[string]json.RawMessage
+		if json.Unmarshal(body, &root) != nil || root == nil {
+			return info, false, apix.Translation("request must be a JSON object")
+		}
+		raw = root["agent"]
 	}
 	var agent string
-	if root["agent"] != nil && json.Unmarshal(root["agent"], &agent) != nil {
-		return info, apix.Translation("agent must be a string")
+	if raw != nil && json.Unmarshal(raw, &agent) != nil {
+		return info, false, apix.Translation("agent must be a string")
 	}
 	if (info.Model == "") == (agent == "") {
-		return info, apix.Translation("Interactions requires exactly one of model or agent")
+		return info, false, apix.Translation("Interactions requires exactly one of model or agent")
 	}
 	if agent != "" {
 		info.Model = agent
 	}
-	return info, nil
+	return info, shared.HasContent(raw), nil
 }
 
 // EncodeError renders err in the Google error envelope.
@@ -110,7 +119,7 @@ func (e *interactionsExchange) ConvertRequest(req apix.Payload, upstreamModel st
 }
 
 func (e *interactionsExchange) convertRequest(req apix.Payload, upstreamModel string) (apix.Payload, *apix.Error) {
-	info, err := inspectInteractions(req.Body)
+	info, hasAgent, err := inspectInteractions(req.Body, false)
 	if err != nil {
 		return apix.Payload{}, err
 	}
@@ -119,11 +128,7 @@ func (e *interactionsExchange) convertRequest(req apix.Payload, upstreamModel st
 		upstreamModel = info.Model
 	}
 	body := req.Body
-	var doc map[string]json.RawMessage
-	if json.Unmarshal(body, &doc) != nil {
-		return apix.Payload{}, apix.Translation("invalid Interactions request")
-	}
-	if shared.HasContent(doc["agent"]) {
+	if hasAgent {
 		if upstreamModel != "" && upstreamModel != info.Model {
 			return apix.Payload{}, apix.Unsupported("Interactions agent cannot be rewritten as a model")
 		}

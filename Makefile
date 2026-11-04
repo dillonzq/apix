@@ -72,6 +72,8 @@ fuzz:
 	$(GO) test ./internal/llm/adapter/shared -run '^$$' -fuzz '^FuzzBase64Parity$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./internal/jsonedit -run '^$$' -fuzz '^FuzzApply$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./internal/llm/reasoning -run '^$$' -fuzz '^FuzzEditsMatchDecoded$$' -fuzztime=$(FUZZTIME)
+	$(GO) test ./internal/llm/codec -run '^$$' -fuzz '^FuzzInspectMatchesDecoded$$' -fuzztime=$(FUZZTIME)
+	$(GO) test ./internal/llm/codec -run '^$$' -fuzz '^FuzzFeatureHelpers$$' -fuzztime=$(FUZZTIME)
 
 bench:
 	$(GO) test ./... -run '^$$' -bench . -benchmem -count=$(BENCHCOUNT)

@@ -238,7 +238,7 @@ func (e *exchange) ConvertRequest(req apix.Payload, upstreamModel string) (apix.
 }
 
 func (e *exchange) convertRequest(req apix.Payload, upstreamModel string) (apix.Payload, *apix.Error) {
-	info, err := inspect(e.clientID, req.Body)
+	info, err := routing(e.clientID, req.Body)
 	if err != nil {
 		return apix.Payload{}, err
 	}
