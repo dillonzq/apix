@@ -7,13 +7,14 @@ GOLANGCI_LINT ?= golangci-lint
 ACTIONLINT_VERSION := v1.7.12
 GOVULNCHECK_VERSION := v1.9.0
 FUZZTIME ?= 30s
+BENCHCOUNT ?= 6
 
 # Avoid silently repairing dependencies during builds and tests. go mod tidy
 # still owns module-file validation and reports changes through -diff.
 export GOFLAGS := -mod=readonly
 export GOWORK := off
 
-.PHONY: help fmt fmt-check vet tidy-check deps build test coverage lint workflow-lint fuzz vuln check ci
+.PHONY: help fmt fmt-check vet tidy-check deps build test coverage lint workflow-lint fuzz bench vuln check ci
 
 help:
 	@printf '%s\n' \
@@ -22,6 +23,7 @@ help:
 	  'make fmt            Format Go source files' \
 	  'make coverage       Race tests with coverage.out and test.log' \
 	  'make fuzz           Stream and image fuzz targets (FUZZTIME=30s by default)' \
+	  'make bench          Benchmarks for benchstat (BENCHCOUNT=6 by default)' \
 	  'make lint           Run the installed golangci-lint' \
 	  'make workflow-lint  Validate GitHub Actions workflows' \
 	  'make vuln           Scan reachable vulnerabilities'
@@ -67,6 +69,9 @@ fuzz:
 	$(GO) test ./internal/image -run '^$$' -fuzz '^FuzzImageStreamChunkBoundaries$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./internal/image -run '^$$' -fuzz '^FuzzImageRequest$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./internal/image -run '^$$' -fuzz '^FuzzImageResponse$$' -fuzztime=$(FUZZTIME)
+
+bench:
+	$(GO) test ./... -run '^$$' -bench . -benchmem -count=$(BENCHCOUNT)
 
 vuln:
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
