@@ -9,7 +9,7 @@
 | `GenerateContentCodec()` | `gemini.generate-content` | 原生，以及与 Chat Completions、Responses、Messages 的请求、普通响应和 SSE 双向直接转换 |
 | `InteractionsCodec()` | `gemini.interactions` | 仅原生；与 GenerateContent 和其他协议之间的转换会明确拒绝 |
 
-`gemini.Codecs()` 返回两者。跨协议时还需注册对应供应商的 Codec。GenerateContent 支持独立的 `ExchangeOptions.Output`；路由继续优先选择客户端的原生协议。
+`gemini.Codecs()` 返回这两个 LLM Codec，以及 `KindImage` 的 `GenerateContentImageCodec()` 和 `ImagenCodec()`；见[图像协议](image.zh-CN.md)。跨协议时还需注册对应供应商的 Codec。GenerateContent 支持独立的 `ExchangeOptions.Output`；路由继续优先选择客户端的原生协议。
 
 ## 请求元信息与 HTTP
 

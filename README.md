@@ -11,7 +11,7 @@
 [Install](#installation) · [Quick start](#quick-start) · [Routing](#routing) · [Gateway](#gateway) · [Docs](#documentation)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-64748b?style=flat-square)](LICENSE)
-[![Release: v0.1.0](https://img.shields.io/badge/release-v0.1.0-6366f1?style=flat-square)](https://github.com/dillonzq/apix/releases/tag/v0.1.0)
+[![Release: v0.2.0](https://img.shields.io/badge/release-v0.2.0-6366f1?style=flat-square)](https://github.com/dillonzq/apix/releases/tag/v0.2.0)
 [![Go: 1.26.10+](https://img.shields.io/badge/Go-1.26.10%2B-0891b2?style=flat-square&logo=go&logoColor=white)](go.mod)
 [![Dependencies: standard library + moego](https://img.shields.io/badge/dependencies-stdlib_%2B_moego-0d9488?style=flat-square)](go.mod)
 
@@ -53,7 +53,7 @@ Image generation and editing convert between OpenAI Images, GenerateContent with
 ## Installation
 
 ```sh
-go get github.com/dillonzq/apix@v0.1.0
+go get github.com/dillonzq/apix@v0.2.0
 ```
 
 ## Quick start
@@ -174,6 +174,8 @@ decoder.Finish() // after all converter output
 
 ## Documentation
 
+- [v0.2.0 release notes](docs/releases/v0.2.0.md): dependency and JSON byte-output changes
+
 - [Architecture](docs/architecture.md): layers, dispatch, and state contracts
 - [Routing](docs/routing.md): endpoint selection, health, and the gateway's failover rules
 - [Adding protocols and kinds](docs/extending.md)
@@ -186,7 +188,7 @@ decoder.Finish() // after all converter output
 
 ```sh
 make check # gofmt, vet, module and dependency checks, build, race tests
-make fuzz  # stream and image conversion fuzz targets
+make fuzz  # stream, image, Base64, and JSON fast-path fuzz targets
 ```
 
 Conversion behavior is pinned by 48 reviewed snapshots under `internal/llm/translate/testdata/conversion`; update them only after reviewing the output change:

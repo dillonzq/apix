@@ -42,7 +42,7 @@ Size mapping:
 - Google to OpenAI: the sizes every GPT image model accepts, `1024x1024`, `1536x1024` (landscape) or `1024x1536` (portrait). Google image sizes are not carried.
 - An aspect ratio that changes is reported as a non-semantic loss.
 
-Edits to OpenAI are sent as multipart forms: one image as `image`, several as `image[]`. Native requests keep their own form or JSON body and only rewrite `model` (and `stream` when needed).
+Edits to OpenAI are sent as multipart forms: one image as `image`, several as `image[]`. Native requests keep their own form or JSON body and only rewrite `model` (and `stream` when needed), apart from an explicitly configured `ResponseModalities` override for GenerateContentImage.
 
 Losses are reported as diagnostics and checked against the loss policy:
 

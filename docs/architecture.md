@@ -33,7 +33,7 @@ flowchart TD
 
 The registration unit is the codec for one protocol. On the client side, a codec implements `Inspect`, which reads routing information such as model, stream, required features and state references, and `EncodeError`. On the upstream side, it lists the protocols it has a direct path with through `Accepts(p)`: requests convert in from p and responses convert out to p. It creates per-execution state with `NewExchange(client, …)`. A codec that implements `OptionsValidator` lets `Registry.ValidateOptions` reject options when they are configured.
 
-This matches the engine's dispatch: requests dispatch by **target protocol**; ordinary responses and streams dispatch by **upstream protocol**. Both directions of an exchange from client X to upstream Y are therefore implemented by Y's adapter. Responses go back to X by default. A host that chooses the response format separately can set `ExchangeOptions.Output` to another protocol Z of the same Kind; Y's adapter implements that direction too. Conversion paths are always direct, with no intermediate representation. Same-protocol requests only rewrite the model where it belongs in the body.
+This matches the engine's dispatch: requests dispatch by **target protocol**; ordinary responses and streams dispatch by **upstream protocol**. Both directions of an exchange from client X to upstream Y are therefore implemented by Y's adapter. Responses go back to X by default. A host that chooses the response format separately can set `ExchangeOptions.Output` to another protocol Z of the same Kind; Y's adapter implements that direction too. Conversion paths are always direct, with no intermediate representation. Same-protocol requests preserve provider fields except for model rewriting and explicitly configured reasoning overrides or tool normalization.
 
 GenerateContent is the one exception to the dispatch rule: `internal/llm/adapter/gemini` owns every path with GenerateContent at either end, in both directions, and the engine's entry points route those paths to it first. Gemini wire objects stay the source or destination; nothing converts through another protocol. GenerateContent model/stream information travels separately in `Payload.Metadata`; `ProtocolSpec.ParsePath` lets the optional HTTP handler recover it from the URL.
 
@@ -61,6 +61,7 @@ Public protocol IDs are namespaced: `openai.chat-completions`, `anthropic.messag
 | `internal/llm/adapter/shared` | Protocol types, content and media, events, tool identities, reasoning, shell, cache hints, diagnostic rules |
 | `internal/llm/reasoning` | Level/budget tables, Gemini level limits, override rendering per protocol, superseded-control stripping |
 | `internal/image` | The `KindImage` codecs: OpenAI generations and edits, GenerateContent with image models, Imagen; direct request and response converters, native stream validation, emulated streams |
+| `internal/jsonedit` | Order-preserving JSON field reads and edits over moego/ojson; callers fall back to `encoding/json` when the fast path declines |
 | `internal/vendorerr` | Vendor error envelopes and upstream error-body classification, shared by every Kind |
 | `internal/errclass` | Short aliases of `apix.Error` and its constructors for internal packages |
 | `route` | `Router`, `NativeFirst`, `Breaker` with half-open trials, `Affinity`, atomic updates |
@@ -77,6 +78,12 @@ Native Responses normalization (`openai.ResponsesOptions{NormalizeTools: true}`)
 `ExchangeOptions.Reasoning` runs in three steps inside `ConvertRequest`: the client's own control is stripped where conversion derives the target control from it, the request converts, and the override is rendered on the converted body with the exchange's Messages and Gemini thinking modes. A value the target cannot express exactly, such as `max` for a Gemini level, is approximated and reported as a request loss.
 
 Exchanges whose upstream stores state implement `apix.StateReporter`. A native Responses exchange captures the response ID from the converted body or from `response.created`; an Interactions exchange captures the interaction ID. Cross-protocol Responses output reports nothing, because its ID refers to nothing an upstream stored.
+
+## JSON reads and edits
+
+`internal/jsonedit` provides order-preserving fast paths for routing fields, native model rewrites, reasoning controls, tool normalization, and selected stream events. Edits preserve untouched bytes, member order, and number spelling; new members are appended. This changes field order compared with earlier whole-object re-encoding. Duplicate or case-ambiguous keys on an accessed path, non-object parents, or invalid JSON make callers fall back to the existing `encoding/json` path, which may re-encode and sort members.
+
+After adding `sequence_number` or restoring a tool name, multi-line SSE JSON is compacted before framing so line breaks cannot truncate the `data:` field. Unmodified native events retain their original frames.
 
 ## Stream state
 

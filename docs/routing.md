@@ -43,7 +43,7 @@ It keeps endpoints that:
 
 The default `NativeFirst` strategy orders the remaining endpoints:
 
-1. **Native first**: endpoints that speak the client's protocol (`Candidate.Native`) need no conversion, only a model rewrite.
+1. **Native first**: endpoints that speak the client's protocol (`Candidate.Native`) preserve the request protocol, applying model rewriting and any explicitly configured overrides or normalization.
 2. **Convertible next**: endpoints with other protocols of the same Kind, reached through direct conversion.
 3. **Priority within a tier**: lower `Priority` first.
 4. **Weight within a priority**: a weighted shuffle without replacement; weights below 1 count as 1.

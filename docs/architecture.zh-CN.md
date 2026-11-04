@@ -33,7 +33,7 @@ flowchart TD
 
 注册单元是「一个协议的 Codec」。Codec 在客户端一侧负责 `Inspect`（读取 model、stream、所需能力和状态引用）和 `EncodeError`；在上游一侧通过 `Accepts(p)` 声明与哪些协议之间存在直接路径（请求可以从 p 转入，响应可以转出为 p），并用 `NewExchange(client, …)` 创建单次执行的状态。实现了 `OptionsValidator` 的 Codec 让 `Registry.ValidateOptions` 在配置阶段就能拒绝错误选项。
 
-这与引擎原有的分派方式一致：请求按**目标协议**分派，普通响应和流式响应按**上游协议**分派。因此「客户端 X → 上游 Y」一次交换的两个方向都由 Y 的适配器实现。响应默认转回 X；宿主若单独指定了响应格式，可以通过 `ExchangeOptions.Output` 转为同 Kind 的另一协议 Z，这一方向同样由 Y 的适配器实现。转换始终是直接路径，不经过中间表示。同协议请求只改写模型。
+这与引擎原有的分派方式一致：请求按**目标协议**分派，普通响应和流式响应按**上游协议**分派。因此「客户端 X → 上游 Y」一次交换的两个方向都由 Y 的适配器实现。响应默认转回 X；宿主若单独指定了响应格式，可以通过 `ExchangeOptions.Output` 转为同 Kind 的另一协议 Z，这一方向同样由 Y 的适配器实现。转换始终是直接路径，不经过中间表示。同协议请求保留供应商字段，仅改写模型以及显式配置的推理覆盖或工具规范化字段。
 
 GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/gemini` 负责任一端为 GenerateContent 的全部路径（双向），引擎入口会先把这些路径交给它。Gemini wire 对象始终是源或目标，不经其他协议中转。GenerateContent 的模型和流式模式通过 `Payload.Metadata` 单独传递；可选的 HTTP Handler 通过 `ProtocolSpec.ParsePath` 从 URL 中取回。
 
@@ -61,6 +61,7 @@ GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/gemini` �
 | `internal/llm/adapter/shared` | 协议类型、内容与媒体、事件构造、工具身份、推理、shell、缓存提示、诊断规则 |
 | `internal/llm/reasoning` | 档位/预算表、Gemini 档位上限、按协议渲染推理覆盖、剥离被取代的推理控制 |
 | `internal/image` | `KindImage` 的 Codec：OpenAI generations 与 edits、图像模型的 GenerateContent、Imagen；直接的请求与响应转换、原生流校验、模拟流 |
+| `internal/jsonedit` | 基于 moego/ojson 保序读取和编辑 JSON 字段；无法走快路径时由调用方回退到 `encoding/json` |
 | `internal/vendorerr` | 各厂商错误信封与上游错误体分类，所有 Kind 共用 |
 | `internal/errclass` | 供内部包使用的 `apix.Error` 及构造函数短别名 |
 | `route` | `Router`、`NativeFirst`、带半开试探的 `Breaker`、`Affinity`、热更新 |
@@ -77,6 +78,12 @@ GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/gemini` �
 `ExchangeOptions.Reasoning` 在 `ConvertRequest` 中分三步执行：先在转换会据此推导目标推理控制的路径上剥离客户端自己的控制，再转换请求，最后按 Exchange 的 Messages、Gemini 推理模式在转换结果上渲染覆盖值。目标无法精确表达的值（如 Gemini 档位中的 `max`）会被近似，并作为请求损耗报告。
 
 上游会存储状态的 Exchange 实现 `apix.StateReporter`。原生 Responses Exchange 从转换后的响应体或 `response.created` 中捕获 response ID，Interactions Exchange 捕获 interaction ID。跨协议输出的 Responses 不报告任何状态，因为它的 ID 并不对应上游存储的对象。
+
+## JSON 读取与编辑
+
+`internal/jsonedit` 为路由字段读取、原生模型改写、推理控制、工具规范化和部分流事件提供保序快路径。编辑保留未涉及字段的字节、成员顺序和数值写法，新增成员追加到对象末尾；这会改变旧版整对象重编码产生的字段顺序。路径上有重复键或大小写歧义、父节点不是对象，或 JSON 无效时，调用方回退到既有 `encoding/json` 路径；回退可能重新编码并排序字段。
+
+SSE 事件在添加 `sequence_number` 或恢复工具名后，若 JSON 跨行，会先压紧为单行再封帧，防止换行截断 `data:` 字段。未修改的原生事件保留原始帧。
 
 ## 流式状态
 

@@ -72,7 +72,7 @@ Linux runs race tests and coverage; macOS and Windows check their native product
 - Module files: run `go mod tidy`, inspect the diff, then retry `make tidy-check deps`. The dependency check includes test imports and fails if package loading itself fails.
 - Tests: download the `test-output` artifact for `test.log` and `coverage.out`, or use `make coverage` locally. The Actions summary includes package results and total coverage. Generated logs and coverage are ignored by Git.
 - Shuffled tests: copy the printed seed and reproduce with `go test -race -shuffle=<seed> -count=1 ./...`. Use `-run '<TestName>'` for a focused regression.
-- Fuzzing: download `fuzz-failures`, preserve the input under `testdata/fuzz/<TargetName>/` of the target's package (`internal/llm/translate`, `protocol/gemini` or `internal/image`), then run `go test ./<package> -run '<TargetName>/<hash>'` to replay it. `make fuzz FUZZTIME=2m` runs all six targets for longer.
+- Fuzzing: download `fuzz-failures`, preserve the input under `testdata/fuzz/<TargetName>/` of the target's package (including `internal/llm/translate`, `protocol/gemini`, `internal/image`, `internal/jsonedit`, `internal/llm/reasoning`, `internal/llm/codec`, and `internal/llm/adapter/shared`), then run `go test ./<package> -run '<TargetName>/<hash>'` to replay it. `make fuzz FUZZTIME=2m` runs all twelve targets for longer.
 - Workflow changes: run `make workflow-lint`. Changes to check commands must update the Makefile and this guide together.
 - Vulnerabilities: reproduce with `make vuln`, inspect the affected call path, and update the Go patch version or code as appropriate. Follow [SECURITY.md](SECURITY.md) for private reports.
 
@@ -96,6 +96,7 @@ The weekly run catches new vulnerability database findings even when there are n
 | `internal/llm/adapter/interactions` | Native Interactions response and stream validation. |
 | `internal/llm/reasoning` | Reasoning level/budget tables and override rendering per protocol. |
 | `internal/llm/adapter/shared` | Shared LLM pieces: decode types, content and media mapping, tool identity, diagnostics, usage. |
+| `internal/jsonedit` | Order-preserving JSON field reads and edits over moego/ojson, with explicit fallback to `encoding/json`. |
 | `internal/errclass` | Short aliases of `apix.Error` and its constructors; classification, status mapping, and redaction live in the root `errors.go`. |
 | `internal/llm/translate/testdata/conversion/{request,response,stream}` | The reviewed conversion snapshots, named `<from>_to_<to>.json` with internal format names. |
 
@@ -105,7 +106,7 @@ The weekly run catches new vulnerability database findings even when there are n
 
 1. **One dependency.** The only module outside the standard library is `github.com/MoeForge/moego`: its `base64` package checks and encodes inline media with SIMD, and its `ojson` package reads and edits request and stream fields without decoding and re-encoding the whole body. moego itself depends only on the standard library. Its allocator uses `//go:linkname runtime.mallocgc`, a target the Go runtime keeps for compatibility; build with `-tags moego_zeroalloc` (or `purego`) to use ordinary allocation. The `lint` job uses `scripts/check-dependencies.sh` to resolve production and test package graphs and checks module ownership. It rejects every other external module, including similarly named sibling modules, and propagates package-loading errors. Discuss an import in an issue before proposing it.
 2. **Public packages are the API.** Everything under `internal/` may change at any time; do not re-export internals unless a caller genuinely needs the value. Codecs are registered explicitly; never add `init()` registration or package-level registries.
-3. **Keep all twelve LLM cross-protocol directions working.** Chat Completions, Responses, Messages, and GenerateContent each convert to the other three. A mapping added to one direction usually needs its counterpart; same-protocol requests only rewrite the model.
+3. **Keep all twelve LLM cross-protocol directions working.** Chat Completions, Responses, Messages, and GenerateContent each convert to the other three. A mapping added to one direction usually needs its counterpart; same-protocol requests preserve provider fields except for model rewriting and explicitly configured normalization or reasoning overrides.
 4. **Requests dispatch by target protocol; responses and streams dispatch by upstream protocol.** An exchange from client X to upstream Y is implemented by Y's adapter; any path with GenerateContent at either end belongs to the Gemini adapter. Do not collapse the direct paths into a shared intermediate representation.
 5. **State is per execution.** An `Exchange` carries tool identities, options, and diagnostics for one request. Registries, codecs, routers, and gateways are safe for concurrent use. No package-level mutable state or caches, and no goroutines that outlive a call; long-lived state such as the affinity cache belongs to a router instance.
 6. **The core decides; the gateway executes.** Conversion and routing never perform I/O. Failover happens only before the commit point; after it, failures surface to the caller. Report what happened through `*apix.Error` and diagnostics instead of guessing.
@@ -133,7 +134,7 @@ Work through this list; reviewers will check it against the diff.
 - Cover the shapes a hostile or buggy upstream can send, not only the happy path: a field carrying the wrong JSON type (a non-string `arguments`, a `citations` object where an array is expected, a query that is a number), an integer beyond 2^53, and a literal outside the `float64` range such as `1e400`. These are the cases where a discarded decode error becomes wrong output, and `DecodeProbe` must never be the reason a value reaches the caller as an empty string.
 - Every stream change should cover: whole input, bytewise input, a missing final separator, and EOF without a terminal event.
 - Fuzz targets must not depend on randomness or state beyond the input bytes they are handed. If fuzzing finds a crash, keep the finding: add the input to the target package's `testdata/fuzz/<TargetName>/` and a focused regression test alongside it.
-- Benchmarks (`Benchmark*` in `internal/llm/adapter/...`) are informative, not gated. Run them with `go test -run '^$' -bench . ./internal/llm/adapter/...` when you touch hot paths.
+- Benchmarks (`Benchmark*` in `internal/llm/adapter/...` and `internal/llm/codec`) are informative, not gated. Run `make bench` when you touch hot paths; `BENCHCOUNT` defaults to 6 for comparison with benchstat. The codec benchmarks include routing inspection, request editing, and 1 MiB inline-media payloads.
 - Tests must pass with `-race`. Do not add shared state to make a test convenient.
 
 ## Formatting, lint, and comments
@@ -188,9 +189,9 @@ Versioning is [Semantic Versioning](https://semver.org/), tagged `vX.Y.Z` from `
 The release workflow gates the GitHub Release, not the module version: once a tag is pushed, the Go toolchain can already resolve it. Cut releases only from commits that are on `main` and already green.
 
 1. Confirm `CI passed` is green on the exact `main` commit you intend to tag.
-2. Land the release preparation as a normal pull request: the version in both READMEs (the `go get` snippet and the release badge), any "unreleased behavior" notes that the release makes obsolete, and the version/location tables in `docs/`. Release notes live in `docs/releases/vX.Y.Z.md` in English, with a `vX.Y.Z.zh-CN.md` translation; the GitHub Release always uses the English notes.
-3. Merge to `main`, then confirm the commit to tag: `git fetch origin && git log --oneline -1 origin/main`.
-4. Create a draft release from the English notes, with relative links rewritten to absolute `blob/vX.Y.Z/` URLs and the title line dropped, then tag and push. The release workflow publishes the draft and keeps its notes:
+2. Commit and push documentation-only release preparation directly to `main`; use a pull request when code changes are included. Update the version in both READMEs (the `go get` snippet and the release badge), any "unreleased behavior" notes that the release makes obsolete, and the version/location tables in `docs/`. Release notes live in `docs/releases/vX.Y.Z.md` in English, with a `vX.Y.Z.zh-CN.md` translation; the GitHub Release always uses the English notes.
+3. After the preparation lands on `main`, wait for `CI passed` on that exact commit, then confirm the commit to tag: `git fetch origin && git log --oneline -1 origin/main`.
+4. Create a draft release from the English notes, with relative links rewritten to absolute `blob/vX.Y.Z/` URLs and the title and language-switch lines dropped, then tag and push. The release workflow publishes the draft and keeps its notes:
 
    ```sh
    gh release create vX.Y.Z --draft --title vX.Y.Z --notes-file notes.md --target "$(git rev-parse origin/main)"

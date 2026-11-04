@@ -14,7 +14,7 @@ The LLM codecs support media input, local shell adaptation, cache hint retention
 
 ## Native paths and responsibilities
 
-Same-protocol requests rewrite only `model`, preserving historical reasoning, compaction, roles, tools, and unknown fields. An unchanged model returns the original bytes. Model catalogs, routing, and upstream compatibility cleanup belong to callers.
+By default, same-protocol requests rewrite only `model`, preserving historical reasoning, compaction, roles, tools, and unknown fields. With no effective model change or explicit override, the original bytes are returned. Explicit reasoning controls and native Responses tool normalization also edit their configured fields. Model catalogs, routing, and upstream compatibility cleanup belong to callers.
 
 Same-protocol responses generally pass through. Responses tool identity restoration and stream error handling, termination checks, and SSE framing are exceptions. Native tool restoration preserves namespaces and unmodeled numeric fields.
 
@@ -197,7 +197,7 @@ User messages support file, audio, and video input conversion, following the [of
 
 Mixed text, images, and media retain their order. Top-level video `processing` overrides the nested value. Messages text-source documents become base64 `text/plain` files; conversion back to Messages decodes and validates UTF-8 before emitting `source.type="text"` with `media_type="text/plain"`. Only `application/pdf` uses a base64 document source. Other or unknown MIME types, including raw base64 without MIME, fail when converting to Messages; filenames are not used to infer types. Document `context` and `citations` settings report semantic loss and fail under Safe/Strict. File IDs are preserved only between OpenAI protocols; conversion to Messages fails. Callers must ensure that IDs are valid for the target upstream.
 
-This support covers user input. Media in system or assistant messages and unrepresentable tool outputs fails. The library does not read local files, fetch URLs, or upload files: callers supply inline content, accessible URLs, or valid IDs. Missing media, invalid field types, and invalid document base64 fail. Same-protocol requests continue to preserve native fields and rewrite only the model. A convertible input does not imply model support for its media or MIME. Audio and video output remain unsupported.
+This support covers user input. Media in system or assistant messages and unrepresentable tool outputs fails. The library does not read local files, fetch URLs, or upload files: callers supply inline content, accessible URLs, or valid IDs. Missing media, invalid field types, and invalid document base64 fail. Same-protocol requests preserve native fields apart from model rewriting and explicitly configured overrides or normalization. A convertible input does not imply model support for its media or MIME. Audio and video output remain unsupported.
 
 Requests can map supported image URLs and base64 sources; system images and unrepresentable tool results fail. In responses, Chat → Messages maps supported image blocks, while Chat → Responses non-text output and unsupported Messages blocks fail. Image-generation results, audio, and further multimodal output remain unsupported. Unknown Responses items/parts are checked using original JSON, including unmodeled `result` / `action` payloads. Unrepresentable actual content fails rather than silently producing a successful empty response.
 

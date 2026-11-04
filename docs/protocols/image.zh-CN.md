@@ -42,7 +42,7 @@ generations 与 edits 之间没有路径：生成没有输入图像，编辑必�
 - Google 转 OpenAI：映射到所有 GPT 图像模型都接受的 `1024x1024`、`1536x1024`（横向）或 `1024x1536`（纵向）。Google 的图像尺寸不保留。
 - 宽高比发生变化时记为非语义损耗。
 
-转往 OpenAI 的编辑请求以 multipart 表单发送：单图用 `image`，多图用 `image[]`。原生请求保留自身的表单或 JSON，只改写 `model`（必要时改写 `stream`）。
+转往 OpenAI 的编辑请求以 multipart 表单发送：单图用 `image`，多图用 `image[]`。原生请求保留自身的表单或 JSON，只改写 `model`（必要时改写 `stream`）；GenerateContentImage 显式配置的 `ResponseModalities` 覆盖除外。
 
 损耗以诊断记录，并按损耗策略检查：
 
