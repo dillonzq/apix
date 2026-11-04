@@ -3,7 +3,9 @@ package translate
 import (
 	"bytes"
 	"encoding/json"
+	"strconv"
 
+	"github.com/dillonzq/apix/internal/jsonedit"
 	"github.com/dillonzq/apix/internal/llm/adapter/chatcompletions"
 	"github.com/dillonzq/apix/internal/llm/adapter/gemini"
 	"github.com/dillonzq/apix/internal/llm/adapter/messages"
@@ -235,11 +237,16 @@ func (sc *publicStreamConverter) encode(events [][]byte) [][]byte {
 		if !ok {
 			continue
 		}
+		number := strconv.AppendInt(nil, sc.sequence, 10)
+		if out, ok := jsonedit.Apply([]byte(data), jsonedit.Set(number, "sequence_number")); ok {
+			sc.sequence++
+			events[i] = shared.SSEFrame(name, out)
+			continue
+		}
 		var doc map[string]json.RawMessage
 		if json.Unmarshal([]byte(data), &doc) != nil || doc == nil {
 			continue
 		}
-		number, _ := json.Marshal(sc.sequence)
 		sc.sequence++
 		doc["sequence_number"] = number
 		events[i] = shared.SSEEvent(name, doc)
