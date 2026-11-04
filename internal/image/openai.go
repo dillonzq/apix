@@ -2,7 +2,6 @@ package image
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -13,6 +12,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/MoeForge/moego/base64"
 
 	"github.com/dillonzq/apix"
 )

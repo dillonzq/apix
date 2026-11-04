@@ -77,4 +77,4 @@ reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), 
 - **Snapshots**: add reviewed snapshots once the output is confirmed.
 - **Hostile upstream output**: cover wrong field types, truncated streams, and EOF without a terminal event.
 - **Gateway integration**: at least one `httptest` upstream case that checks the spec's path, authentication, and `EncodeError`.
-- **Dependencies**: keep the standard-library-only rule.
+- **Dependencies**: add none; the standard library and moego are the only allowed modules.

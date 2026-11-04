@@ -77,4 +77,4 @@ reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), 
 - **快照**：先确认输出符合预期，再加入快照。
 - **异常上游输出**：覆盖字段类型错误、截断的流、EOF 前没有终止事件等情况。
 - **gateway 集成测试**：至少一个用 `httptest` 模拟上游的用例，验证 `Spec` 的路径、鉴权和 `EncodeError`。
-- **依赖**：保持仅依赖标准库。
+- **依赖**：不要新增；只允许标准库和 moego。
