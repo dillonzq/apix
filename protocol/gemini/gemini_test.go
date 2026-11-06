@@ -66,13 +66,28 @@ func drain(t *testing.T, c apix.StreamConverter, wire string, step int) []sse.Ev
 	var d sse.Decoder
 	out := d.Feed(bytes.Join(frames, nil))
 	out = append(out, d.Finish()...)
+	// Wall-clock stamps differ when two drains straddle a second: Chat
+	// Completions carries "created", Responses "response.created_at".
 	for i, event := range out {
 		var doc map[string]json.RawMessage
-		if json.Unmarshal(event.Data, &doc) == nil {
-			if _, ok := doc["created"]; ok {
-				doc["created"] = json.RawMessage("0")
-				out[i].Data, _ = json.Marshal(doc)
+		if json.Unmarshal(event.Data, &doc) != nil {
+			continue
+		}
+		changed := false
+		if _, ok := doc["created"]; ok {
+			doc["created"] = json.RawMessage("0")
+			changed = true
+		}
+		var resp map[string]json.RawMessage
+		if json.Unmarshal(doc["response"], &resp) == nil {
+			if _, ok := resp["created_at"]; ok {
+				resp["created_at"] = json.RawMessage("0")
+				doc["response"], _ = json.Marshal(resp)
+				changed = true
 			}
+		}
+		if changed {
+			out[i].Data, _ = json.Marshal(doc)
 		}
 	}
 	return out
