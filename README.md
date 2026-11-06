@@ -98,11 +98,24 @@ An `Exchange` holds one execution's state, such as tool identities restored in r
 | `Reasoning: &apix.Reasoning{Effort: "high"}` | any LLM | Replace the request's reasoning control after conversion, rendered with the upstream's own thinking options; `reasoning.ParseSuffix(model).Reasoning()` builds it from a `model(high)` suffix |
 | `Ext: anthropic.MessagesOptions{AllowUnsignedThinking: true}` | Messages | Replay cross-protocol reasoning as unsigned thinking blocks |
 | `Ext: anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}` | Messages | Send reasoning levels as fixed `budget_tokens` for Claude models without adaptive thinking (default: adaptive) |
+| `Ext: openai.ChatCompletionsOptions{StreamUsage: true}` | Chat Completions | Set `stream_options.include_usage` on streamed requests so the stream ends with a usage chunk; native clients receive it too |
 | `Ext: openai.ResponsesOptions{NormalizeTools: true}` | Responses | Flatten namespaces, wrap custom tools, and adapt local shell for upstreams that only accept function tools |
 | `Ext: gemini.GenerateContentOptions{ThinkingMode: gemini.ThinkingBudget}` | GenerateContent | Send reasoning as `thinkingBudget` (or `ThinkingLevel` for `thinkingLevel`), for the model in use |
 | `Ext: gemini.GenerateContentImageOptions{ResponseModalities: []gemini.Modality{gemini.ModalityText, gemini.ModalityImage}}` | GenerateContentImage | Set `responseModalities` on every image request the upstream receives, converted (default `["IMAGE"]`) or native, for models that need text alongside images |
 
 `ex.Diagnostics()` lists fields that conversion omitted or approximated, with `Code`, `Path`, `Message`, `Semantic`, `From`, and `To`. Responses and streams report losses but are never rejected because of the policy.
+
+### Token usage
+
+Exchanges implement `apix.UsageReporter`. After a response converts, or after a stream ends, `Usage()` returns the counts the upstream itself reported, read from the upstream bytes, in one accounting for every protocol:
+
+```go
+if u, ok := ex.(apix.UsageReporter).Usage(); ok {
+    log.Printf("in=%d (cached %d) out=%d (reasoning %d)", u.InputTokens, u.CacheReadTokens, u.OutputTokens, u.ReasoningTokens)
+}
+```
+
+`InputTokens` includes cache reads and writes, and `OutputTokens` includes reasoning, so Anthropic's separate cache counts and Gemini's thought and tool-use prompt counts are added in. `TotalTokens` is the upstream's total, or the sum when it reports none, and `Raw` keeps the upstream's usage object for vendor-specific detail. Streams merge usage across events, such as Messages `message_start` and `message_delta`. Chat Completions streams report usage only when requested; see `StreamUsage` above. Imagen reports no usage.
 
 ## Routing
 
@@ -148,6 +161,7 @@ http.Handle("/v1/chat/completions", g.Handler(openai.ChatCompletions))
 | `MaxResponseBytes` | Limit ordinary response bodies (default 64 MiB); a larger one fails over |
 | `ForwardHeaders` | Upstream response headers to pass to clients, such as `"X-Request-Id"` or `"X-Ratelimit-*"`; `Response.UpstreamHeader` holds them all |
 | `ReasoningSuffix` | Route `model(high)` by `model` and apply the suffix as `Request.Reasoning` |
+| `OnUsage` | Receive the committed attempt's [token usage](#token-usage): when `Do` returns an ordinary response, and once a stream ends, fails, or is closed (counts seen so far); also works with `Handler`. `Response.Usage()` returns the same value |
 
 An upstream's `Retry-After` reaches the error as `RetryAfter`, pauses that endpoint, and is relayed by `Handler`. Stored responses and interactions are remembered per endpoint, so follow-up turns return to it.
 

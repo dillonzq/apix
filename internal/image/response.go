@@ -17,6 +17,7 @@ func (e *exchange) ConvertResponse(status int, resp apix.Payload) (apix.Payload,
 	if err != nil {
 		return apix.Payload{}, err
 	}
+	e.usage.Body(resp.Body)
 	return out, nil
 }
 

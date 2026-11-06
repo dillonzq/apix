@@ -81,6 +81,13 @@ type Config struct {
 	RouterOptions []route.Option
 	// OnAttempt observes every attempt, for logs and metrics.
 	OnAttempt func(Attempt)
+	// OnUsage receives the token usage of every committed response whose
+	// upstream reported it, with the committed attempt as OnAttempt saw it:
+	// when Do returns an ordinary response, and once a stream ends, fails, or
+	// its Body is closed, from the goroutine that did so. A stream that ended
+	// early reports the usage seen so far. It is not called when the upstream
+	// reported no usage. See apix.Usage.
+	OnUsage func(Attempt, apix.Usage)
 }
 
 // Attempt describes one try against an upstream.
@@ -130,6 +137,23 @@ type Response struct {
 	exchange apix.Exchange
 }
 
+// Usage returns the token usage the upstream reported; ok is false when it
+// reported none. For streams, call it after Body is drained or closed. See
+// apix.Usage.
+func (r *Response) Usage() (u apix.Usage, ok bool) {
+	if r == nil {
+		return apix.Usage{}, false
+	}
+	return usageOf(r.exchange)
+}
+
+func usageOf(ex apix.Exchange) (apix.Usage, bool) {
+	if ur, ok := ex.(apix.UsageReporter); ok {
+		return ur.Usage()
+	}
+	return apix.Usage{}, false
+}
+
 // Diagnostics returns the conversion losses recorded for the exchange. For
 // streams, call it after Body is drained.
 func (r *Response) Diagnostics() []apix.Diagnostic {
@@ -152,6 +176,7 @@ type Gateway struct {
 	forwardHeaders   []string
 	reasoningSuffix  bool
 	onAttempt        func(Attempt)
+	onUsage          func(Attempt, apix.Usage)
 	mu               sync.RWMutex // guards routing and upstream configuration together
 	upstreams        map[string]Upstream
 }
@@ -163,7 +188,7 @@ func New(cfg Config) (*Gateway, error) {
 	}
 	g := &Gateway{reg: cfg.Registry, client: cfg.Client, maxAttempts: cfg.MaxAttempts, maxRequestBytes: cfg.MaxRequestBytes,
 		maxResponseBytes: cfg.MaxResponseBytes, commitTimeout: cfg.CommitTimeout, forwardHeaders: append([]string(nil), cfg.ForwardHeaders...),
-		reasoningSuffix: cfg.ReasoningSuffix, onAttempt: cfg.OnAttempt}
+		reasoningSuffix: cfg.ReasoningSuffix, onAttempt: cfg.OnAttempt, onUsage: cfg.OnUsage}
 	if g.client == nil {
 		g.client = &http.Client{}
 	}
@@ -291,6 +316,7 @@ func (g *Gateway) Do(ctx context.Context, req Request) (*Response, error) {
 		}
 		if aerr == nil {
 			resp.Attempts = attempts
+			g.reportUsage(resp, a)
 			return resp, nil
 		}
 		last = aerr
@@ -458,6 +484,23 @@ func (g *Gateway) send(ctx context.Context, cancel context.CancelCauseFunc, req 
 	return resp, true, nil
 }
 
+// reportUsage passes a committed response's usage to OnUsage: now for an
+// ordinary response, at the end of the stream otherwise.
+func (g *Gateway) reportUsage(resp *Response, a Attempt) {
+	if g.onUsage == nil {
+		return
+	}
+	report := func(u apix.Usage) { g.onUsage(a, u) }
+	if body, ok := resp.Body.(*streamBody); ok {
+		body.usage = func() (apix.Usage, bool) { return usageOf(resp.exchange) }
+		body.onUsage = report
+		return
+	}
+	if u, ok := usageOf(resp.exchange); ok {
+		report(u)
+	}
+}
+
 // remember records state the exchange's upstream created so follow-up
 // requests reach the same endpoint.
 func (g *Gateway) remember(ex apix.Exchange, endpointID string) {
@@ -577,8 +620,11 @@ func (g *Gateway) newRequest(ctx context.Context, req Request, info apix.Request
 	return hreq, nil
 }
 
-// streamBody converts the upstream stream lazily as the caller reads.
+// streamBody converts the upstream stream lazily as the caller reads. Close
+// may run concurrently with Read to abort it; mu orders the converter state
+// that the usage report reads.
 type streamBody struct {
+	mu        sync.Mutex
 	upstream  io.ReadCloser
 	conv      apix.StreamConverter
 	chunk     []byte
@@ -590,6 +636,26 @@ type streamBody struct {
 	cancel    context.CancelCauseFunc
 	onFailure func(error)
 	onDone    func()
+	// onUsage receives usage() once when the stream ends, fails, or is
+	// closed, whichever comes first.
+	usage   func() (apix.Usage, bool)
+	onUsage func(apix.Usage)
+}
+
+// end takes the usage report, once. The caller holds mu, so the converter
+// state is final, and runs the returned report after releasing it, so the
+// callback may use the body.
+func (b *streamBody) end() func() {
+	report := b.onUsage
+	b.onUsage = nil
+	if report == nil {
+		return nil
+	}
+	u, ok := b.usage()
+	if !ok {
+		return nil
+	}
+	return func() { report(u) }
 }
 
 // prime reads until the first converted event: the commit point. Any failure
@@ -644,6 +710,17 @@ func (b *streamBody) fail(err error) {
 }
 
 func (b *streamBody) Read(p []byte) (int, error) {
+	b.mu.Lock()
+	n, report, err := b.read(p)
+	b.mu.Unlock()
+	if report != nil {
+		report()
+	}
+	return n, err
+}
+
+// read is Read under mu; it also returns the usage report to run after.
+func (b *streamBody) read(p []byte) (int, func(), error) {
 	for len(b.current) == 0 {
 		if len(b.pending) > 0 {
 			b.current, b.pending = b.pending[0], b.pending[1:]
@@ -656,26 +733,33 @@ func (b *streamBody) Read(p []byte) (int, error) {
 				b.onFailure(b.err)
 				b.onFailure = nil
 			}
-			return 0, b.err
+			return 0, b.end(), b.err
 		}
 		if b.done {
 			if b.onDone != nil {
 				b.onDone()
 				b.onDone = nil
 			}
-			return 0, io.EOF
+			return 0, b.end(), io.EOF
 		}
 		b.fill()
 	}
 	n := copy(p, b.current)
 	b.current = b.current[n:]
-	return n, nil
+	return n, nil, nil
 }
 
 func (b *streamBody) Close() error {
+	// Closing the upstream first unblocks a concurrent Read holding mu.
 	err := b.upstream.Close()
 	if b.cancel != nil {
 		b.cancel(nil)
+	}
+	b.mu.Lock()
+	report := b.end()
+	b.mu.Unlock()
+	if report != nil {
+		report()
 	}
 	return err
 }

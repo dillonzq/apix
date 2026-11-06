@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/dillonzq/apix"
+	"github.com/dillonzq/apix/internal/usage"
 	"github.com/dillonzq/apix/internal/vendorerr"
 )
 
@@ -62,6 +63,17 @@ var protocols = map[apix.Protocol]protocol{
 
 // urlModel reports whether the protocol carries the model in its URL.
 func (p protocol) urlModel() bool { return p.family != familyOpenAI }
+
+// usage names the fields responses report usage in; Imagen reports none.
+func (p protocol) usage() usage.Dialect {
+	switch p.family {
+	case familyOpenAI:
+		return usage.Responses
+	case familyGemini:
+		return usage.Gemini
+	}
+	return 0
+}
 
 // Options are the exchange options an image protocol's package may set.
 type Options struct {
@@ -211,5 +223,5 @@ func (c *Codec) NewExchange(client apix.Protocol, opts apix.ExchangeOptions) (ap
 	if opts.Output != "" {
 		output = opts.Output
 	}
-	return &exchange{client: client, upstream: c.id, output: output, policy: opts.LossPolicy, options: o}, nil
+	return &exchange{client: client, upstream: c.id, output: output, policy: opts.LossPolicy, options: o, usage: usage.New(c.proto.usage())}, nil
 }

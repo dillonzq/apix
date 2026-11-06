@@ -1,5 +1,7 @@
 package apix
 
+import "encoding/json"
+
 // Codec implements one protocol. As the client protocol it inspects requests
 // and encodes errors; as the upstream protocol it creates exchanges from the
 // client protocols it can convert directly.
@@ -78,6 +80,43 @@ type Exchange interface {
 // uses, so a router can send follow-up requests to the same endpoint.
 type StateReporter interface {
 	CreatedState() []string
+}
+
+// UsageReporter is an optional Exchange extension for protocols whose
+// upstream reports token usage. Usage returns what the upstream response, or
+// the stream events converted so far, reported; ok is false when nothing was
+// reported. For streams, call it after the stream ends: some upstreams report
+// usage only in their final events, and a stream that ended early may hold
+// partial counts.
+type UsageReporter interface {
+	Usage() (u Usage, ok bool)
+}
+
+// Usage is the token usage an upstream reported, in one accounting for every
+// protocol. Input counts include cached input, and output counts include
+// reasoning, so InputTokens + OutputTokens covers every billed token class:
+// Anthropic's separate cache counts are added to InputTokens, and Gemini's
+// thought and tool-use prompt counts to OutputTokens and InputTokens.
+type Usage struct {
+	// InputTokens counts every input token, including CacheReadTokens and
+	// CacheWriteTokens.
+	InputTokens int64
+	// OutputTokens counts every output token, including ReasoningTokens.
+	OutputTokens int64
+	// TotalTokens is the upstream's total when it reports one, otherwise
+	// InputTokens + OutputTokens.
+	TotalTokens int64
+	// CacheReadTokens counts input served from a prompt cache.
+	CacheReadTokens int64
+	// CacheWriteTokens counts input written to a prompt cache.
+	CacheWriteTokens int64
+	// ReasoningTokens counts output spent on reasoning.
+	ReasoningTokens int64
+	// Raw is the upstream's usage object in its own protocol, for
+	// vendor-specific detail such as modality counts. When a stream reports
+	// usage across several events, Raw merges their members, later values
+	// replacing earlier ones.
+	Raw json.RawMessage
 }
 
 // StreamConverter accepts arbitrary upstream byte chunks and returns encoded
