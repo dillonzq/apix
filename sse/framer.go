@@ -13,6 +13,7 @@ import (
 // set — pass false when no consumer reads them.
 type Framer struct {
 	buf       []byte          // partial line carried across Push calls
+	scanned   int             // bytes of buf already searched for a line end
 	eventType string          // current event: value
 	data      strings.Builder // joined data: payloads of the current frame
 	dataLines int
@@ -40,13 +41,19 @@ func (f *Framer) End() { f.Push([]byte("\n\n")) }
 // ok=false means the buffer needs more input.
 func (f *Framer) Next() (eventType, data string, raw []byte, ok bool) {
 	for {
-		i := bytes.IndexAny(f.buf, "\r\n")
+		// Resume where the last search stopped: rescanning a long line on
+		// every Push would make framing quadratic in its length.
+		i := lineEnd(f.buf[f.scanned:])
 		if i < 0 {
+			f.scanned = len(f.buf)
 			return "", "", nil, false
 		}
+		i += f.scanned
 		if f.buf[i] == '\r' && i+1 == len(f.buf) {
+			f.scanned = i // a following '\n' joins this '\r'
 			return "", "", nil, false
 		}
+		f.scanned = 0
 		end := i + 1
 		if f.buf[i] == '\r' && end < len(f.buf) && f.buf[end] == '\n' {
 			end++
@@ -86,6 +93,21 @@ func (f *Framer) Next() (eventType, data string, raw []byte, ok bool) {
 			// Unknown lines are ignored outside raw capture.
 		}
 	}
+}
+
+// lineEnd returns the index of the first '\r' or '\n' in b, or -1. Two
+// IndexByte searches beat bytes.IndexAny, which tests a two-byte set one
+// byte at a time; the '\r' search stops at the first '\n'.
+func lineEnd(b []byte) int {
+	n := bytes.IndexByte(b, '\n')
+	head := b
+	if n >= 0 {
+		head = b[:n]
+	}
+	if r := bytes.IndexByte(head, '\r'); r >= 0 {
+		return r
+	}
+	return n
 }
 
 // IsDone reports whether a framer-stripped SSE data payload is the
