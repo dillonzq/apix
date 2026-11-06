@@ -201,7 +201,7 @@ decoder.Finish() // 处理完所有转换输出后调用
 
 ```sh
 make check # gofmt、vet、模块与依赖检查、构建、竞态测试
-make fuzz  # 流、图像、Base64 与 JSON 快路径 fuzz
+make fuzz  # 流、SSE 分帧、图像、Base64、JSON 快路径与用量 fuzz
 ```
 
 转换行为由 `internal/llm/translate/testdata/conversion` 下 48 份经过审阅的快照固定。确认输出变化符合预期后才更新：

@@ -72,7 +72,7 @@ Linux runs race tests and coverage; macOS and Windows check their native product
 - Module files: run `go mod tidy`, inspect the diff, then retry `make tidy-check deps`. The dependency check includes test imports and fails if package loading itself fails.
 - Tests: download the `test-output` artifact for `test.log` and `coverage.out`, or use `make coverage` locally. The Actions summary includes package results and total coverage. Generated logs and coverage are ignored by Git.
 - Shuffled tests: copy the printed seed and reproduce with `go test -race -shuffle=<seed> -count=1 ./...`. Use `-run '<TestName>'` for a focused regression.
-- Fuzzing: download `fuzz-failures`, preserve the input under `testdata/fuzz/<TargetName>/` of the target's package (including `internal/llm/translate`, `protocol/gemini`, `internal/image`, `internal/jsonedit`, `internal/llm/reasoning`, `internal/llm/codec`, and `internal/llm/adapter/shared`), then run `go test ./<package> -run '<TargetName>/<hash>'` to replay it. `make fuzz FUZZTIME=2m` runs all twelve targets for longer.
+- Fuzzing: download `fuzz-failures`, preserve the input under `testdata/fuzz/<TargetName>/` of the target's package (including `internal/llm/translate`, `protocol/gemini`, `internal/image`, `internal/jsonedit`, `internal/llm/reasoning`, `internal/llm/codec`, `internal/llm/adapter/shared`, `internal/usage`, and `sse`), then run `go test ./<package> -run '<TargetName>/<hash>'` to replay it. `make fuzz FUZZTIME=2m` runs all eighteen targets for longer.
 - Workflow changes: run `make workflow-lint`. Changes to check commands must update the Makefile and this guide together.
 - Vulnerabilities: reproduce with `make vuln`, inspect the affected call path, and update the Go patch version or code as appropriate. Follow [SECURITY.md](SECURITY.md) for private reports.
 
@@ -97,6 +97,7 @@ The weekly run catches new vulnerability database findings even when there are n
 | `internal/llm/reasoning` | Reasoning level/budget tables and override rendering per protocol. |
 | `internal/llm/adapter/shared` | Shared LLM pieces: decode types, content and media mapping, tool identity, diagnostics, usage. |
 | `internal/jsonedit` | Order-preserving JSON field reads and edits over moego/ojson, with explicit fallback to `encoding/json`. |
+| `internal/usage` | Usage objects read from upstream bodies and SSE bytes, per dialect, normalized to `apix.Usage`. |
 | `internal/errclass` | Short aliases of `apix.Error` and its constructors; classification, status mapping, and redaction live in the root `errors.go`. |
 | `internal/llm/translate/testdata/conversion/{request,response,stream}` | The reviewed conversion snapshots, named `<from>_to_<to>.json` with internal format names. |
 

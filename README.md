@@ -202,7 +202,7 @@ decoder.Finish() // after all converter output
 
 ```sh
 make check # gofmt, vet, module and dependency checks, build, race tests
-make fuzz  # stream, image, Base64, and JSON fast-path fuzz targets
+make fuzz  # stream, SSE framing, image, Base64, JSON fast-path, and usage fuzz targets
 ```
 
 Conversion behavior is pinned by 48 reviewed snapshots under `internal/llm/translate/testdata/conversion`; update them only after reviewing the output change:
