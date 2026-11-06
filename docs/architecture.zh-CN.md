@@ -80,7 +80,7 @@ GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/gemini` �
 
 上游会存储状态的 Exchange 实现 `apix.StateReporter`。原生 Responses Exchange 从转换后的响应体或 `response.created` 中捕获 response ID，Interactions Exchange 捕获 interaction ID。跨协议输出的 Responses 不报告任何状态，因为它的 ID 并不对应上游存储的对象。
 
-所有 LLM 和图像 Exchange 都通过按上游协议选择的 `internal/usage` 跟踪器实现 `apix.UsageReporter`。它读取上游字节而非转换后的输出，因此任何路径上的计数都是上游自己的：普通响应在转换成功后读取响应体；流式响应在转换器收到分块时，经独立的 SSE 分帧器读取，且只解码含 usage 键的事件。多个 usage 对象的成员会合并，后出现的值覆盖先前的值。错误响应不记录用量。
+所有 LLM 和图像 Exchange 都通过按上游协议选择的 `internal/usage` 跟踪器实现 `apix.UsageReporter`。它读取上游字节而非转换后的输出，因此任何路径上的计数都是上游自己的：普通响应在转换成功后读取响应体；流式响应在转换器收到分块时读取。跟踪器自行按行拆分 SSE，不再运行第二个 `sse.Framer`，且只解码数据中可能含 usage 键的事件。多个 usage 对象的成员会合并，后出现的值覆盖先前的值。错误响应不记录用量。
 
 ## JSON 读取与编辑
 

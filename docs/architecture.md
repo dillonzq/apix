@@ -80,7 +80,7 @@ Native Responses normalization (`openai.ResponsesOptions{NormalizeTools: true}`)
 
 Exchanges whose upstream stores state implement `apix.StateReporter`. A native Responses exchange captures the response ID from the converted body or from `response.created`; an Interactions exchange captures the interaction ID. Cross-protocol Responses output reports nothing, because its ID refers to nothing an upstream stored.
 
-Every LLM and image exchange implements `apix.UsageReporter` through an `internal/usage` tracker chosen by the upstream protocol. It reads the upstream's bytes, not the converted output, so counts are the upstream's own on every path: ordinary bodies after a successful conversion, and stream chunks as the converter receives them, through a separate SSE framer that only decodes events containing a usage key. Members of several usage objects merge, later values replacing earlier ones. Error responses record nothing.
+Every LLM and image exchange implements `apix.UsageReporter` through an `internal/usage` tracker chosen by the upstream protocol. It reads the upstream's bytes, not the converted output, so counts are the upstream's own on every path: ordinary bodies after a successful conversion, and stream chunks as the converter receives them. For streams the tracker splits SSE lines itself rather than running a second `sse.Framer`, and decodes only events whose data may hold a usage key. Members of several usage objects merge, later values replacing earlier ones. Error responses record nothing.
 
 ## JSON reads and edits
 
