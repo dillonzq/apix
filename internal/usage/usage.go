@@ -7,11 +7,9 @@ package usage
 import (
 	"bytes"
 	"encoding/json"
-	"strings"
 
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/internal/jsonedit"
-	"github.com/dillonzq/apix/sse"
 )
 
 // Dialect names the usage fields of one family of protocols.
@@ -44,9 +42,17 @@ var paths = map[Dialect][][]string{
 
 // Tracker accumulates the usage of one execution. A nil Tracker tracks
 // nothing. It is not safe for concurrent use.
+//
+// The stream converter already frames the same bytes, so the tracker does
+// not run a second sse.Framer: it splits lines the way the framer does,
+// keeps only data payloads, in buffers it reuses, and decodes a frame only
+// when it may hold a usage key.
 type Tracker struct {
 	dialect Dialect
-	framer  *sse.Framer
+	partial []byte // a line split across chunks
+	cr      bool   // the last chunk ended a line with '\r'
+	data    []byte // joined data payloads of the current frame
+	lines   int    // data lines in the current frame
 	merged  map[string]json.RawMessage
 	keys    []string // member order of merged, first appearance first
 	single  json.RawMessage
@@ -75,42 +81,115 @@ func (t *Tracker) Feed(chunk []byte) {
 	if t == nil {
 		return
 	}
-	if t.framer == nil {
-		t.framer = sse.NewFramer(false)
+	for len(chunk) > 0 {
+		if t.cr {
+			// A '\r' ended the previous chunk's line; a '\n' here belongs
+			// to it, as sse.Framer joins "\r\n" into one line end.
+			t.cr = false
+			if chunk[0] == '\n' {
+				chunk = chunk[1:]
+				continue
+			}
+		}
+		i := lineEnd(chunk)
+		if i < 0 {
+			t.partial = append(t.partial, chunk...)
+			return
+		}
+		line := chunk[:i]
+		if len(t.partial) > 0 {
+			t.partial = append(t.partial, line...)
+			line = t.partial
+		}
+		if chunk[i] == '\r' {
+			if i+1 == len(chunk) {
+				t.cr = true
+			} else if chunk[i+1] == '\n' {
+				i++
+			}
+		}
+		chunk = chunk[i+1:]
+		t.line(line)
+		t.partial = t.partial[:0]
 	}
-	t.framer.Push(chunk)
-	t.drain()
 }
 
 // End frames a final event whose separator the stream omitted.
 func (t *Tracker) End() {
-	if t == nil || t.framer == nil {
+	t.Feed([]byte("\n\n"))
+}
+
+// line handles one SSE line as sse.Framer does, for the data it joins: a
+// blank line ends the frame, and data lines join with '\n'. Event names,
+// comments, and other lines do not affect usage.
+func (t *Tracker) line(line []byte) {
+	if len(line) == 0 {
+		if t.lines > 0 {
+			t.record(t.data)
+		}
+		t.data = t.data[:0]
+		t.lines = 0
 		return
 	}
-	t.framer.End()
-	t.drain()
-}
-
-func (t *Tracker) drain() {
-	for {
-		_, data, _, ok := t.framer.Next()
-		if !ok {
-			return
-		}
-		// Every usage key contains "sage"; skip the JSON walk for events
-		// that cannot hold one, such as text deltas.
-		if !strings.Contains(data, "sage") {
-			continue
-		}
-		t.record([]byte(data))
+	payload, ok := bytes.CutPrefix(line, []byte("data:"))
+	if !ok {
+		return
 	}
+	if t.lines > 0 {
+		t.data = append(t.data, '\n')
+	}
+	t.lines++
+	payload, _ = bytes.CutPrefix(payload, []byte(" "))
+	t.data = append(t.data, payload...)
 }
 
-// record merges the usage object found in doc, if any.
+// record merges the usage object found in doc, if any, skipping documents
+// that cannot hold one, such as text deltas.
 func (t *Tracker) record(doc []byte) {
-	if !bytes.Contains(doc, []byte("sage")) {
-		return
+	if hasUsageKey(doc) {
+		t.merge(doc)
 	}
+}
+
+// hasUsageKey reports whether doc contains `"usage`, the start of the last
+// key on every path in paths. find reads that key exactly: a key that
+// differs only in case makes the fast path decline, and the encoding/json
+// fallback looks keys up exactly. A quote cannot appear unescaped inside a
+// JSON string, so text and Base64 payloads rarely match. Keys spelled with
+// \u escapes are not seen.
+func hasUsageKey(doc []byte) bool {
+	// Search for "usage" and check the quote before it: bytes.Index tries
+	// each occurrence of the needle's first byte, and quotes fill JSON.
+	for i := 0; ; {
+		j := bytes.Index(doc[i:], []byte("usage"))
+		if j < 0 {
+			return false
+		}
+		i += j
+		if i > 0 && doc[i-1] == '"' {
+			return true
+		}
+		i += len("usage")
+	}
+}
+
+// lineEnd returns the index of the first '\r' or '\n' in b, or -1. Two
+// IndexByte searches beat bytes.IndexAny, which tests a two-byte set one
+// byte at a time; the '\r' search stops at the first '\n'.
+func lineEnd(b []byte) int {
+	n := bytes.IndexByte(b, '\n')
+	head := b
+	if n >= 0 {
+		head = b[:n]
+	}
+	if r := bytes.IndexByte(head, '\r'); r >= 0 {
+		return r
+	}
+	return n
+}
+
+// merge merges the usage object found in doc, if any.
+func (t *Tracker) merge(doc []byte) {
 	raw := find(doc, paths[t.dialect])
 	if raw == nil {
 		return

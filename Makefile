@@ -79,6 +79,7 @@ fuzz:
 	$(GO) test ./internal/llm/codec -run '^$$' -fuzz '^FuzzFeatureHelpers$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./internal/llm/adapter/shared -run '^$$' -fuzz '^FuzzCheckProtocolFailure$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./internal/usage -run '^$$' -fuzz '^FuzzTrackerChunkBoundaries$$' -fuzztime=$(FUZZTIME)
+	$(GO) test ./internal/usage -run '^$$' -fuzz '^FuzzTrackerMatchesFramer$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./sse -run '^$$' -fuzz '^FuzzFramerMatchesReference$$' -fuzztime=$(FUZZTIME)
 
 bench:

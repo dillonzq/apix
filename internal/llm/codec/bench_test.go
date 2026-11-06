@@ -118,3 +118,53 @@ func BenchmarkStreamChatToResponses(b *testing.B) {
 		}
 	}
 }
+
+var benchMessagesStream = func() []byte {
+	var sb strings.Builder
+	sb.WriteString("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"m\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"c\",\"content\":[],\"stop_reason\":null,\"usage\":{\"input_tokens\":10,\"output_tokens\":1}}}\n\n")
+	sb.WriteString("event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n")
+	for range 200 {
+		sb.WriteString("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"The quick brown fox jumps over the lazy dog. \"}}\n\n")
+	}
+	sb.WriteString("event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n")
+	sb.WriteString("event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":200}}\n\n")
+	sb.WriteString("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+	return []byte(sb.String())
+}()
+
+// BenchmarkStreamNative measures same-protocol streams, where the converter
+// does little beyond validating and framing, so per-event overhead such as
+// usage tracking shows most.
+func BenchmarkStreamNative(b *testing.B) {
+	for _, tt := range []struct {
+		name string
+		p    apix.Protocol
+		wire []byte
+	}{
+		{"ChatCompletions", openai.ChatCompletions, benchChatStream},
+		{"Messages", anthropic.Messages, benchMessagesStream},
+	} {
+		b.Run(tt.name, func(b *testing.B) {
+			reg := benchRegistry(b)
+			b.SetBytes(int64(len(tt.wire)))
+			b.ReportAllocs()
+			for b.Loop() {
+				ex, err := reg.NewExchange(tt.p, tt.p, apix.ExchangeOptions{})
+				if err != nil {
+					b.Fatal(err)
+				}
+				sc, err := ex.NewStreamConverter()
+				if err != nil {
+					b.Fatal(err)
+				}
+				if _, _, err := sc.Feed(tt.wire); err != nil {
+					b.Fatal(err)
+				}
+				if _, err := sc.Finish(); err != nil {
+					b.Fatal(err)
+				}
+				ex.(apix.UsageReporter).Usage()
+			}
+		})
+	}
+}
