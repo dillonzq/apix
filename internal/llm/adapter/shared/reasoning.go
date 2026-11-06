@@ -24,6 +24,11 @@ type ReasoningFields struct {
 // Text selects the first readable reasoning alias for response display.
 func (r ReasoningFields) Text() string {
 	for _, raw := range []json.RawMessage{r.ReasoningContent, r.Reasoning, r.ReasoningDetails} {
+		// An absent field cannot decode; skip building the error for it,
+		// which every streamed delta without reasoning would pay.
+		if len(raw) == 0 {
+			continue
+		}
 		var node any
 		if json.Unmarshal(raw, &node) == nil {
 			if text := reasoningText(node); text != "" {
@@ -150,7 +155,7 @@ func (e ResponsesEventEmitter) ReasoningAdded(id string, index int) [][]byte {
 }
 
 func (e ResponsesEventEmitter) ReasoningDelta(id string, index int, text string) []byte {
-	return SSEEvent("response.reasoning_summary_text.delta", map[string]any{"type": "response.reasoning_summary_text.delta", "item_id": id, "output_index": index, "summary_index": 0, "delta": text})
+	return SSEEvent("response.reasoning_summary_text.delta", summaryDeltaEvent{Delta: text, ItemID: id, OutputIndex: index, Type: "response.reasoning_summary_text.delta"})
 }
 
 func (e ResponsesEventEmitter) ReasoningDone(item RespItem, index int) [][]byte {

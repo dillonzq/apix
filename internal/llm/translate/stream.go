@@ -135,6 +135,7 @@ type publicStreamConverter struct {
 	input     *shared.SSEFramer
 	sequence  int64
 	sequenced bool
+	line      bytes.Buffer // the normalized data line drain feeds
 	done      bool
 	failure   *Error
 }
@@ -180,14 +181,19 @@ func (sc *publicStreamConverter) drain() ([][]byte, bool, *Error) {
 		if data == "" {
 			continue
 		}
-		if !shared.IsSSEDone(data) {
-			var compact bytes.Buffer
-			if err := json.Compact(&compact, []byte(data)); err != nil || !shared.IsJSONObject(data) {
-				return events, false, Translation("malformed Chat Completions SSE payload: " + shared.RedactedSnippet(data))
-			}
-			data = compact.String()
+		// The converter copies what it keeps, so one line buffer serves
+		// every event.
+		sc.line.Reset()
+		sc.line.WriteString("data: ")
+		if shared.IsSSEDone(data) {
+			sc.line.WriteString(data)
+		} else if err := json.Compact(&sc.line, []byte(data)); err != nil || sc.line.Bytes()[len("data: ")] != '{' {
+			// Compact validates the payload and elides the whitespace
+			// around it, so its first byte tells an object apart.
+			return events, false, Translation("malformed Chat Completions SSE payload: " + shared.RedactedSnippet(data))
 		}
-		out, done, err := sc.converter.Feed([]byte("data: " + data + "\n"))
+		sc.line.WriteByte('\n')
+		out, done, err := sc.converter.Feed(sc.line.Bytes())
 		events = append(events, out...)
 		if err != nil || done {
 			return events, done, err
@@ -230,21 +236,26 @@ func (sc *publicStreamConverter) encode(events [][]byte) [][]byte {
 	if !sc.sequenced {
 		return events
 	}
+	var number []byte
 	for i, frame := range events {
-		framer := shared.NewSSEFramer(false)
-		framer.Push(frame)
-		name, data, _, ok := framer.Next()
+		name, data, ok := splitFrame(frame)
 		if !ok {
-			continue
+			framer := shared.NewSSEFramer(false)
+			framer.Push(frame)
+			var payload string
+			if name, payload, _, ok = framer.Next(); !ok {
+				continue
+			}
+			data = []byte(payload)
 		}
-		number := strconv.AppendInt(nil, sc.sequence, 10)
-		if out, ok := jsonedit.Apply([]byte(data), jsonedit.Set(number, "sequence_number")); ok {
+		number = strconv.AppendInt(number[:0], sc.sequence, 10)
+		if out, ok := jsonedit.Apply(data, jsonedit.Set(number, "sequence_number")); ok {
 			sc.sequence++
 			events[i] = shared.SSEFrame(name, out)
 			continue
 		}
 		var doc map[string]json.RawMessage
-		if json.Unmarshal([]byte(data), &doc) != nil || doc == nil {
+		if json.Unmarshal(data, &doc) != nil || doc == nil {
 			continue
 		}
 		sc.sequence++
@@ -252,4 +263,35 @@ func (sc *publicStreamConverter) encode(events [][]byte) [][]byte {
 		events[i] = shared.SSEEvent(name, doc)
 	}
 	return events
+}
+
+// splitFrame reads the event name and data of a frame in the single-line
+// form shared.SSEFrame renders, "event: NAME\ndata: {...}\n\n", without a
+// framer. It reports ok=false for any other frame, which the caller frames
+// instead; where it succeeds, the framer would read the same name and data.
+// data aliases frame.
+func splitFrame(frame []byte) (name string, data []byte, ok bool) {
+	rest, ok := bytes.CutPrefix(frame, []byte("event: "))
+	if !ok {
+		return "", nil, false
+	}
+	n := bytes.IndexByte(rest, '\n')
+	if n <= 0 {
+		return "", nil, false
+	}
+	// The framer trims the name; a printable ASCII name has nothing to trim.
+	for _, c := range rest[:n] {
+		if c <= ' ' || c > '~' {
+			return "", nil, false
+		}
+	}
+	data, ok = bytes.CutPrefix(rest[n+1:], []byte("data: "))
+	if !ok {
+		return "", nil, false
+	}
+	data, ok = bytes.CutSuffix(data, []byte("\n\n"))
+	if !ok || len(data) == 0 || data[0] != '{' || bytes.ContainsAny(data, "\r\n") {
+		return "", nil, false
+	}
+	return string(rest[:n]), data, true
 }
