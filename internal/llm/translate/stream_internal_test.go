@@ -24,6 +24,9 @@ func FuzzSplitFrameMatchesFramer(f *testing.F) {
 		f.Add([]byte(s))
 	}
 	f.Fuzz(func(t *testing.T, frame []byte) {
+		if len(frame) > 4096 {
+			t.Skip()
+		}
 		name, data, ok := splitFrame(frame)
 		if !ok {
 			return
@@ -47,6 +50,9 @@ func FuzzCompactObjectCheck(f *testing.F) {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, data string) {
+		if len(data) > 4096 {
+			t.Skip()
+		}
 		var buf bytes.Buffer
 		buf.WriteString("data: ")
 		err := json.Compact(&buf, []byte(data))

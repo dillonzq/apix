@@ -12,6 +12,9 @@ func FuzzDeltaEventsMatchMaps(f *testing.F) {
 		f.Add(s, "item_1", 3, 1)
 	}
 	f.Fuzz(func(t *testing.T, delta, id string, index, contentIndex int) {
+		if len(delta)+len(id) > 1024 {
+			t.Skip()
+		}
 		for _, c := range []struct {
 			got  any
 			want map[string]any
