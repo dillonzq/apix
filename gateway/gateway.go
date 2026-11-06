@@ -147,6 +147,8 @@ func (r *Response) Usage() (u apix.Usage, ok bool) {
 	return usageOf(r.exchange)
 }
 
+// usageOf returns the exchange's reported usage, or zero usage and false
+// when the exchange does not implement apix.UsageReporter.
 func usageOf(ex apix.Exchange) (apix.Usage, bool) {
 	if ur, ok := ex.(apix.UsageReporter); ok {
 		return ur.Usage()
@@ -709,6 +711,9 @@ func (b *streamBody) fail(err error) {
 	b.err = apix.AsError(err)
 }
 
+// Read returns converted bytes, draining buffered events before returning a
+// stream error or io.EOF. Any usage callback runs before Read returns, outside
+// the body lock, and may close the body.
 func (b *streamBody) Read(p []byte) (int, error) {
 	b.mu.Lock()
 	n, report, err := b.read(p)
@@ -749,6 +754,9 @@ func (b *streamBody) read(p []byte) (int, func(), error) {
 	return n, nil, nil
 }
 
+// Close closes the upstream body, cancels the request, and reports usage
+// collected so far if it has not already been reported. It may interrupt a
+// concurrent Read and returns the upstream body's Close error.
 func (b *streamBody) Close() error {
 	// Closing the upstream first unblocks a concurrent Read holding mu.
 	err := b.upstream.Close()

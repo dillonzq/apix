@@ -68,7 +68,8 @@ func New(d Dialect) *Tracker {
 	return &Tracker{dialect: d}
 }
 
-// Body records the usage of an ordinary response.
+// Body merges usage from an ordinary response, replacing previously recorded
+// members with the same names. Missing or malformed usage is ignored.
 func (t *Tracker) Body(body []byte) {
 	if t == nil {
 		return
@@ -76,7 +77,10 @@ func (t *Tracker) Body(body []byte) {
 	t.record(body)
 }
 
-// Feed records usage from a chunk of an upstream SSE stream.
+// Feed records usage from an arbitrary chunk of an upstream SSE stream.
+// Usage members from complete events replace earlier members with the same
+// names; counts are not summed across events. Missing or malformed usage is
+// ignored. Call End at EOF to process an event without a final separator.
 func (t *Tracker) Feed(chunk []byte) {
 	if t == nil {
 		return
@@ -211,7 +215,9 @@ func (t *Tracker) merge(doc []byte) {
 	t.single = raw
 }
 
-// Usage returns the normalized usage recorded so far.
+// Usage returns the normalized usage recorded so far and a copy of its raw
+// usage object. It returns zero usage and false for a nil tracker or when no
+// usage object has been recorded; an empty object still counts as reported.
 func (t *Tracker) Usage() (apix.Usage, bool) {
 	if t == nil || t.objects == 0 {
 		return apix.Usage{}, false
@@ -275,6 +281,8 @@ func find(doc []byte, paths [][]string) json.RawMessage {
 	return nil
 }
 
+// findSlow returns a copy of the first JSON object found at paths, or nil
+// when none is found. Invalid JSON and non-object values are ignored.
 func findSlow(doc []byte, paths [][]string) json.RawMessage {
 	for _, path := range paths {
 		cur := json.RawMessage(doc)
@@ -328,6 +336,9 @@ func orderedKeys(raw []byte, obj map[string]json.RawMessage) []string {
 	return keys
 }
 
+// normalize maps dialect-specific counts to apix.Usage, including separate
+// cache, reasoning, and tool prompt counts where applicable. Invalid counts
+// read as zero; a zero total is replaced by the sum of input and output.
 func normalize(d Dialect, m map[string]json.RawMessage) apix.Usage {
 	var u apix.Usage
 	total := num(m, "total_tokens")
@@ -386,7 +397,8 @@ func num(m map[string]json.RawMessage, path ...string) int64 {
 	return n
 }
 
-// first reads the first of keys that is present.
+// first reads the first of keys that is present, returning zero if its value
+// is not a non-negative integer or if none of the keys is present.
 func first(m map[string]json.RawMessage, keys ...string) int64 {
 	for _, k := range keys {
 		if _, ok := m[k]; ok {

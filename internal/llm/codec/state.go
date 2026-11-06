@@ -87,6 +87,9 @@ type stream struct {
 	usage    *usage.Tracker
 }
 
+// Feed tracks upstream usage and converts chunk, recording created state
+// from the returned events. Events are returned even when conversion also
+// reports an error; the caller must process them before handling the error.
 func (s *stream) Feed(chunk []byte) ([][]byte, bool, error) {
 	s.usage.Feed(chunk)
 	events, done, err := s.engine.Feed(chunk)
@@ -97,6 +100,9 @@ func (s *stream) Feed(chunk []byte) ([][]byte, bool, error) {
 	return events, done, nil
 }
 
+// Finish flushes pending usage and conversion events at EOF and records any
+// created state. It returns final events alongside any converter error,
+// including a failure to reach a valid terminal state.
 func (s *stream) Finish() ([][]byte, error) {
 	s.usage.End()
 	events, err := s.engine.Finish()

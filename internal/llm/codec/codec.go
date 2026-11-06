@@ -250,6 +250,11 @@ func (e *exchange) ConvertRequest(req apix.Payload, upstreamModel string) (apix.
 	return out, nil
 }
 
+// convertRequest converts the client request using metadata overrides and
+// exchange options. An empty upstreamModel uses the effective request model.
+// URL-based upstreams receive model and stream metadata; streamed requests
+// request usage when configured. Inspection, conversion, and option rendering
+// errors are returned to the caller.
 func (e *exchange) convertRequest(req apix.Payload, upstreamModel string) (apix.Payload, *apix.Error) {
 	info, err := routing(e.clientID, req.Body)
 	if err != nil {
@@ -305,6 +310,10 @@ func (e *exchange) convertRequest(req apix.Payload, upstreamModel string) (apix.
 	return result, nil
 }
 
+// ConvertResponse converts the upstream response to the output protocol. On
+// success it records created state from the output and usage from the upstream
+// body. Upstream status and conversion errors propagate without recording
+// state or usage from the failed response.
 func (e *exchange) ConvertResponse(status int, resp apix.Payload) (apix.Payload, error) {
 	out, err := translate.ConvertResponse(e.codec.proto.format, e.output.format, status, resp.Body, e.state)
 	if err != nil {
@@ -315,6 +324,9 @@ func (e *exchange) ConvertResponse(status int, resp apix.Payload) (apix.Payload,
 	return apix.Payload{Body: out, ContentType: "application/json"}, nil
 }
 
+// NewStreamConverter creates a converter to the output protocol that records
+// created state and upstream usage on this exchange. It propagates errors
+// from constructing the protocol converter.
 func (e *exchange) NewStreamConverter() (apix.StreamConverter, error) {
 	sc, err := translate.NewStreamConverter(e.codec.proto.format, e.output.format, e.state)
 	if err != nil {

@@ -40,6 +40,9 @@ type passthrough struct {
 	err      *apix.Error
 }
 
+// Feed tracks usage and returns validated upstream frames from chunk. It
+// returns frames preceding a validation error together with that error; later
+// calls return the same error. Once done, further input is ignored.
 func (s *passthrough) Feed(chunk []byte) ([][]byte, bool, error) {
 	if s.err != nil {
 		return nil, false, s.err
@@ -56,6 +59,10 @@ func (s *passthrough) Feed(chunk []byte) ([][]byte, bool, error) {
 	return events, s.done, nil
 }
 
+// Finish processes a final event without a separator and its usage. It
+// returns any valid frames preceding an error, including a translation error
+// when the stream lacks a valid terminal event. A completed stream returns
+// no frames or error; an earlier error is returned again.
 func (s *passthrough) Finish() ([][]byte, error) {
 	if s.err != nil {
 		return nil, s.err

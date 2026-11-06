@@ -143,6 +143,9 @@ func (e *interactionsExchange) convertRequest(req apix.Payload, upstreamModel st
 	return apix.Payload{Body: body, ContentType: "application/json"}, nil
 }
 
+// ConvertResponse validates a native Interactions response and records its
+// ID and usage on success. Upstream status and validation errors propagate
+// without recording state or usage from the failed response.
 func (e *interactionsExchange) ConvertResponse(status int, resp apix.Payload) (apix.Payload, error) {
 	body, err := interactions.ConvertResponse(status, resp.Body)
 	if err != nil {
@@ -153,6 +156,8 @@ func (e *interactionsExchange) ConvertResponse(status int, resp apix.Payload) (a
 	return apix.Payload{Body: body, ContentType: "application/json"}, nil
 }
 
+// NewStreamConverter creates a native Interactions stream validator that
+// records created interaction state and upstream usage on this exchange.
 func (e *interactionsExchange) NewStreamConverter() (apix.StreamConverter, error) {
 	return &stream{engine: interactions.NewStreamConverter(), recorder: e.recorder, usage: e.usage}, nil
 }
