@@ -12,11 +12,15 @@ import (
 // now stamps converted OpenAI responses; tests replace it.
 var now = time.Now
 
+// ConvertResponse validates or converts the upstream response and records
+// its usage only on success. It propagates upstream status, validation, and
+// conversion errors without recording usage from the failed response.
 func (e *exchange) ConvertResponse(status int, resp apix.Payload) (apix.Payload, error) {
 	out, err := e.convertResponse(status, resp)
 	if err != nil {
 		return apix.Payload{}, err
 	}
+	e.usage.Body(resp.Body)
 	return out, nil
 }
 

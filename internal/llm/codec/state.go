@@ -6,6 +6,7 @@ import (
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/internal/jsonedit"
 	"github.com/dillonzq/apix/internal/llm/adapter/shared"
+	"github.com/dillonzq/apix/internal/usage"
 )
 
 // recorder captures the ID of state an upstream stores, such as a Responses
@@ -78,14 +79,19 @@ type engineStream interface {
 	Finish() ([][]byte, *apix.Error)
 }
 
-// stream adapts an engine stream to apix.StreamConverter and records created
-// state from its output.
+// stream adapts an engine stream to apix.StreamConverter, records created
+// state from its output, and tracks usage from its upstream input.
 type stream struct {
 	engine   engineStream
 	recorder *recorder
+	usage    *usage.Tracker
 }
 
+// Feed tracks upstream usage and converts chunk, recording created state
+// from the returned events. Events are returned even when conversion also
+// reports an error; the caller must process them before handling the error.
 func (s *stream) Feed(chunk []byte) ([][]byte, bool, error) {
+	s.usage.Feed(chunk)
 	events, done, err := s.engine.Feed(chunk)
 	s.recorder.events(events)
 	if err != nil {
@@ -94,7 +100,11 @@ func (s *stream) Feed(chunk []byte) ([][]byte, bool, error) {
 	return events, done, nil
 }
 
+// Finish flushes pending usage and conversion events at EOF and records any
+// created state. It returns final events alongside any converter error,
+// including a failure to reach a valid terminal state.
 func (s *stream) Finish() ([][]byte, error) {
+	s.usage.End()
 	events, err := s.engine.Finish()
 	s.recorder.events(events)
 	if err != nil {

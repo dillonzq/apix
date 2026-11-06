@@ -10,6 +10,7 @@ import (
 	"github.com/MoeForge/moego/base64"
 
 	"github.com/dillonzq/apix"
+	"github.com/dillonzq/apix/internal/usage"
 )
 
 // clientRequest is a decoded request of one protocol family.
@@ -44,6 +45,7 @@ type exchange struct {
 	candidates int
 	// expected is how many completed images a native OpenAI stream carries.
 	expected int
+	usage    *usage.Tracker
 }
 
 func (e *exchange) ConvertRequest(req apix.Payload, upstreamModel string) (apix.Payload, error) {
@@ -153,6 +155,9 @@ func (e *exchange) enforcePolicy() *apix.Error {
 	}
 	return nil
 }
+
+// Usage implements apix.UsageReporter.
+func (e *exchange) Usage() (apix.Usage, bool) { return e.usage.Usage() }
 
 func (e *exchange) Diagnostics() []apix.Diagnostic {
 	if len(e.diagnostics) == 0 {

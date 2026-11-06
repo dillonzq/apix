@@ -16,6 +16,7 @@ import (
 	"github.com/dillonzq/apix/internal/llm/ids"
 	"github.com/dillonzq/apix/internal/llm/reasoning"
 	"github.com/dillonzq/apix/internal/llm/translate"
+	"github.com/dillonzq/apix/internal/usage"
 	"github.com/dillonzq/apix/internal/vendorerr"
 )
 
@@ -32,15 +33,19 @@ type protocol struct {
 	envelope vendorerr.Envelope
 	// validate checks protocol requirements Inspect enforces beyond JSON shape.
 	validate func(root map[string]json.RawMessage) *apix.Error
+	// usage names the fields upstream responses report usage in.
+	usage usage.Dialect
 }
 
 var protocols = map[apix.Protocol]protocol{
-	ids.ChatCompletions: {format: ids.FormatChatCompletions, path: "/v1/chat/completions", auth: apix.AuthBearer, envelope: vendorerr.OpenAI},
-	ids.Responses:       {format: ids.FormatResponses, path: "/v1/responses", auth: apix.AuthBearer, envelope: vendorerr.OpenAI},
+	ids.ChatCompletions: {format: ids.FormatChatCompletions, path: "/v1/chat/completions", auth: apix.AuthBearer, envelope: vendorerr.OpenAI,
+		usage: usage.ChatCompletions},
+	ids.Responses: {format: ids.FormatResponses, path: "/v1/responses", auth: apix.AuthBearer, envelope: vendorerr.OpenAI,
+		usage: usage.Responses},
 	ids.Messages: {format: ids.FormatMessages, path: "/v1/messages", auth: apix.AuthScheme{Header: "x-api-key"},
-		headers: map[string]string{"anthropic-version": "2023-06-01"}, envelope: vendorerr.Anthropic},
+		headers: map[string]string{"anthropic-version": "2023-06-01"}, envelope: vendorerr.Anthropic, usage: usage.Messages},
 	ids.GenerateContent: {format: ids.FormatGemini, auth: apix.AuthScheme{Header: "x-goog-api-key"}, urlModel: true,
-		envelope: vendorerr.Google, validate: validateGemini},
+		envelope: vendorerr.Google, validate: validateGemini, usage: usage.Gemini},
 }
 
 // Options are the engine options an upstream protocol's package may set.
@@ -63,6 +68,9 @@ type Options struct {
 	// GeminiRequireThoughtSignatures rejects unsigned historical function
 	// calls (upstream GenerateContent only).
 	GeminiRequireThoughtSignatures bool
+	// ChatStreamUsage asks streamed requests for a final usage chunk with
+	// stream_options.include_usage (upstream Chat Completions only).
+	ChatStreamUsage bool
 }
 
 // ExtFunc converts apix.ExchangeOptions.Ext into Options. It reports false for
@@ -201,7 +209,8 @@ func (c *Codec) NewExchange(client apix.Protocol, opts apix.ExchangeOptions) (ap
 		value := *o.GeminiIncludeThoughts
 		state.Options.GeminiIncludeThoughts = &value
 	}
-	ex := &exchange{codec: c, clientID: client, client: from, output: to, state: state, normalize: o.NormalizeResponsesTools}
+	ex := &exchange{codec: c, clientID: client, client: from, output: to, state: state, normalize: o.NormalizeResponsesTools,
+		streamUsage: o.ChatStreamUsage, usage: usage.New(c.proto.usage)}
 	if opts.Reasoning != nil {
 		r := *opts.Reasoning
 		if r.Budget != nil {
@@ -227,6 +236,10 @@ type exchange struct {
 	normalize bool
 	reasoning *apix.Reasoning
 	recorder  *recorder
+	// streamUsage requests a usage chunk from a streaming Chat Completions
+	// upstream.
+	streamUsage bool
+	usage       *usage.Tracker
 }
 
 func (e *exchange) ConvertRequest(req apix.Payload, upstreamModel string) (apix.Payload, error) {
@@ -237,6 +250,11 @@ func (e *exchange) ConvertRequest(req apix.Payload, upstreamModel string) (apix.
 	return out, nil
 }
 
+// convertRequest converts the client request using metadata overrides and
+// exchange options. An empty upstreamModel uses the effective request model.
+// URL-based upstreams receive model and stream metadata; streamed requests
+// request usage when configured. Inspection, conversion, and option rendering
+// errors are returned to the caller.
 func (e *exchange) convertRequest(req apix.Payload, upstreamModel string) (apix.Payload, *apix.Error) {
 	info, err := routing(e.clientID, req.Body)
 	if err != nil {
@@ -279,6 +297,11 @@ func (e *exchange) convertRequest(req apix.Payload, upstreamModel string) (apix.
 			return apix.Payload{}, err
 		}
 	}
+	if e.streamUsage && info.Stream {
+		if out, err = includeUsage(out); err != nil {
+			return apix.Payload{}, err
+		}
+	}
 	result := apix.Payload{Body: out, ContentType: "application/json"}
 	if upstream.urlModel {
 		stream := info.Stream
@@ -287,21 +310,29 @@ func (e *exchange) convertRequest(req apix.Payload, upstreamModel string) (apix.
 	return result, nil
 }
 
+// ConvertResponse converts the upstream response to the output protocol. On
+// success it records created state from the output and usage from the upstream
+// body. Upstream status and conversion errors propagate without recording
+// state or usage from the failed response.
 func (e *exchange) ConvertResponse(status int, resp apix.Payload) (apix.Payload, error) {
 	out, err := translate.ConvertResponse(e.codec.proto.format, e.output.format, status, resp.Body, e.state)
 	if err != nil {
 		return apix.Payload{}, err
 	}
 	e.recorder.body(out)
+	e.usage.Body(resp.Body)
 	return apix.Payload{Body: out, ContentType: "application/json"}, nil
 }
 
+// NewStreamConverter creates a converter to the output protocol that records
+// created state and upstream usage on this exchange. It propagates errors
+// from constructing the protocol converter.
 func (e *exchange) NewStreamConverter() (apix.StreamConverter, error) {
 	sc, err := translate.NewStreamConverter(e.codec.proto.format, e.output.format, e.state)
 	if err != nil {
 		return nil, err
 	}
-	return &stream{engine: sc, recorder: e.recorder}, nil
+	return &stream{engine: sc, recorder: e.recorder, usage: e.usage}, nil
 }
 
 func (e *exchange) Diagnostics() []apix.Diagnostic {
@@ -318,6 +349,32 @@ func (e *exchange) Diagnostics() []apix.Diagnostic {
 
 // CreatedState implements apix.StateReporter.
 func (e *exchange) CreatedState() []string { return e.recorder.keys() }
+
+// Usage implements apix.UsageReporter.
+func (e *exchange) Usage() (apix.Usage, bool) { return e.usage.Usage() }
+
+// includeUsage sets stream_options.include_usage on a streamed Chat
+// Completions request, keeping the client's other stream options.
+func includeUsage(body []byte) ([]byte, *apix.Error) {
+	if out, ok := jsonedit.Apply(body, jsonedit.SetString("true", "stream_options", "include_usage")); ok {
+		return out, nil
+	}
+	var root map[string]json.RawMessage
+	if json.Unmarshal(body, &root) != nil || root == nil {
+		return nil, apix.Translation("request must be a JSON object")
+	}
+	var opts map[string]json.RawMessage
+	if raw, ok := root["stream_options"]; ok && json.Unmarshal(raw, &opts) != nil {
+		return nil, apix.Translation("stream_options must be an object")
+	}
+	if opts == nil {
+		opts = map[string]json.RawMessage{}
+	}
+	opts["include_usage"] = json.RawMessage("true")
+	root["stream_options"], _ = json.Marshal(opts)
+	out, _ := json.Marshal(root)
+	return out, nil
+}
 
 // applyStreamMetadata sets the body's stream field to a URL-borne value.
 func applyStreamMetadata(body []byte, stream *bool) ([]byte, *apix.Error) {

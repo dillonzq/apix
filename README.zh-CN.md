@@ -98,11 +98,24 @@ tail, err := stream.Finish()                   // 上游 EOF 时调用
 | `Reasoning: &apix.Reasoning{Effort: "high"}` | 任意 LLM | 转换后替换请求的推理控制，按上游自身的推理选项渲染；`reasoning.ParseSuffix(model).Reasoning()` 可从 `model(high)` 后缀生成 |
 | `Ext: anthropic.MessagesOptions{AllowUnsignedThinking: true}` | Messages | 把跨协议推理历史回传为无签名 thinking 块 |
 | `Ext: anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}` | Messages | 为不支持 adaptive 的旧 Claude 模型发送固定 `budget_tokens`（默认 adaptive） |
+| `Ext: openai.ChatCompletionsOptions{StreamUsage: true}` | Chat Completions | 为流式请求设置 `stream_options.include_usage`，让流以用量块结束；原生客户端也会收到该块 |
 | `Ext: openai.ResponsesOptions{NormalizeTools: true}` | Responses | 为只接受函数工具的上游展开 namespace、包装 custom 工具并适配本地 shell |
 | `Ext: gemini.GenerateContentOptions{ThinkingMode: gemini.ThinkingBudget}` | GenerateContent | 按所用模型把推理发送为 `thinkingBudget`（`ThinkingLevel` 则为 `thinkingLevel`） |
 | `Ext: gemini.GenerateContentImageOptions{ResponseModalities: []gemini.Modality{gemini.ModalityText, gemini.ModalityImage}}` | GenerateContentImage | 设置该上游收到的所有图像请求的 `responseModalities`，包括转换后（默认 `["IMAGE"]`）和原生请求，用于需要同时输出文本的模型 |
 
 `ex.Diagnostics()` 列出转换省略或近似的字段，包含 `Code`、`Path`、`Message`、`Semantic`、`From`、`To`。响应和流式响应只报告损耗，不会因策略被拒绝。
+
+### Token 用量
+
+Exchange 实现了 `apix.UsageReporter`。响应转换完成后，或流结束后，`Usage()` 返回上游自己报告的用量。它直接读取上游字节，并按统一口径归一化所有协议：
+
+```go
+if u, ok := ex.(apix.UsageReporter).Usage(); ok {
+    log.Printf("in=%d (cached %d) out=%d (reasoning %d)", u.InputTokens, u.CacheReadTokens, u.OutputTokens, u.ReasoningTokens)
+}
+```
+
+`InputTokens` 包含缓存读取和写入，`OutputTokens` 包含推理，因此 Anthropic 单独列出的缓存计数、Gemini 的 thought 和工具调用提示计数都会被计入。`TotalTokens` 取上游给出的总数，没有时取两者之和；`Raw` 保留上游原始 usage 对象，供需要厂商细节的场景使用。流式响应会合并多个事件中的用量，例如 Messages 的 `message_start` 和 `message_delta`。Chat Completions 流只有在请求时才报告用量，见上文 `StreamUsage`。Imagen 不报告用量。
 
 ## 路由
 
@@ -147,6 +160,7 @@ http.Handle("/v1/chat/completions", g.Handler(openai.ChatCompletions))
 | `MaxResponseBytes` | 限制普通响应体大小（默认 64 MiB），超出时切换 |
 | `ForwardHeaders` | 透传给客户端的上游响应头，如 `"X-Request-Id"`、`"X-Ratelimit-*"`；`Response.UpstreamHeader` 保留全部响应头 |
 | `ReasoningSuffix` | 按去掉后缀的模型名路由 `model(high)`，并把后缀作为 `Request.Reasoning` |
+| `OnUsage` | 接收已提交尝试的 [Token 用量](#token-用量)：普通响应在 `Do` 返回时触发，流式响应在结束、失败或被关闭时触发一次（提前结束时为已观察到的用量）；`Handler` 同样适用。`Response.Usage()` 返回同一结果 |
 
 上游的 `Retry-After` 会写入错误的 `RetryAfter`，让该端点暂停接收流量，并由 `Handler` 转告客户端。已存储的 response 和 interaction 会记住所属端点，后续轮次回到同一端点。
 

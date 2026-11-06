@@ -23,7 +23,7 @@ flowchart TD
     IMAGE --> VE
 ```
 
-- 根包 `apix` 与协议无关，定义 `Kind`、`Protocol`、`Payload`、`ProtocolSpec`、`Codec`、`Exchange`、`StreamConverter`、`Registry`、可选扩展 `OptionsValidator` 与 `StateReporter`、`Error` 类型和诊断类型。根包不 import 本模块的任何其他包；内部包通过 `internal/errclass` 的别名使用它的错误类型。
+- 根包 `apix` 与协议无关，定义 `Kind`、`Protocol`、`Payload`、`ProtocolSpec`、`Codec`、`Exchange`、`StreamConverter`、`Registry`、可选扩展 `OptionsValidator`、`StateReporter` 与 `UsageReporter`、`Usage`、`Error` 类型和诊断类型。根包不 import 本模块的任何其他包；内部包通过 `internal/errclass` 的别名使用它的错误类型。
 - 公开函数返回 `error`，其值为 `*apix.Error`，用 `apix.AsError` 或 `errors.As` 读取。内部包仍返回 `*apix.Error`，每个公开边界都显式地把 nil 指针转换为 nil 接口。
 - 供应商包按厂商组织，重新导出协议 ID，放构造函数和厂商专属选项，实际转换委托给 `internal/llm`（LLM）或 `internal/image`（图像生成与编辑）。
 - `route` 只做决策，不做 I/O；`gateway` 是唯一执行网络请求的包，可以不用。
@@ -61,6 +61,7 @@ GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/gemini` �
 | `internal/llm/adapter/shared` | 协议类型、内容与媒体、事件构造、工具身份、推理、shell、缓存提示、诊断规则 |
 | `internal/llm/reasoning` | 档位/预算表、Gemini 档位上限、按协议渲染推理覆盖、剥离被取代的推理控制 |
 | `internal/image` | `KindImage` 的 Codec：OpenAI generations 与 edits、图像模型的 GenerateContent、Imagen；直接的请求与响应转换、原生流校验、模拟流 |
+| `internal/usage` | 按方言从上游响应体和 SSE 字节读取 usage 对象，并归一化为 `apix.Usage` |
 | `internal/jsonedit` | 基于 moego/ojson 保序读取和编辑 JSON 字段；无法走快路径时由调用方回退到 `encoding/json` |
 | `internal/vendorerr` | 各厂商错误信封与上游错误体分类，所有 Kind 共用 |
 | `internal/errclass` | 供内部包使用的 `apix.Error` 及构造函数短别名 |
@@ -78,6 +79,8 @@ GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/gemini` �
 `ExchangeOptions.Reasoning` 在 `ConvertRequest` 中分三步执行：先在转换会据此推导目标推理控制的路径上剥离客户端自己的控制，再转换请求，最后按 Exchange 的 Messages、Gemini 推理模式在转换结果上渲染覆盖值。目标无法精确表达的值（如 Gemini 档位中的 `max`）会被近似，并作为请求损耗报告。
 
 上游会存储状态的 Exchange 实现 `apix.StateReporter`。原生 Responses Exchange 从转换后的响应体或 `response.created` 中捕获 response ID，Interactions Exchange 捕获 interaction ID。跨协议输出的 Responses 不报告任何状态，因为它的 ID 并不对应上游存储的对象。
+
+所有 LLM 和图像 Exchange 都通过按上游协议选择的 `internal/usage` 跟踪器实现 `apix.UsageReporter`。它读取上游字节而非转换后的输出，因此任何路径上的计数都是上游自己的：普通响应在转换成功后读取响应体；流式响应在转换器收到分块时读取。跟踪器自行按行拆分 SSE，不再运行第二个 `sse.Framer`，且只解码数据中可能含 usage 键的事件。多个 usage 对象的成员会合并，后出现的值覆盖先前的值。错误响应不记录用量。
 
 ## JSON 读取与编辑
 
@@ -112,7 +115,7 @@ SSE 事件在添加 `sequence_number` 或恢复工具名后，若 JSON 跨行，
 - `Retryable` 的上游错误（包括 404），或单次尝试超过 `CommitTimeout`；
 - 上游返回了 2xx，但内容无法解码或转换，或超过 `MaxResponseBytes`。这类失败会被重新归类为可重试的 `ClassUpstream`。
 
-提交点之后的失败不重试，通过 `Body.Read` 返回，并回报给健康统计。请求被取消时立即停止，也不计入端点失败。上游路径由转换后 Payload 的元信息生成；新建的状态在提交点和流结束时交给 `Router.Remember`。
+提交点之后的失败不重试，通过 `Body.Read` 返回，并回报给健康统计。请求被取消时立即停止，也不计入端点失败。上游路径由转换后 Payload 的元信息生成；新建的状态在提交点和流结束时交给 `Router.Remember`。`Config.OnUsage` 对普通响应在提交点调用；对流式响应在 EOF、失败或 `Body.Close` 中最先发生的时刻调用一次。`Close` 可以中止并发的 `Read`，报告读取的转换器状态由互斥锁保证顺序。
 
 ## 验证约定
 

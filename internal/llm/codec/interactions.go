@@ -8,6 +8,7 @@ import (
 	"github.com/dillonzq/apix/internal/llm/adapter/interactions"
 	"github.com/dillonzq/apix/internal/llm/adapter/shared"
 	"github.com/dillonzq/apix/internal/llm/ids"
+	"github.com/dillonzq/apix/internal/usage"
 	"github.com/dillonzq/apix/internal/vendorerr"
 )
 
@@ -103,11 +104,12 @@ func (c *InteractionsCodec) NewExchange(client apix.Protocol, opts apix.Exchange
 	if err := c.check(opts); err != nil {
 		return nil, err
 	}
-	return &interactionsExchange{recorder: &recorder{kind: "interaction"}}, nil
+	return &interactionsExchange{recorder: &recorder{kind: "interaction"}, usage: usage.New(usage.Interactions)}, nil
 }
 
 type interactionsExchange struct {
 	recorder *recorder
+	usage    *usage.Tracker
 }
 
 func (e *interactionsExchange) ConvertRequest(req apix.Payload, upstreamModel string) (apix.Payload, error) {
@@ -141,20 +143,29 @@ func (e *interactionsExchange) convertRequest(req apix.Payload, upstreamModel st
 	return apix.Payload{Body: body, ContentType: "application/json"}, nil
 }
 
+// ConvertResponse validates a native Interactions response and records its
+// ID and usage on success. Upstream status and validation errors propagate
+// without recording state or usage from the failed response.
 func (e *interactionsExchange) ConvertResponse(status int, resp apix.Payload) (apix.Payload, error) {
 	body, err := interactions.ConvertResponse(status, resp.Body)
 	if err != nil {
 		return apix.Payload{}, err
 	}
 	e.recorder.body(body)
+	e.usage.Body(body)
 	return apix.Payload{Body: body, ContentType: "application/json"}, nil
 }
 
+// NewStreamConverter creates a native Interactions stream validator that
+// records created interaction state and upstream usage on this exchange.
 func (e *interactionsExchange) NewStreamConverter() (apix.StreamConverter, error) {
-	return &stream{engine: interactions.NewStreamConverter(), recorder: e.recorder}, nil
+	return &stream{engine: interactions.NewStreamConverter(), recorder: e.recorder, usage: e.usage}, nil
 }
 
 func (*interactionsExchange) Diagnostics() []apix.Diagnostic { return nil }
 
 // CreatedState implements apix.StateReporter.
 func (e *interactionsExchange) CreatedState() []string { return e.recorder.keys() }
+
+// Usage implements apix.UsageReporter.
+func (e *interactionsExchange) Usage() (apix.Usage, bool) { return e.usage.Usage() }

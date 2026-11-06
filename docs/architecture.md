@@ -23,7 +23,7 @@ flowchart TD
     IMAGE --> VE
 ```
 
-- The root package `apix` is protocol neutral. It defines `Kind`, `Protocol`, `Payload`, `ProtocolSpec`, `Codec`, `Exchange`, `StreamConverter`, `Registry`, the optional `OptionsValidator` and `StateReporter` extensions, the `Error` type, and diagnostics. It imports no other package of this module; internal packages refer to its error type through `internal/errclass` aliases.
+- The root package `apix` is protocol neutral. It defines `Kind`, `Protocol`, `Payload`, `ProtocolSpec`, `Codec`, `Exchange`, `StreamConverter`, `Registry`, the optional `OptionsValidator`, `StateReporter` and `UsageReporter` extensions, `Usage`, the `Error` type, and diagnostics. It imports no other package of this module; internal packages refer to its error type through `internal/errclass` aliases.
 - Public functions return `error`. Values are `*apix.Error`; read them with `apix.AsError` or `errors.As`. Internal packages keep returning `*apix.Error`, and every public boundary converts a nil pointer to a nil interface explicitly.
 - Vendor packages are organized by vendor. They re-export protocol IDs and hold constructors and vendor options, and delegate conversion to `internal/llm` (LLM) or `internal/image` (image generation and editing).
 - `route` decides and never performs I/O. `gateway` is the only package that makes network calls, and it is optional.
@@ -61,6 +61,7 @@ Public protocol IDs are namespaced: `openai.chat-completions`, `anthropic.messag
 | `internal/llm/adapter/shared` | Protocol types, content and media, events, tool identities, reasoning, shell, cache hints, diagnostic rules |
 | `internal/llm/reasoning` | Level/budget tables, Gemini level limits, override rendering per protocol, superseded-control stripping |
 | `internal/image` | The `KindImage` codecs: OpenAI generations and edits, GenerateContent with image models, Imagen; direct request and response converters, native stream validation, emulated streams |
+| `internal/usage` | Usage objects read from upstream bodies and SSE bytes, per dialect, normalized to `apix.Usage` |
 | `internal/jsonedit` | Order-preserving JSON field reads and edits over moego/ojson; callers fall back to `encoding/json` when the fast path declines |
 | `internal/vendorerr` | Vendor error envelopes and upstream error-body classification, shared by every Kind |
 | `internal/errclass` | Short aliases of `apix.Error` and its constructors for internal packages |
@@ -78,6 +79,8 @@ Native Responses normalization (`openai.ResponsesOptions{NormalizeTools: true}`)
 `ExchangeOptions.Reasoning` runs in three steps inside `ConvertRequest`: the client's own control is stripped where conversion derives the target control from it, the request converts, and the override is rendered on the converted body with the exchange's Messages and Gemini thinking modes. A value the target cannot express exactly, such as `max` for a Gemini level, is approximated and reported as a request loss.
 
 Exchanges whose upstream stores state implement `apix.StateReporter`. A native Responses exchange captures the response ID from the converted body or from `response.created`; an Interactions exchange captures the interaction ID. Cross-protocol Responses output reports nothing, because its ID refers to nothing an upstream stored.
+
+Every LLM and image exchange implements `apix.UsageReporter` through an `internal/usage` tracker chosen by the upstream protocol. It reads the upstream's bytes, not the converted output, so counts are the upstream's own on every path: ordinary bodies after a successful conversion, and stream chunks as the converter receives them. For streams the tracker splits SSE lines itself rather than running a second `sse.Framer`, and decodes only events whose data may hold a usage key. Members of several usage objects merge, later values replacing earlier ones. Error responses record nothing.
 
 ## JSON reads and edits
 
@@ -112,7 +115,7 @@ Before that point, these failures fail over to the next candidate:
 - the upstream returned an error marked `Retryable`, including 404, or the attempt exceeded `CommitTimeout`;
 - the upstream returned a 2xx response that cannot be decoded or converted, or exceeds `MaxResponseBytes`; this is reclassified as a retryable `ClassUpstream` error.
 
-After the commit point nothing is retried. Failures surface from `Body.Read` and are reported to health tracking. Cancellation stops immediately and does not count against the endpoint. The upstream path comes from the converted payload's metadata, and created state is passed to `Router.Remember` at the commit point and again at the end of a stream.
+After the commit point nothing is retried. Failures surface from `Body.Read` and are reported to health tracking. Cancellation stops immediately and does not count against the endpoint. The upstream path comes from the converted payload's metadata, and created state is passed to `Router.Remember` at the commit point and again at the end of a stream. `Config.OnUsage` runs at the commit point for ordinary responses and once at the end of a stream, at EOF, at a failure, or at `Body.Close`, whichever comes first; `Close` may abort a concurrent `Read`, and a mutex orders the converter state the report reads.
 
 ## Validation
 

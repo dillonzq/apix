@@ -30,8 +30,30 @@ type ResponsesOptions struct {
 	NormalizeTools bool
 }
 
-// ChatCompletionsCodec returns the Chat Completions codec.
-func ChatCompletionsCodec() apix.Codec { return codec.New(ChatCompletions, nil) }
+// ChatCompletionsOptions configures exchanges whose upstream speaks Chat
+// Completions. Pass it, or a pointer to it, as apix.ExchangeOptions.Ext.
+type ChatCompletionsOptions struct {
+	// StreamUsage sets stream_options.include_usage on streamed requests, so
+	// the upstream ends the stream with a usage chunk that
+	// apix.UsageReporter reads. Without it, Chat Completions streams report
+	// usage only when the client asked for it. Clients that did not ask still
+	// receive the chunk on native paths.
+	StreamUsage bool
+}
+
+// ChatCompletionsCodec returns the Chat Completions codec. It accepts
+// ChatCompletionsOptions.
+func ChatCompletionsCodec() apix.Codec {
+	return codec.New(ChatCompletions, func(ext any) (codec.Options, bool) {
+		switch o := ext.(type) {
+		case ChatCompletionsOptions:
+			return codec.Options{ChatStreamUsage: o.StreamUsage}, true
+		case *ChatCompletionsOptions:
+			return codec.Options{ChatStreamUsage: o != nil && o.StreamUsage}, true
+		}
+		return codec.Options{}, false
+	})
+}
 
 // ResponsesCodec returns the Responses codec. It accepts ResponsesOptions.
 func ResponsesCodec() apix.Codec {
