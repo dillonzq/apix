@@ -103,6 +103,9 @@ func (c Citation) Wire(to string) map[string]any {
 }
 
 func DecodeCitations(raw json.RawMessage, from, to, path, text string, offset int, ctx *ConversionContext) []Citation {
+	if len(raw) == 0 {
+		return nil // absent: nothing to read and nothing lost
+	}
 	var list []json.RawMessage
 	if json.Unmarshal(raw, &list) != nil {
 		if HasContent(raw) {

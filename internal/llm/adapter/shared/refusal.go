@@ -20,7 +20,7 @@ func (a *OutputAssembler) AddRefusal(fragment string) {
 }
 
 func (e ResponsesEventEmitter) RefusalDelta(id string, index, contentIndex int, text string) []byte {
-	return SSEEvent("response.refusal.delta", map[string]any{"type": "response.refusal.delta", "item_id": id, "output_index": index, "content_index": contentIndex, "delta": text})
+	return SSEEvent("response.refusal.delta", contentDeltaEvent{ContentIndex: contentIndex, Delta: text, ItemID: id, OutputIndex: index, Type: "response.refusal.delta"})
 }
 
 // MessageDone completes every rendered text/refusal part with the same
@@ -57,5 +57,5 @@ func (e ResponsesEventEmitter) MessageDone(item RespItem, index int) [][]byte {
 }
 
 func (e ResponsesEventEmitter) TextDeltaAt(id string, index, contentIndex int, text string) []byte {
-	return SSEEvent("response.output_text.delta", map[string]any{"type": "response.output_text.delta", "item_id": id, "output_index": index, "content_index": contentIndex, "delta": text})
+	return SSEEvent("response.output_text.delta", contentDeltaEvent{ContentIndex: contentIndex, Delta: text, ItemID: id, OutputIndex: index, Type: "response.output_text.delta"})
 }

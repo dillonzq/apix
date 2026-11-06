@@ -65,6 +65,9 @@ workflow-lint:
 fuzz:
 	$(GO) test ./internal/llm/translate -run '^$$' -fuzz '^FuzzStreamChunkBoundaries$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./internal/llm/translate -run '^$$' -fuzz '^FuzzSSEFailureIsTerminal$$' -fuzztime=$(FUZZTIME)
+	$(GO) test ./internal/llm/translate -run '^$$' -fuzz '^FuzzSplitFrameMatchesFramer$$' -fuzztime=$(FUZZTIME)
+	$(GO) test ./internal/llm/translate -run '^$$' -fuzz '^FuzzCompactObjectCheck$$' -fuzztime=$(FUZZTIME)
+	$(GO) test ./internal/llm/adapter/shared -run '^$$' -fuzz '^FuzzDeltaEventsMatchMaps$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./protocol/gemini -run '^$$' -fuzz '^FuzzGeminiStreamChunkBoundaries$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./internal/image -run '^$$' -fuzz '^FuzzImageStreamChunkBoundaries$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./internal/image -run '^$$' -fuzz '^FuzzImageRequest$$' -fuzztime=$(FUZZTIME)

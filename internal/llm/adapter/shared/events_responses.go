@@ -74,17 +74,13 @@ func (e ResponsesEventEmitter) TextDelta(itemID string, outputIndex int, delta s
 // ArgsDelta streams one partial function_call_arguments delta referencing
 // the announced function_call item by item_id and output_index.
 func (e ResponsesEventEmitter) ArgsDelta(itemID string, outputIndex int, delta string) []byte {
-	return SSEEvent("response.function_call_arguments.delta", map[string]any{
-		"type": "response.function_call_arguments.delta", "item_id": itemID, "output_index": outputIndex, "delta": delta,
-	})
+	return SSEEvent("response.function_call_arguments.delta", itemDeltaEvent{Delta: delta, ItemID: itemID, OutputIndex: outputIndex, Type: "response.function_call_arguments.delta"})
 }
 
 // InputDelta streams one partial custom_tool_call_input delta referencing
 // the announced custom_tool_call item by item_id and output_index.
 func (e ResponsesEventEmitter) InputDelta(itemID string, outputIndex int, delta string) []byte {
-	return SSEEvent("response.custom_tool_call_input.delta", map[string]any{
-		"type": "response.custom_tool_call_input.delta", "item_id": itemID, "output_index": outputIndex, "delta": delta,
-	})
+	return SSEEvent("response.custom_tool_call_input.delta", itemDeltaEvent{Delta: delta, ItemID: itemID, OutputIndex: outputIndex, Type: "response.custom_tool_call_input.delta"})
 }
 
 // InputDone renders the custom_tool_call_input completion for the
