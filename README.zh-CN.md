@@ -11,7 +11,7 @@
 [安装](#安装) · [快速开始](#快速开始) · [路由](#路由) · [网关](#网关) · [文档](#文档)
 
 [![许可证：MIT](https://img.shields.io/badge/license-MIT-64748b?style=flat-square)](LICENSE)
-[![版本：v0.2.0](https://img.shields.io/badge/release-v0.2.0-6366f1?style=flat-square)](https://github.com/dillonzq/apix/releases/tag/v0.2.0)
+[![版本：v0.3.0](https://img.shields.io/badge/release-v0.3.0-6366f1?style=flat-square)](https://github.com/dillonzq/apix/releases/tag/v0.3.0)
 [![Go：1.26.10+](https://img.shields.io/badge/Go-1.26.10%2B-0891b2?style=flat-square&logo=go&logoColor=white)](go.mod)
 [![依赖：标准库 + moego](https://img.shields.io/badge/dependencies-stdlib_%2B_moego-0d9488?style=flat-square)](go.mod)
 
@@ -53,7 +53,7 @@ Chat Completions、Responses、Messages 与 Gemini GenerateContent 在全部十�
 ## 安装
 
 ```sh
-go get github.com/dillonzq/apix@v0.2.0
+go get github.com/dillonzq/apix@v0.3.0
 ```
 
 ## 快速开始
@@ -187,7 +187,7 @@ decoder.Finish() // 处理完所有转换输出后调用
 
 ## 文档
 
-- [v0.2.0 发布说明](docs/releases/v0.2.0.zh-CN.md)：依赖及 JSON 字节输出变化
+- [v0.3.0 发布说明](docs/releases/v0.3.0.zh-CN.md)：Token 用量报告与更快的 SSE 流
 
 - [架构](docs/architecture.zh-CN.md)：分层、分派与状态约定
 - [路由](docs/routing.zh-CN.md)：端点选择、健康统计与网关的切换规则
