@@ -20,9 +20,9 @@ const (
 	KindLLM Kind = "llm"
 	// KindImage is image generation and editing.
 	KindImage Kind = "image"
-	// KindCountTokens is counting the input tokens of an LLM request without
+	// KindTokens is counting the input tokens of an LLM request without
 	// generating, such as Anthropic's count_tokens.
-	KindCountTokens Kind = "count-tokens"
+	KindTokens Kind = "tokens"
 	// KindAudio is reserved for speech protocols; no built-in codec
 	// implements it yet.
 	KindAudio Kind = "audio"

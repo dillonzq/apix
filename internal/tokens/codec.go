@@ -1,4 +1,4 @@
-// Package counttokens implements the apix.KindCountTokens protocols: Anthropic
+// Package tokens implements the apix.KindTokens protocols: Anthropic
 // Messages count_tokens, OpenAI Responses input_tokens and Gemini
 // countTokens. The vendor packages protocol/anthropic, protocol/openai and
 // protocol/gemini construct these codecs.
@@ -9,7 +9,7 @@
 // the upstream's count body. The count itself comes from the upstream, in its
 // own tokenizer, and only the envelope of the reply is converted. Counts do
 // not stream.
-package counttokens
+package tokens
 
 import (
 	"net/url"
@@ -72,14 +72,14 @@ type Codec struct {
 func New(id apix.Protocol) *Codec {
 	p, ok := protocols[id]
 	if !ok {
-		panic("counttokens: unknown protocol " + string(id))
+		panic("tokens: unknown protocol " + string(id))
 	}
 	return &Codec{id: id, proto: p, inspector: llmcodec.New(p.generation, nil)}
 }
 
 // Spec returns the protocol description with the vendor's default endpoint.
 func (c *Codec) Spec() apix.ProtocolSpec {
-	spec := apix.ProtocolSpec{ID: c.id, Kind: apix.KindCountTokens, Method: "POST", Auth: c.proto.auth, Stream: apix.FramingNone}
+	spec := apix.ProtocolSpec{ID: c.id, Kind: apix.KindTokens, Method: "POST", Auth: c.proto.auth, Stream: apix.FramingNone}
 	if len(c.proto.headers) > 0 {
 		spec.Headers = make(map[string]string, len(c.proto.headers))
 		for k, v := range c.proto.headers {
@@ -133,7 +133,7 @@ func (c *Codec) Inspect(req apix.Payload) (apix.RequestInfo, error) {
 	if ierr != nil {
 		return apix.RequestInfo{}, ierr
 	}
-	info.Kind, info.Protocol, info.Stream = apix.KindCountTokens, c.id, false
+	info.Kind, info.Protocol, info.Stream = apix.KindTokens, c.id, false
 	if r.model != "" {
 		info.Model = r.model
 	}

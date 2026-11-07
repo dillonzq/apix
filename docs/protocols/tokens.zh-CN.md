@@ -1,8 +1,8 @@
 # Token 计数
 
-[English](count-tokens.md) | 简体中文 · [返回 README](../../README.zh-CN.md)
+[English](tokens.md) | 简体中文 · [返回 README](../../README.zh-CN.md)
 
-Token 计数协议属于 `apix.KindCountTokens`：只计算一个 LLM 请求的输入 token 数，不做生成，且只在彼此之间转换；计数请求不会被路由到生成端点，反之亦然。实现位于 `internal/counttokens`；各供应商包导出 ID 与构造函数，每个供应商的 `Codecs()` 都已包含它们。
+Token 计数协议属于 `apix.KindTokens`：只计算一个 LLM 请求的输入 token 数，不做生成，且只在彼此之间转换；计数请求不会被路由到生成端点，反之亦然。实现位于 `internal/tokens`；各供应商包导出 ID 与构造函数，每个供应商的 `Codecs()` 都已包含它们。
 
 | 协议 ID | 常量 | 端点 | 响应 |
 | --- | --- | --- | --- |

@@ -1,4 +1,4 @@
-package counttokens_test
+package tokens_test
 
 import (
 	"encoding/json"

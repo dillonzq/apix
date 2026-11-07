@@ -61,7 +61,7 @@ GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/gemini` �
 | `internal/llm/adapter/shared` | 协议类型、内容与媒体、事件构造、工具身份、推理、shell、缓存提示、诊断规则 |
 | `internal/llm/reasoning` | 档位/预算表、Gemini 档位上限、按协议渲染推理覆盖、剥离被取代的推理控制 |
 | `internal/image` | `KindImage` 的 Codec：OpenAI generations 与 edits、图像模型的 GenerateContent、Imagen；直接的请求与响应转换、原生流校验、模拟流 |
-| `internal/counttokens` | `KindCountTokens` 的 Codec：Messages count_tokens、Responses input_tokens、Gemini countTokens；请求经 `internal/llm/translate` 转换后按计数端点整形 |
+| `internal/tokens` | `KindTokens` 的 Codec：Messages count_tokens、Responses input_tokens、Gemini countTokens；请求经 `internal/llm/translate` 转换后按计数端点整形 |
 | `internal/usage` | 按方言从上游响应体和 SSE 字节读取 usage 对象，并归一化为 `apix.Usage` |
 | `internal/jsonedit` | 基于 moego/ojson 保序读取和编辑 JSON 字段；无法走快路径时由调用方回退到 `encoding/json` |
 | `internal/vendorerr` | 各厂商错误信封与上游错误体分类，所有 Kind 共用 |
@@ -125,4 +125,4 @@ SSE 事件在添加 `sequence_number` 或恢复工具名后，若 JSON 跨行，
 - 流式测试覆盖以下输入：完整输入、逐字节输入、缺少最终分隔符、EOF 前没有终止事件。
 - gateway 用 `httptest` 模拟上游，覆盖同协议优先、各类切换条件、提交点前后的流式失败、熔断、提交超时、亲和性和取消。
 
-验证命令见 [CONTRIBUTING.md](../CONTRIBUTING.md)。GenerateContent 与 Interactions 的细节见 [Gemini](protocols/gemini.zh-CN.md)，`KindImage` 见[图像协议转换](protocols/image.zh-CN.md)，`KindCountTokens` 见 [Token 计数](protocols/count-tokens.zh-CN.md)。
+验证命令见 [CONTRIBUTING.md](../CONTRIBUTING.md)。GenerateContent 与 Interactions 的细节见 [Gemini](protocols/gemini.zh-CN.md)，`KindImage` 见[图像协议转换](protocols/image.zh-CN.md)，`KindTokens` 见 [Token 计数](protocols/tokens.zh-CN.md)。

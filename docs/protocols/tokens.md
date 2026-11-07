@@ -1,8 +1,8 @@
 # Token counting
 
-English | [简体中文](count-tokens.zh-CN.md) · [Back to README](../../README.md)
+English | [简体中文](tokens.zh-CN.md) · [Back to README](../../README.md)
 
-Token counting protocols belong to `apix.KindCountTokens`. They count the input tokens of an LLM request without generating, and convert only among themselves: a count never reaches a generation endpoint, and the reverse holds too. The implementation lives in `internal/counttokens`; each vendor package exports its ID and constructor, and every vendor's `Codecs()` includes it.
+Token counting protocols belong to `apix.KindTokens`. They count the input tokens of an LLM request without generating, and convert only among themselves: a count never reaches a generation endpoint, and the reverse holds too. The implementation lives in `internal/tokens`; each vendor package exports its ID and constructor, and every vendor's `Codecs()` includes it.
 
 | Protocol ID | Constant | Endpoint | Reply |
 | --- | --- | --- | --- |

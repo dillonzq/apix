@@ -61,7 +61,7 @@ Public protocol IDs are namespaced: `openai.chat-completions`, `anthropic.messag
 | `internal/llm/adapter/shared` | Protocol types, content and media, events, tool identities, reasoning, shell, cache hints, diagnostic rules |
 | `internal/llm/reasoning` | Level/budget tables, Gemini level limits, override rendering per protocol, superseded-control stripping |
 | `internal/image` | The `KindImage` codecs: OpenAI generations and edits, GenerateContent with image models, Imagen; direct request and response converters, native stream validation, emulated streams |
-| `internal/counttokens` | The `KindCountTokens` codecs: Messages count_tokens, Responses input_tokens, Gemini countTokens; requests convert through `internal/llm/translate` and are reshaped per count endpoint |
+| `internal/tokens` | The `KindTokens` codecs: Messages count_tokens, Responses input_tokens, Gemini countTokens; requests convert through `internal/llm/translate` and are reshaped per count endpoint |
 | `internal/usage` | Usage objects read from upstream bodies and SSE bytes, per dialect, normalized to `apix.Usage` |
 | `internal/jsonedit` | Order-preserving JSON field reads and edits over moego/ojson; callers fall back to `encoding/json` when the fast path declines |
 | `internal/vendorerr` | Vendor error envelopes and upstream error-body classification, shared by every Kind |
@@ -125,4 +125,4 @@ After the commit point nothing is retried. Failures surface from `Body.Read` and
 - Stream tests cover whole input, bytewise input, a missing final separator, and EOF without a terminal event.
 - Gateway tests use `httptest` upstreams to cover native preference, each failover condition, stream failures before and after the commit point, the breaker, commit timeouts, affinity, and cancellation.
 
-Validation commands are in [CONTRIBUTING.md](../CONTRIBUTING.md). See [Gemini](protocols/gemini.md) for GenerateContent and Interactions specifics, [image protocol conversion](protocols/image.md) for `KindImage`, and [token counting](protocols/count-tokens.md) for `KindCountTokens`.
+Validation commands are in [CONTRIBUTING.md](../CONTRIBUTING.md). See [Gemini](protocols/gemini.md) for GenerateContent and Interactions specifics, [image protocol conversion](protocols/image.md) for `KindImage`, and [token counting](protocols/tokens.md) for `KindTokens`.

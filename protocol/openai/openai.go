@@ -2,7 +2,7 @@
 // and Responses belong to apix.KindLLM and convert directly to and from the
 // other generation protocols in this module (excluding Interactions). Image
 // generations and edits belong to apix.KindImage; see images.go.
-// ResponsesInputTokens belongs to apix.KindCountTokens; see counttokens.go.
+// ResponsesInputTokens belongs to apix.KindTokens; see tokens.go.
 package openai
 
 import (
