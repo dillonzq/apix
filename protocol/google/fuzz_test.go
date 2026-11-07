@@ -1,4 +1,4 @@
-package gemini_test
+package google_test
 
 import (
 	"encoding/json"
@@ -9,13 +9,13 @@ import (
 
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/protocol/anthropic"
-	"github.com/dillonzq/apix/protocol/gemini"
+	"github.com/dillonzq/apix/protocol/google"
 	"github.com/dillonzq/apix/protocol/openai"
 	"github.com/dillonzq/apix/sse"
 )
 
-func FuzzGeminiStreamChunkBoundaries(f *testing.F) {
-	ps := []apix.Protocol{gemini.GenerateContent, openai.ChatCompletions, openai.Responses, anthropic.Messages}
+func FuzzGoogleStreamChunkBoundaries(f *testing.F) {
+	ps := []apix.Protocol{google.GenerateContent, openai.ChatCompletions, openai.Responses, anthropic.Messages}
 	for i, p := range ps {
 		f.Add([]byte(fixtures[p].stream), uint8(i))
 		f.Add([]byte("data: {broken\n\n"), uint8(i))
@@ -25,8 +25,8 @@ func FuzzGeminiStreamChunkBoundaries(f *testing.F) {
 			t.Skip()
 		}
 		from := ps[int(index)%len(ps)]
-		to := gemini.GenerateContent
-		if from == gemini.GenerateContent {
+		to := google.GenerateContent
+		if from == google.GenerateContent {
 			to = ps[int(index/4)%len(ps)]
 		}
 		r := registry(t)

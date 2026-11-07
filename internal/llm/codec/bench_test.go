@@ -7,7 +7,7 @@ import (
 
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/protocol/anthropic"
-	"github.com/dillonzq/apix/protocol/gemini"
+	"github.com/dillonzq/apix/protocol/google"
 	"github.com/dillonzq/apix/protocol/openai"
 )
 
@@ -26,7 +26,7 @@ var (
 
 func benchRegistry(b *testing.B) *apix.Registry {
 	b.Helper()
-	reg, err := apix.NewRegistry(openai.ChatCompletionsCodec(), openai.ResponsesCodec(), anthropic.MessagesCodec(), gemini.GenerateContentCodec())
+	reg, err := apix.NewRegistry(openai.ChatCompletionsCodec(), openai.ResponsesCodec(), anthropic.MessagesCodec(), google.GenerateContentCodec())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func BenchmarkConvertRequest(b *testing.B) {
 		{"passthrough-reasoning/image1MiB", openai.ChatCompletions, openai.ChatCompletions, apix.ExchangeOptions{Reasoning: &effort}, apix.RequestMetadata{}, benchChatImage},
 		{"passthrough-stream-meta/image1MiB", openai.ChatCompletions, openai.ChatCompletions, apix.ExchangeOptions{}, apix.RequestMetadata{Stream: &stream}, benchChatImage},
 		{"chat-to-messages-pdf/1MiB", openai.ChatCompletions, anthropic.Messages, apix.ExchangeOptions{}, apix.RequestMetadata{}, benchChatPDF},
-		{"messages-to-gemini-image/1MiB", anthropic.Messages, gemini.GenerateContent, apix.ExchangeOptions{}, apix.RequestMetadata{}, benchMsgImage},
+		{"messages-to-google-image/1MiB", anthropic.Messages, google.GenerateContent, apix.ExchangeOptions{}, apix.RequestMetadata{}, benchMsgImage},
 	} {
 		b.Run(c.name, func(b *testing.B) {
 			b.SetBytes(int64(len(c.body)))

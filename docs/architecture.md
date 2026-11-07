@@ -11,7 +11,7 @@ flowchart TD
     GW --> SSE[sse: framing and decoding]
     GW --> REG[apix: Codec, Exchange, Registry, Error]
     RT --> REG
-    REG -. registered codecs .-> VENDOR[protocol/openai, protocol/anthropic, protocol/gemini: IDs, constructors, options]
+    REG -. registered codecs .-> VENDOR[protocol/openai, protocol/anthropic, protocol/google: IDs, constructors, options]
     VENDOR --> CODEC[internal/llm/codec: LLM codecs, protocol table, Interactions codec]
     VENDOR --> IMAGE[internal/image: image codecs and direct conversion]
     VENDOR --> TOKENS[internal/tokens: count codecs, request reshaping]
@@ -43,7 +43,7 @@ The registration unit is the codec for one protocol. On the client side, a codec
 
 This matches the engine's dispatch: requests dispatch by **target protocol**; ordinary responses and streams dispatch by **upstream protocol**. Both directions of an exchange from client X to upstream Y are therefore implemented by Y's adapter. Responses go back to X by default. A host that chooses the response format separately can set `ExchangeOptions.Output` to another protocol Z of the same Kind; Y's adapter implements that direction too. Conversion paths are always direct, with no intermediate representation. Same-protocol requests preserve provider fields except for model rewriting and explicitly configured reasoning overrides or tool normalization.
 
-GenerateContent is the one exception to the dispatch rule: `internal/llm/adapter/gemini` owns every path with GenerateContent at either end, in both directions, and the engine's entry points route those paths to it first. Gemini wire objects stay the source or destination; nothing converts through another protocol. GenerateContent model/stream information travels separately in `Payload.Metadata`; `ProtocolSpec.ParsePath` lets the optional HTTP handler recover it from the URL.
+GenerateContent is the one exception to the dispatch rule: `internal/llm/adapter/generatecontent` owns every path with GenerateContent at either end, in both directions, and the engine's entry points route those paths to it first. Gemini wire objects stay the source or destination; nothing converts through another protocol. GenerateContent model/stream information travels separately in `Payload.Metadata`; `ProtocolSpec.ParsePath` lets the optional HTTP handler recover it from the URL.
 
 The four generation protocols share one codec type whose per-protocol differences (path, authentication, headers, error envelope, URL-borne model, extra request checks) are rows of the `protocols` table in `internal/llm/codec/codec.go`. Interactions converts to nothing and has its own codec in `internal/llm/codec/interactions.go`, backed by `internal/llm/adapter/interactions`.
 
@@ -51,7 +51,7 @@ The four generation protocols share one codec type whose per-protocol difference
 
 ## Protocol IDs
 
-Public protocol IDs are namespaced: `openai.chat-completions`, `anthropic.messages`. The LLM engine keeps its historical internal names (`chat-completions`, `responses`, `messages`, `gemini`, `interactions`). Both, and the mapping between them, have a single definition in `internal/llm/ids`. The vendor packages re-export the IDs (`const ChatCompletions = ids.ChatCompletions`); the codecs, the engine, and `internal/llm/reasoning` use the same constants, and diagnostic `From`/`To` values are mapped back to public IDs there.
+Public protocol IDs are namespaced: `openai.chat-completions`, `anthropic.messages`. The LLM engine uses internal format names, which are the IDs without their vendor prefix (`chat-completions`, `responses`, `messages`, `generate-content`, `interactions`). Both, and the mapping between them, have a single definition in `internal/llm/ids`. The vendor packages re-export the IDs (`const ChatCompletions = ids.ChatCompletions`); the codecs, the engine, and `internal/llm/reasoning` use the same constants, and diagnostic `From`/`To` values are mapped back to public IDs there.
 
 ## Responsibilities
 
@@ -64,7 +64,7 @@ Public protocol IDs are namespaced: `openai.chat-completions`, `anthropic.messag
 | `internal/llm/codec` | `codec.go`: the protocol table, the generation codec and its exchange; `inspect.go`, `scan.go`: routing fields, features, affinity keys; `state.go`: created-state capture and the stream error boundary; `interactions.go`: the Interactions codec |
 | `internal/llm/translate` | LLM request, response, and stream entry points; reasoning overrides; terminal error state; SSE framing; Responses sequence numbers; the 48 conversion snapshots |
 | `internal/llm/adapter/{chatcompletions,messages,responses}` | Direct conversion per protocol: `request.go`, `convert.go`, `stream.go`, and target stream output |
-| `internal/llm/adapter/gemini` | Every GenerateContent path in both directions: requests, configuration, media, citations, responses, streams |
+| `internal/llm/adapter/generatecontent` | Every GenerateContent path in both directions: requests, configuration, media, citations, responses, streams |
 | `internal/llm/adapter/interactions` | Native Interactions response and stream validation |
 | `internal/llm/adapter/shared` | Protocol types, content and media, events, tool identities, reasoning, shell, cache hints, diagnostic rules |
 | `internal/llm/reasoning` | Level/budget tables, Gemini level limits, override rendering per protocol, superseded-control stripping |

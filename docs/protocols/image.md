@@ -2,24 +2,24 @@
 
 English | [简体中文](image.zh-CN.md) · [Back to README](../../README.md)
 
-Image generation and editing protocols belong to `apix.KindImage`. They convert only among themselves; an image request never reaches an LLM endpoint, and the reverse holds too. The implementation lives in `internal/image`; `protocol/openai` and `protocol/gemini` export the IDs and constructors, and `openai.Codecs()` and `gemini.Codecs()` include them.
+Image generation and editing protocols belong to `apix.KindImage`. They convert only among themselves; an image request never reaches an LLM endpoint, and the reverse holds too. The implementation lives in `internal/image`; `protocol/openai` and `protocol/google` export the IDs and constructors, and `openai.Codecs()` and `google.Codecs()` include them.
 
 | Protocol ID | Constant | Endpoint | Streams |
 | --- | --- | --- | --- |
 | `openai.images.generations` | `openai.ImagesGenerations` | `POST /v1/images/generations` (JSON) | SSE |
 | `openai.images.edits` | `openai.ImagesEdits` | `POST /v1/images/edits` (multipart, or JSON with data URLs and file IDs) | SSE |
-| `gemini.generate-content.image` | `gemini.GenerateContentImage` | `POST /v1beta/models/{model}:generateContent` / `:streamGenerateContent` to an image model | SSE |
-| `gemini.imagen` | `gemini.Imagen` | `POST /v1beta/models/{model}:predict` | no |
+| `google.generate-content.image` | `google.GenerateContentImage` | `POST /v1beta/models/{model}:generateContent` / `:streamGenerateContent` to an image model | SSE |
+| `google.imagen` | `google.Imagen` | `POST /v1beta/models/{model}:predict` | no |
 
-`gemini.generate-content.image` uses the GenerateContent wire format with image models such as `gemini-2.5-flash-image`. It has its own ID because it belongs to a different Kind from `gemini.generate-content`; mount the handler of whichever Kind a URL serves. Like GenerateContent, the model and streaming mode live in the URL and travel in `Payload.Metadata`; `ProtocolSpec.ParsePath` recovers them for `gateway.Handler`.
+`google.generate-content.image` uses the GenerateContent wire format with image models such as `gemini-2.5-flash-image`. It has its own ID because it belongs to a different Kind from `google.generate-content`; mount the handler of whichever Kind a URL serves. Like GenerateContent, the model and streaming mode live in the URL and travel in `Payload.Metadata`; `ProtocolSpec.ParsePath` recovers them for `gateway.Handler`.
 
 ## Direct paths
 
 ```mermaid
 flowchart LR
-    G[openai.images.generations] <--> C[gemini.generate-content.image]
+    G[openai.images.generations] <--> C[google.generate-content.image]
     E[openai.images.edits] <--> C
-    G <--> I[gemini.imagen]
+    G <--> I[google.imagen]
     I <--> C
 ```
 
@@ -59,13 +59,13 @@ Conversion performs no I/O, so input it would have to fetch fails with `ClassUns
 
 ## Options
 
-`gemini.GenerateContentImageOptions` configures a GenerateContentImage upstream, usually per endpoint through `route.EndpointOptions.Ext`:
+`google.GenerateContentImageOptions` configures a GenerateContentImage upstream, usually per endpoint through `route.EndpointOptions.Ext`:
 
 ```go
 route.Endpoint{
-    ID: "nano", Protocol: gemini.GenerateContentImage,
-    Options: route.EndpointOptions{Ext: gemini.GenerateContentImageOptions{
-        ResponseModalities: []gemini.Modality{gemini.ModalityText, gemini.ModalityImage},
+    ID: "nano", Protocol: google.GenerateContentImage,
+    Options: route.EndpointOptions{Ext: google.GenerateContentImageOptions{
+        ResponseModalities: []google.Modality{google.ModalityText, google.ModalityImage},
     }},
 }
 ```

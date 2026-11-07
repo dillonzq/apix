@@ -6,8 +6,8 @@ The apix core is protocol neutral. Adding a protocol, or a new Kind such as imag
 
 ## Where code goes
 
-- Protocols are organized by vendor under `protocol/<vendor>/`. For example, OpenAI image generation goes in `protocol/openai/images.go`, and Gemini's APIs go under `protocol/gemini/`.
-- Protocol IDs are namespaced as `<vendor>.<api>`, for example `openai.images.generations` or `gemini.generate-content`.
+- Protocols are organized by vendor under `protocol/<vendor>/`. For example, OpenAI image generation goes in `protocol/openai/images.go`, and Gemini's APIs go under `protocol/google/`.
+- Protocol IDs are namespaced as `<vendor>.<api>`, for example `openai.images.generations` or `google.generate-content`.
 - Conversion code shared by several vendors of one Kind goes in `internal/<kind>/`, for example `internal/image/`. The LLM implementation lives in `internal/llm/`.
 - Every vendor package provides `Codecs() []apix.Codec`. Callers register codecs explicitly with `apix.NewRegistry(slices.Concat(...))`.
 
@@ -50,9 +50,9 @@ An `Exchange` must follow these rules:
 `apix.KindImage` is implemented this way; read it as a worked example of a Kind outside `internal/llm`. See [image protocol conversion](protocols/image.md) for its behavior.
 
 - `internal/image/codec.go` holds one `Codec` type for all four image protocols. Their differences, such as path, authentication, error envelope, streaming and accepted protocols, are rows of a `protocols` table. Error envelopes come from `internal/vendorerr`, which the LLM codecs share.
-- `openai.go`, `gemini.go` and `imagen.go` hold each wire format: request decoding (JSON and multipart forms), response types, and the native request rewrite.
+- `openai.go`, `google.go` and `imagen.go` hold each wire format: request decoding (JSON and multipart forms), response types, and the native request rewrite.
 - `exchange.go` and `response.go` hold the direct converters, one function per source and target, with no intermediate representation. `stream.go` validates native streams; cross-protocol streams are emulated in `ConvertResponse`.
-- `protocol/openai/images.go` and `protocol/gemini/images.go` export the IDs and constructors, and each vendor's `Codecs()` includes them. `gemini.GenerateContentImageOptions` is converted to `image.Options` by an `ExtFunc` passed to `image.New`, the same pattern the LLM codecs use.
+- `protocol/openai/images.go` and `protocol/google/images.go` export the IDs and constructors, and each vendor's `Codecs()` includes them. `google.GenerateContentImageOptions` is converted to `image.Options` by an `ExtFunc` passed to `image.New`, the same pattern the LLM codecs use.
 
 ```go
 func (c *Codec) Spec() apix.ProtocolSpec {
@@ -68,7 +68,7 @@ func (c *Codec) Accepts(p apix.Protocol) bool { return p == c.id || slices.Conta
 Once registered, image requests route by the same rules as LLM requests: native image endpoints first, then convertible ones. LLM endpoints belong to a different Kind and are never chosen.
 
 ```go
-reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), gemini.Codecs())...)
+reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), google.Codecs())...)
 ```
 
 ## Testing

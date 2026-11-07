@@ -1,7 +1,7 @@
 // Package tokens implements the apix.KindTokens protocols: Anthropic
 // Messages count_tokens, OpenAI Responses input_tokens and Gemini
 // countTokens. The vendor packages protocol/anthropic, protocol/openai and
-// protocol/gemini construct these codecs.
+// protocol/google construct these codecs.
 //
 // A count request carries the same content as a generation request, so
 // conversion reuses the LLM engine: the client's count body is read as its
@@ -26,7 +26,7 @@ import (
 const (
 	MessagesCountTokens  apix.Protocol = "anthropic.messages.count-tokens"
 	ResponsesInputTokens apix.Protocol = "openai.responses.input-tokens"
-	CountTokens          apix.Protocol = "gemini.count-tokens"
+	CountTokens          apix.Protocol = "google.count-tokens"
 )
 
 // protocol describes one count protocol at the codec boundary.
@@ -46,7 +46,7 @@ var protocols = map[apix.Protocol]protocol{
 		auth: apix.AuthScheme{Header: "x-api-key"}, headers: map[string]string{"anthropic-version": "2023-06-01"}, envelope: vendorerr.Anthropic},
 	ResponsesInputTokens: {generation: ids.Responses, format: ids.FormatResponses, path: "/v1/responses/input_tokens",
 		auth: apix.AuthBearer, envelope: vendorerr.OpenAI},
-	CountTokens: {generation: ids.GenerateContent, format: ids.FormatGemini,
+	CountTokens: {generation: ids.GenerateContent, format: ids.FormatGenerateContent,
 		auth: apix.AuthScheme{Header: "x-goog-api-key"}, envelope: vendorerr.Google},
 }
 
@@ -90,7 +90,7 @@ func (c *Codec) Spec() apix.ProtocolSpec {
 		spec.Path = func(_ apix.RequestInfo, model string) string {
 			return "/v1beta/models/" + url.PathEscape(strings.TrimPrefix(model, "models/")) + ":countTokens"
 		}
-		spec.ParsePath = parseGeminiPath
+		spec.ParsePath = parseGooglePath
 		return spec
 	}
 	path := c.proto.path
@@ -98,8 +98,8 @@ func (c *Codec) Spec() apix.ProtocolSpec {
 	return spec
 }
 
-// parseGeminiPath reads the model from a countTokens URL path.
-func parseGeminiPath(path string) (apix.RequestMetadata, error) {
+// parseGooglePath reads the model from a countTokens URL path.
+func parseGooglePath(path string) (apix.RequestMetadata, error) {
 	suffix, ok := strings.CutPrefix(path, "/v1beta/models/")
 	if !ok {
 		suffix, ok = strings.CutPrefix(path, "/v1/models/")

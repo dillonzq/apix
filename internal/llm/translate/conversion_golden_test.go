@@ -84,17 +84,17 @@ func TestProtocolGolden(t *testing.T) {
 	}
 }
 
-func TestGeminiProtocolGolden(t *testing.T) {
+func TestGoogleProtocolGolden(t *testing.T) {
 	fixtures := protocolFixtures()
-	fixtures[translate.FormatGemini] = struct{ request, response, stream string }{
+	fixtures[translate.FormatGenerateContent] = struct{ request, response, stream string }{
 		`{"contents":[{"role":"user","parts":[{"text":"hello"}]}],"tools":[{"functionDeclarations":[{"name":"f","parametersJsonSchema":{"type":"object"}}]}],"generationConfig":{"responseMimeType":"application/json","responseJsonSchema":{"type":"object"}}}`,
 		`{"responseId":"r","modelVersion":"m","candidates":[{"index":0,"content":{"role":"model","parts":[{"text":"plan","thought":true},{"text":"hello"},{"functionCall":{"id":"c1","name":"f","args":{}}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":4,"candidatesTokenCount":2,"totalTokenCount":6}}`,
 		"data: {\"responseId\":\"r\",\"modelVersion\":\"m\",\"candidates\":[{\"index\":0,\"content\":{\"parts\":[{\"text\":\"hello\"}]}}]}\n\ndata: {\"candidates\":[{\"index\":0,\"finishReason\":\"STOP\"}]}\n\n",
 	}
-	ps := append(append([]string(nil), formats...), translate.FormatGemini)
+	ps := append(append([]string(nil), formats...), translate.FormatGenerateContent)
 	for _, from := range ps {
 		for _, to := range ps {
-			if from != translate.FormatGemini && to != translate.FormatGemini {
+			if from != translate.FormatGenerateContent && to != translate.FormatGenerateContent {
 				continue
 			}
 			t.Run(from+"/"+to, func(t *testing.T) {

@@ -8,7 +8,7 @@ Token 计数协议属于 `apix.KindTokens`：只计算一个 LLM 请求的输入
 | --- | --- | --- | --- |
 | `anthropic.messages.count-tokens` | `anthropic.MessagesCountTokens` | `POST /v1/messages/count_tokens` | `{"input_tokens": n}` |
 | `openai.responses.input-tokens` | `openai.ResponsesInputTokens` | `POST /v1/responses/input_tokens` | `{"object": "response.input_tokens", "input_tokens": n}` |
-| `gemini.count-tokens` | `gemini.CountTokens` | `POST /v1beta/models/{model}:countTokens` | `{"totalTokens": n, ...}` |
+| `google.count-tokens` | `google.CountTokens` | `POST /v1beta/models/{model}:countTokens` | `{"totalTokens": n, ...}` |
 
 Chat Completions 没有计数端点，因此只支持 Chat Completions 的上游无法提供计数。计数不支持流式：spec 声明 `apix.FramingNone`，`NewStreamConverter` 返回 `ClassUnsupported`。
 
@@ -55,7 +55,7 @@ g, err := gateway.New(gateway.Config{
     Upstreams: []gateway.Upstream{
         {Endpoint: route.Endpoint{ID: "anthropic", Protocol: anthropic.Messages}, BaseURL: anthropicURL, APIKey: anthropicKey},
         {Endpoint: route.Endpoint{ID: "anthropic-count", Protocol: anthropic.MessagesCountTokens}, BaseURL: anthropicURL, APIKey: anthropicKey},
-        {Endpoint: route.Endpoint{ID: "gemini-count", Protocol: gemini.CountTokens, Priority: 1}, BaseURL: geminiURL, APIKey: geminiKey},
+        {Endpoint: route.Endpoint{ID: "google-count", Protocol: google.CountTokens, Priority: 1}, BaseURL: googleURL, APIKey: googleKey},
     },
 })
 http.Handle("/v1/messages", g.Handler(anthropic.Messages))
@@ -66,7 +66,7 @@ http.Handle("/v1/responses/input_tokens", g.Handler(openai.ResponsesInputTokens)
 Gemini 的生成与计数操作共用 `/v1beta/models/` 前缀，需要先按操作分发再选择 handler：
 
 ```go
-generate, count := g.Handler(gemini.GenerateContent), g.Handler(gemini.CountTokens)
+generate, count := g.Handler(google.GenerateContent), g.Handler(google.CountTokens)
 http.HandleFunc("/v1beta/models/", func(w http.ResponseWriter, r *http.Request) {
     if strings.HasSuffix(r.URL.Path, ":countTokens") {
         count.ServeHTTP(w, r)

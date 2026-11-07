@@ -29,10 +29,10 @@ func TestBody(t *testing.T) {
 		{"messages adds cache counts to input", Messages,
 			`{"id":"m","usage":{"input_tokens":10,"cache_read_input_tokens":60,"cache_creation_input_tokens":30,"output_tokens":40}}`,
 			apix.Usage{InputTokens: 100, OutputTokens: 40, TotalTokens: 140, CacheReadTokens: 60, CacheWriteTokens: 30}},
-		{"gemini adds thoughts and tool prompts", Gemini,
+		{"google adds thoughts and tool prompts", Google,
 			`{"candidates":[],"usageMetadata":{"promptTokenCount":90,"toolUsePromptTokenCount":10,"candidatesTokenCount":15,"thoughtsTokenCount":25,"cachedContentTokenCount":60,"totalTokenCount":140}}`,
 			apix.Usage{InputTokens: 100, OutputTokens: 40, TotalTokens: 140, CacheReadTokens: 60, ReasoningTokens: 25}},
-		{"gemini snake case", Gemini,
+		{"google snake case", Google,
 			`{"usage_metadata":{"prompt_token_count":100,"candidates_token_count":40}}`,
 			apix.Usage{InputTokens: 100, OutputTokens: 40, TotalTokens: 140}},
 		{"interactions", Interactions,
@@ -140,7 +140,7 @@ func TestStreams(t *testing.T) {
 			"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":5,\"cache_read_input_tokens\":3,\"output_tokens\":1}}}\n\n" +
 				"event: message_delta\ndata: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":7}}\n\n",
 			apix.Usage{InputTokens: 8, OutputTokens: 7, TotalTokens: 15, CacheReadTokens: 3}, `{"input_tokens":5,"cache_read_input_tokens":3,"output_tokens":7}`},
-		{"gemini keeps the latest cumulative counts", Gemini,
+		{"google keeps the latest cumulative counts", Google,
 			"data: {\"usageMetadata\":{\"promptTokenCount\":5,\"totalTokenCount\":5}}\n\n" +
 				"data: {\"usageMetadata\":{\"promptTokenCount\":5,\"candidatesTokenCount\":7,\"totalTokenCount\":12}}",
 			apix.Usage{InputTokens: 5, OutputTokens: 7, TotalTokens: 12}, `{"promptTokenCount":5,"totalTokenCount":12,"candidatesTokenCount":7}`},

@@ -7,13 +7,13 @@ import (
 
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/protocol/anthropic"
-	"github.com/dillonzq/apix/protocol/gemini"
+	"github.com/dillonzq/apix/protocol/google"
 	"github.com/dillonzq/apix/protocol/openai"
 )
 
 func registry(t *testing.T) *apix.Registry {
 	t.Helper()
-	r, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), gemini.Codecs())...)
+	r, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), google.Codecs())...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,8 +38,8 @@ func TestAdaptiveReasoningDefault(t *testing.T) {
 	}{
 		{"chat", openai.ChatCompletions, `{"messages":[{"role":"user","content":"hi"}],"reasoning_effort":"high","response_format":{"type":"json_schema","json_schema":{"name":"answer","schema":{"type":"object"}}}}`, "high"},
 		{"responses", openai.Responses, `{"input":"hi","reasoning":{"effort":"high"},"text":{"format":{"type":"json_schema","schema":{"type":"object"}}}}`, "high"},
-		{"gemini level", gemini.GenerateContent, `{"contents":[{"parts":[{"text":"hi"}]}],"generationConfig":{"thinkingConfig":{"thinkingLevel":"high"},"responseMimeType":"application/json","responseJsonSchema":{"type":"object"}}}`, "high"},
-		{"gemini budget", gemini.GenerateContent, `{"contents":[{"parts":[{"text":"hi"}]}],"generationConfig":{"thinkingConfig":{"thinkingBudget":8192},"responseMimeType":"application/json","responseJsonSchema":{"type":"object"}}}`, "medium"},
+		{"google level", google.GenerateContent, `{"contents":[{"parts":[{"text":"hi"}]}],"generationConfig":{"thinkingConfig":{"thinkingLevel":"high"},"responseMimeType":"application/json","responseJsonSchema":{"type":"object"}}}`, "high"},
+		{"google budget", google.GenerateContent, `{"contents":[{"parts":[{"text":"hi"}]}],"generationConfig":{"thinkingConfig":{"thinkingBudget":8192},"responseMimeType":"application/json","responseJsonSchema":{"type":"object"}}}`, "medium"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ex, err := registry(t).NewExchange(tc.protocol, anthropic.Messages, apix.ExchangeOptions{})
@@ -75,8 +75,8 @@ func TestManualReasoningOption(t *testing.T) {
 		budget   float64
 	}{
 		{"chat", openai.ChatCompletions, `{"messages":[{"role":"user","content":"hi"}],"reasoning_effort":"high"}`, 24576},
-		{"gemini level", gemini.GenerateContent, `{"contents":[{"parts":[{"text":"hi"}]}],"generationConfig":{"thinkingConfig":{"thinkingLevel":"low"}}}`, 1024},
-		{"gemini budget", gemini.GenerateContent, `{"contents":[{"parts":[{"text":"hi"}]}],"generationConfig":{"thinkingConfig":{"thinkingBudget":3000}}}`, 3000},
+		{"google level", google.GenerateContent, `{"contents":[{"parts":[{"text":"hi"}]}],"generationConfig":{"thinkingConfig":{"thinkingLevel":"low"}}}`, 1024},
+		{"google budget", google.GenerateContent, `{"contents":[{"parts":[{"text":"hi"}]}],"generationConfig":{"thinkingConfig":{"thinkingBudget":3000}}}`, 3000},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			opts := apix.ExchangeOptions{Ext: &anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}}

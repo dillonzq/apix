@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/dillonzq/apix"
-	"github.com/dillonzq/apix/protocol/gemini"
+	"github.com/dillonzq/apix/protocol/google"
 	"github.com/dillonzq/apix/protocol/openai"
 	"github.com/dillonzq/apix/sse"
 )
@@ -38,7 +38,7 @@ var streamCases = []streamCase{
 	{openai.ImagesEdits, apix.Payload{Body: []byte(`{"prompt":"p","stream":true,"images":[{"image_url":"data:image/png;base64,aW1n"}]}`)},
 		"event: image_edit.completed\ndata: {\"type\":\"image_edit.completed\",\"b64_json\":\"aW1n\"}",
 		completedEvent("image_edit")},
-	{gemini.GenerateContentImage, apix.Payload{Body: []byte(`{"contents":[{"parts":[{"text":"p"}]}]}`)},
+	{google.GenerateContentImage, apix.Payload{Body: []byte(`{"contents":[{"parts":[{"text":"p"}]}]}`)},
 		"data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"ok\"}]}}]}\n\ndata: {\"candidates\":[{\"content\":{\"parts\":[{\"inlineData\":{\"mimeType\":\"image/png\",\"data\":\"aW1n\"}}]},\"finishReason\":\"STOP\"}]}\n\n",
 		// A loose check: Gemini accepts camelCase and snake_case names.
 		func(_, data string) bool {
@@ -143,7 +143,7 @@ func FuzzImageStreamChunkBoundaries(f *testing.F) {
 
 // directions lists every image client/upstream pair; the output is the client.
 func directions() [][2]apix.Protocol {
-	reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), gemini.Codecs())...)
+	reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), google.Codecs())...)
 	if err != nil {
 		panic(err)
 	}
@@ -161,8 +161,8 @@ func directions() [][2]apix.Protocol {
 var fuzzRequests = map[apix.Protocol]apix.Payload{
 	openai.ImagesGenerations:    {Body: []byte(`{"model":"m","prompt":"a cat","n":2,"size":"1536x1024","quality":"high"}`)},
 	openai.ImagesEdits:          {Body: []byte(`{"prompt":"a hat","images":[{"image_url":"data:image/png;base64,aW1n"}],"size":"1024x1536"}`)},
-	gemini.GenerateContentImage: {Body: []byte(`{"contents":[{"role":"user","parts":[{"text":"a hat"},{"inlineData":{"mimeType":"image/png","data":"aW1n"}}]}],"generationConfig":{"candidateCount":2,"imageConfig":{"aspectRatio":"16:9","imageSize":"2K"}}}`)},
-	gemini.Imagen:               {Body: []byte(`{"instances":[{"prompt":"a fox"}],"parameters":{"sampleCount":2,"aspectRatio":"3:4","outputOptions":{"mimeType":"image/jpeg"}}}`)},
+	google.GenerateContentImage: {Body: []byte(`{"contents":[{"role":"user","parts":[{"text":"a hat"},{"inlineData":{"mimeType":"image/png","data":"aW1n"}}]}],"generationConfig":{"candidateCount":2,"imageConfig":{"aspectRatio":"16:9","imageSize":"2K"}}}`)},
+	google.Imagen:               {Body: []byte(`{"instances":[{"prompt":"a fox"}],"parameters":{"sampleCount":2,"aspectRatio":"3:4","outputOptions":{"mimeType":"image/jpeg"}}}`)},
 }
 
 // FuzzImageRequest converts hostile requests in every direction. Conversion
@@ -216,8 +216,8 @@ func FuzzImageRequest(f *testing.F) {
 var fuzzResponses = map[apix.Protocol]string{
 	openai.ImagesGenerations:    `{"created":1,"data":[{"b64_json":"aW1n","revised_prompt":"r"}],"output_format":"webp","usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3,"input_tokens_details":{"text_tokens":1}}}`,
 	openai.ImagesEdits:          `{"created":1,"data":[{"b64_json":"aW1n"},{"url":"https://example.com/a.png"}]}`,
-	gemini.GenerateContentImage: `{"candidates":[{"content":{"parts":[{"text":"t"},{"inline_data":{"mime_type":"image/png","data":"aW1n"},"thought":true},{"inlineData":{"mimeType":"image/jpeg","data":"aW1n"}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":1,"candidatesTokensDetails":[{"modality":"IMAGE","tokenCount":2}]}}`,
-	gemini.Imagen:               `{"predictions":[{"raiFilteredReason":"x"},{"bytesBase64Encoded":"aW1n","mimeType":"image/png"}]}`,
+	google.GenerateContentImage: `{"candidates":[{"content":{"parts":[{"text":"t"},{"inline_data":{"mime_type":"image/png","data":"aW1n"},"thought":true},{"inlineData":{"mimeType":"image/jpeg","data":"aW1n"}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":1,"candidatesTokensDetails":[{"modality":"IMAGE","tokenCount":2}]}}`,
+	google.Imagen:               `{"predictions":[{"raiFilteredReason":"x"},{"bytesBase64Encoded":"aW1n","mimeType":"image/png"}]}`,
 }
 
 // FuzzImageResponse converts hostile upstream responses in every direction.

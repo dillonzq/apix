@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	fuzzTargets = []string{ids.FormatChatCompletions, ids.FormatMessages, ids.FormatResponses, ids.FormatGemini, "other"}
+	fuzzTargets = []string{ids.FormatChatCompletions, ids.FormatMessages, ids.FormatResponses, ids.FormatGenerateContent, "other"}
 	fuzzEfforts = []string{"auto", "none", "minimal", "low", "medium", "high", "xhigh", "max"}
 	fuzzModes   = []string{"", "budget", "level"}
 )
@@ -38,7 +38,7 @@ func FuzzEditsMatchDecoded(f *testing.F) {
 				r.Effort = ""
 			}
 		}
-		opts := Options{MessagesManual: pick&8 != 0, GeminiMode: fuzzModes[int(pick>>4)%len(fuzzModes)]}
+		opts := Options{MessagesManual: pick&8 != 0, GoogleMode: fuzzModes[int(pick>>4)%len(fuzzModes)]}
 		r, err := Validate(r)
 		if err != nil {
 			return
@@ -55,14 +55,14 @@ func FuzzEditsMatchDecoded(f *testing.F) {
 		}
 		for _, source := range fuzzTargets[:4] {
 			out := Strip(target, source, body)
-			dropThinking := source == ids.FormatMessages && (target == ids.FormatChatCompletions || target == ids.FormatResponses || target == ids.FormatGemini)
-			dropEffort := (target == ids.FormatMessages || target == ids.FormatGemini) && source == ids.FormatChatCompletions
-			dropNested := (target == ids.FormatMessages || target == ids.FormatGemini) && source == ids.FormatResponses
-			dropGemini := source == ids.FormatGemini && (target == ids.FormatChatCompletions || target == ids.FormatResponses || target == ids.FormatMessages)
-			if !dropThinking && !dropEffort && !dropNested && !dropGemini {
+			dropThinking := source == ids.FormatMessages && (target == ids.FormatChatCompletions || target == ids.FormatResponses || target == ids.FormatGenerateContent)
+			dropEffort := (target == ids.FormatMessages || target == ids.FormatGenerateContent) && source == ids.FormatChatCompletions
+			dropNested := (target == ids.FormatMessages || target == ids.FormatGenerateContent) && source == ids.FormatResponses
+			dropGoogle := source == ids.FormatGenerateContent && (target == ids.FormatChatCompletions || target == ids.FormatResponses || target == ids.FormatMessages)
+			if !dropThinking && !dropEffort && !dropNested && !dropGoogle {
 				continue
 			}
-			want := stripDecoded(body, dropThinking, dropEffort, dropGemini)
+			want := stripDecoded(body, dropThinking, dropEffort, dropGoogle)
 			if bytes.Equal(want, body) {
 				// The decoded path leaves malformed bodies alone.
 				if !json.Valid(body) {

@@ -26,7 +26,7 @@ const (
 	// counts, which it adds to the input.
 	Messages
 	// Gemini reads usageMetadata.
-	Gemini
+	Google
 	// Interactions reads total_input_tokens and total_output_tokens.
 	Interactions
 )
@@ -37,7 +37,7 @@ var paths = map[Dialect][][]string{
 	ChatCompletions: {{"usage"}},
 	Responses:       {{"usage"}, {"response", "usage"}},
 	Messages:        {{"usage"}, {"message", "usage"}},
-	Gemini:          {{"usageMetadata"}, {"usage_metadata"}},
+	Google:          {{"usageMetadata"}, {"usage_metadata"}},
 	Interactions:    {{"usage"}, {"interaction", "usage"}},
 }
 
@@ -387,7 +387,7 @@ func normalize(d Dialect, m map[string]json.RawMessage) apix.Usage {
 		u.InputTokens = num(m, "input_tokens") + u.CacheReadTokens + u.CacheWriteTokens
 		u.OutputTokens = num(m, "output_tokens")
 		total = 0 // Messages reports no total
-	case Gemini:
+	case Google:
 		u.CacheReadTokens = first(m, "cachedContentTokenCount", "cached_content_token_count")
 		u.ReasoningTokens = first(m, "thoughtsTokenCount", "thoughts_token_count")
 		u.InputTokens = first(m, "promptTokenCount", "prompt_token_count") + first(m, "toolUsePromptTokenCount", "tool_use_prompt_token_count")

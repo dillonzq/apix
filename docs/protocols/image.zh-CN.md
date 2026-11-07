@@ -2,24 +2,24 @@
 
 [English](image.md) | 简体中文 · [返回 README](../../README.zh-CN.md)
 
-图像生成与编辑协议属于 `apix.KindImage`，只在彼此之间转换；图像请求不会被路由到 LLM 端点，反之亦然。实现位于 `internal/image`；`protocol/openai` 与 `protocol/gemini` 导出 ID 和构造函数，`openai.Codecs()`、`gemini.Codecs()` 已包含它们。
+图像生成与编辑协议属于 `apix.KindImage`，只在彼此之间转换；图像请求不会被路由到 LLM 端点，反之亦然。实现位于 `internal/image`；`protocol/openai` 与 `protocol/google` 导出 ID 和构造函数，`openai.Codecs()`、`google.Codecs()` 已包含它们。
 
 | 协议 ID | 常量 | 端点 | 流式 |
 | --- | --- | --- | --- |
 | `openai.images.generations` | `openai.ImagesGenerations` | `POST /v1/images/generations`（JSON） | SSE |
 | `openai.images.edits` | `openai.ImagesEdits` | `POST /v1/images/edits`（multipart，或以 data URL、文件 ID 引用图像的 JSON） | SSE |
-| `gemini.generate-content.image` | `gemini.GenerateContentImage` | 发往图像模型的 `POST /v1beta/models/{model}:generateContent` / `:streamGenerateContent` | SSE |
-| `gemini.imagen` | `gemini.Imagen` | `POST /v1beta/models/{model}:predict` | 否 |
+| `google.generate-content.image` | `google.GenerateContentImage` | 发往图像模型的 `POST /v1beta/models/{model}:generateContent` / `:streamGenerateContent` | SSE |
+| `google.imagen` | `google.Imagen` | `POST /v1beta/models/{model}:predict` | 否 |
 
-`gemini.generate-content.image` 使用 GenerateContent 线格式，面向 `gemini-2.5-flash-image` 等图像模型。它与 `gemini.generate-content` 属于不同 Kind，所以有独立 ID；某个 URL 服务哪种 Kind，就挂载哪种 Kind 的 handler。与 GenerateContent 相同，模型和流式模式位于 URL 中，经 `Payload.Metadata` 传递；`gateway.Handler` 通过 `ProtocolSpec.ParsePath` 取回它们。
+`google.generate-content.image` 使用 GenerateContent 线格式，面向 `gemini-2.5-flash-image` 等图像模型。它与 `google.generate-content` 属于不同 Kind，所以有独立 ID；某个 URL 服务哪种 Kind，就挂载哪种 Kind 的 handler。与 GenerateContent 相同，模型和流式模式位于 URL 中，经 `Payload.Metadata` 传递；`gateway.Handler` 通过 `ProtocolSpec.ParsePath` 取回它们。
 
 ## 直连路径
 
 ```mermaid
 flowchart LR
-    G[openai.images.generations] <--> C[gemini.generate-content.image]
+    G[openai.images.generations] <--> C[google.generate-content.image]
     E[openai.images.edits] <--> C
-    G <--> I[gemini.imagen]
+    G <--> I[google.imagen]
     I <--> C
 ```
 
@@ -59,13 +59,13 @@ generations 与 edits 之间没有路径：生成没有输入图像，编辑必�
 
 ## 选项
 
-`gemini.GenerateContentImageOptions` 配置 GenerateContentImage 上游，通常经 `route.EndpointOptions.Ext` 按端点设置：
+`google.GenerateContentImageOptions` 配置 GenerateContentImage 上游，通常经 `route.EndpointOptions.Ext` 按端点设置：
 
 ```go
 route.Endpoint{
-    ID: "nano", Protocol: gemini.GenerateContentImage,
-    Options: route.EndpointOptions{Ext: gemini.GenerateContentImageOptions{
-        ResponseModalities: []gemini.Modality{gemini.ModalityText, gemini.ModalityImage},
+    ID: "nano", Protocol: google.GenerateContentImage,
+    Options: route.EndpointOptions{Ext: google.GenerateContentImageOptions{
+        ResponseModalities: []google.Modality{google.ModalityText, google.ModalityImage},
     }},
 }
 ```

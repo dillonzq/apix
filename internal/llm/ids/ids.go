@@ -10,8 +10,8 @@ const (
 	ChatCompletions apix.Protocol = "openai.chat-completions"
 	Responses       apix.Protocol = "openai.responses"
 	Messages        apix.Protocol = "anthropic.messages"
-	GenerateContent apix.Protocol = "gemini.generate-content"
-	Interactions    apix.Protocol = "gemini.interactions"
+	GenerateContent apix.Protocol = "google.generate-content"
+	Interactions    apix.Protocol = "google.interactions"
 )
 
 // Internal format names used by the adapters and snapshots.
@@ -19,7 +19,7 @@ const (
 	FormatChatCompletions = "chat-completions"
 	FormatResponses       = "responses"
 	FormatMessages        = "messages"
-	FormatGemini          = "gemini"
+	FormatGenerateContent = "generate-content"
 	FormatInteractions    = "interactions"
 )
 
@@ -27,7 +27,7 @@ var formats = map[apix.Protocol]string{
 	ChatCompletions: FormatChatCompletions,
 	Responses:       FormatResponses,
 	Messages:        FormatMessages,
-	GenerateContent: FormatGemini,
+	GenerateContent: FormatGenerateContent,
 	Interactions:    FormatInteractions,
 }
 

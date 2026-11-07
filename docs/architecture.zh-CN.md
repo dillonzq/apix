@@ -11,7 +11,7 @@ flowchart TD
     GW --> SSE[sse：分帧与解码]
     GW --> REG[apix：Codec、Exchange、Registry、Error]
     RT --> REG
-    REG -. 注册的 Codec .-> VENDOR[protocol/openai、protocol/anthropic、protocol/gemini：协议 ID、构造函数、选项]
+    REG -. 注册的 Codec .-> VENDOR[protocol/openai、protocol/anthropic、protocol/google：协议 ID、构造函数、选项]
     VENDOR --> CODEC[internal/llm/codec：LLM Codec、协议表、Interactions Codec]
     VENDOR --> IMAGE[internal/image：图像 Codec 与直接转换]
     VENDOR --> TOKENS[internal/tokens：计数 Codec、请求整形]
@@ -43,7 +43,7 @@ flowchart TD
 
 这与引擎原有的分派方式一致：请求按**目标协议**分派，普通响应和流式响应按**上游协议**分派。因此「客户端 X → 上游 Y」一次交换的两个方向都由 Y 的适配器实现。响应默认转回 X；宿主若单独指定了响应格式，可以通过 `ExchangeOptions.Output` 转为同 Kind 的另一协议 Z，这一方向同样由 Y 的适配器实现。转换始终是直接路径，不经过中间表示。同协议请求保留供应商字段，仅改写模型以及显式配置的推理覆盖或工具规范化字段。
 
-GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/gemini` 负责任一端为 GenerateContent 的全部路径（双向），引擎入口会先把这些路径交给它。Gemini wire 对象始终是源或目标，不经其他协议中转。GenerateContent 的模型和流式模式通过 `Payload.Metadata` 单独传递；可选的 HTTP Handler 通过 `ProtocolSpec.ParsePath` 从 URL 中取回。
+GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/generatecontent` 负责任一端为 GenerateContent 的全部路径（双向），引擎入口会先把这些路径交给它。Gemini wire 对象始终是源或目标，不经其他协议中转。GenerateContent 的模型和流式模式通过 `Payload.Metadata` 单独传递；可选的 HTTP Handler 通过 `ProtocolSpec.ParsePath` 从 URL 中取回。
 
 四种生成协议共用一个 Codec 类型，各协议在 Codec 边界上的差异（路径、鉴权、固定头、错误信封、URL 中的模型、额外的请求校验）是 `internal/llm/codec/codec.go` 中 `protocols` 表的一行。Interactions 不与任何协议转换，单独实现于 `internal/llm/codec/interactions.go`，底层是 `internal/llm/adapter/interactions`。
 
@@ -51,7 +51,7 @@ GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/gemini` �
 
 ## 协议 ID
 
-公开协议 ID 带命名空间，例如 `openai.chat-completions`、`anthropic.messages`。LLM 引擎内部仍使用旧格式名（`chat-completions`、`responses`、`messages`、`gemini`、`interactions`）。两者及其映射只在 `internal/llm/ids` 中定义一次。供应商包重新导出这些 ID（`const ChatCompletions = ids.ChatCompletions`），Codec、引擎和 `internal/llm/reasoning` 使用同一组常量，诊断的 `From/To` 也在这里映射回公开 ID。
+公开协议 ID 带命名空间，例如 `openai.chat-completions`、`anthropic.messages`。LLM 引擎内部使用格式名，即去掉供应商前缀的 ID（`chat-completions`、`responses`、`messages`、`generate-content`、`interactions`）。两者及其映射只在 `internal/llm/ids` 中定义一次。供应商包重新导出这些 ID（`const ChatCompletions = ids.ChatCompletions`），Codec、引擎和 `internal/llm/reasoning` 使用同一组常量，诊断的 `From/To` 也在这里映射回公开 ID。
 
 ## 文件职责
 
@@ -64,7 +64,7 @@ GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/gemini` �
 | `internal/llm/codec` | `codec.go`：协议表、生成协议 Codec 及其 Exchange；`inspect.go`、`scan.go`：路由字段、能力、亲和键；`state.go`：新建状态的捕获与流式错误边界；`interactions.go`：Interactions Codec |
 | `internal/llm/translate` | LLM 请求、响应、流式入口，推理覆盖，错误状态锁定，SSE 包装，Responses 序号；48 份转换快照 |
 | `internal/llm/adapter/{chatcompletions,messages,responses}` | 按协议组织的直接转换：`request.go`、`convert.go`、`stream.go` 以及各目标的流式输出 |
-| `internal/llm/adapter/gemini` | GenerateContent 的全部双向路径：请求、配置、媒体、引用、响应、流 |
+| `internal/llm/adapter/generatecontent` | GenerateContent 的全部双向路径：请求、配置、媒体、引用、响应、流 |
 | `internal/llm/adapter/interactions` | 原生 Interactions 响应与流的校验 |
 | `internal/llm/adapter/shared` | 协议类型、内容与媒体、事件构造、工具身份、推理、shell、缓存提示、诊断规则 |
 | `internal/llm/reasoning` | 档位/预算表、Gemini 档位上限、按协议渲染推理覆盖、剥离被取代的推理控制 |

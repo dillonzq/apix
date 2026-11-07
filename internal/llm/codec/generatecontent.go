@@ -9,9 +9,9 @@ import (
 	"github.com/dillonzq/apix/internal/jsonedit"
 )
 
-// geminiPath builds the GenerateContent URL path, which carries the model and
+// googlePath builds the GenerateContent URL path, which carries the model and
 // the streaming mode.
-func geminiPath(info apix.RequestInfo, model string) string {
+func googlePath(info apix.RequestInfo, model string) string {
 	action := "generateContent"
 	if info.Stream {
 		action = "streamGenerateContent?alt=sse"
@@ -19,8 +19,8 @@ func geminiPath(info apix.RequestInfo, model string) string {
 	return "/v1beta/models/" + url.PathEscape(strings.TrimPrefix(model, "models/")) + ":" + action
 }
 
-// parseGeminiPath reads the model and streaming mode from a client URL path.
-func parseGeminiPath(path string) (apix.RequestMetadata, error) {
+// parseGooglePath reads the model and streaming mode from a client URL path.
+func parseGooglePath(path string) (apix.RequestMetadata, error) {
 	suffix, ok := strings.CutPrefix(path, "/v1beta/models/")
 	if !ok {
 		suffix, ok = strings.CutPrefix(path, "/v1/models/")
@@ -40,7 +40,7 @@ func parseGeminiPath(path string) (apix.RequestMetadata, error) {
 	return apix.RequestMetadata{Model: model, Stream: &stream}, nil
 }
 
-func validateGemini(root map[string]json.RawMessage) *apix.Error {
+func validateGoogle(root map[string]json.RawMessage) *apix.Error {
 	// root holds checked JSON; contents must be a non-empty array.
 	contents := jsonedit.Parse(root["contents"])
 	if !contents.IsArray() || !contents.Get("0").Exists() {

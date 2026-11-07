@@ -142,9 +142,9 @@ func scanRequest(id apix.Protocol, root featureObject, stream bool) scan {
 		s.structured(featureMap(root["text"])["format"])
 	case ids.GenerateContent:
 		s.state("cached-content", featureAlias(root, "cachedContent", "cached_content"))
-		s.geminiContent(featureAlias(root, "systemInstruction", "system_instruction"))
+		s.googleContent(featureAlias(root, "systemInstruction", "system_instruction"))
 		for _, v := range featureList(root["contents"]) {
-			s.geminiContent(v)
+			s.googleContent(v)
 		}
 		cfg := featureMap(featureAlias(root, "generationConfig", "generation_config"))
 		s.outputModalities(featureAlias(cfg, "responseModalities", "response_modalities"))
@@ -232,17 +232,17 @@ func (s *scan) files(part featureObject) {
 func (s *scan) carrier(o featureObject) {
 	google := featureMap(featureMap(o["extra_content"])["google"])
 	for _, raw := range featureList(google["parts"]) {
-		s.geminiPart(raw)
+		s.googlePart(raw)
 	}
 }
 
-func (s *scan) geminiContent(raw json.RawMessage) {
+func (s *scan) googleContent(raw json.RawMessage) {
 	for _, part := range featureList(featureMap(raw)["parts"]) {
-		s.geminiPart(part)
+		s.googlePart(part)
 	}
 }
 
-func (s *scan) geminiPart(raw json.RawMessage) {
+func (s *scan) googlePart(raw json.RawMessage) {
 	part := featureMap(raw)
 	for _, key := range []string{"inlineData", "inline_data", "fileData", "file_data"} {
 		if featurePresent(part[key]) {
@@ -258,7 +258,7 @@ func (s *scan) geminiPart(raw json.RawMessage) {
 	// arbitrary tool data and must never be traversed.
 	response := featureMap(featureAlias(part, "functionResponse", "function_response"))
 	for _, attachment := range featureList(response["parts"]) {
-		s.geminiPart(attachment)
+		s.googlePart(attachment)
 	}
 }
 

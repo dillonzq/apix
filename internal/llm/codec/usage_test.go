@@ -8,7 +8,7 @@ import (
 
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/protocol/anthropic"
-	"github.com/dillonzq/apix/protocol/gemini"
+	"github.com/dillonzq/apix/protocol/google"
 	"github.com/dillonzq/apix/protocol/openai"
 )
 
@@ -31,7 +31,7 @@ func TestExchangeUsage(t *testing.T) {
 	streams := map[apix.Protocol]string{
 		openai.ChatCompletions: strings.Replace(fixtures[openai.ChatCompletions].stream, "data: [DONE]", "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":4,\"completion_tokens\":2}}\n\ndata: [DONE]", 1),
 		openai.Responses:       strings.Replace(fixtures[openai.Responses].stream, `"output":[]}`, `"output":[],"usage":{"input_tokens":4,"output_tokens":2}}`, 1),
-		gemini.GenerateContent: strings.Replace(fixtures[gemini.GenerateContent].stream, `"finishReason":"STOP"}]}`, `"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":4,"candidatesTokenCount":2}}`, 1),
+		google.GenerateContent: strings.Replace(fixtures[google.GenerateContent].stream, `"finishReason":"STOP"}]}`, `"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":4,"candidatesTokenCount":2}}`, 1),
 		anthropic.Messages: strings.NewReplacer(`"model":"m"}}`, `"model":"m","usage":{"input_tokens":4,"output_tokens":1}}}`,
 			`"end_turn"}}`, `"end_turn"},"usage":{"output_tokens":2}}`).Replace(fixtures[anthropic.Messages].stream),
 	}
@@ -79,11 +79,11 @@ func TestErrorResponseReportsNoUsage(t *testing.T) {
 }
 
 func TestInteractionsUsage(t *testing.T) {
-	reg, err := apix.NewRegistry(gemini.InteractionsCodec())
+	reg, err := apix.NewRegistry(google.InteractionsCodec())
 	if err != nil {
 		t.Fatal(err)
 	}
-	ex, err := reg.NewExchange(gemini.Interactions, gemini.Interactions, apix.ExchangeOptions{})
+	ex, err := reg.NewExchange(google.Interactions, google.Interactions, apix.ExchangeOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestChatStreamUsageOption(t *testing.T) {
 	}{
 		{"cross-protocol stream", anthropic.Messages, `{"model":"m","max_tokens":5,"stream":true,"messages":[{"role":"user","content":"hi"}]}`, apix.RequestMetadata{}, `{"include_usage":true}`},
 		{"native stream keeps other options", openai.ChatCompletions, `{"model":"m","stream":true,"stream_options":{"include_obfuscation":false},"messages":[{"role":"user","content":"hi"}]}`, apix.RequestMetadata{}, `{"include_obfuscation":false,"include_usage":true}`},
-		{"URL-borne stream", gemini.GenerateContent, `{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`, apix.RequestMetadata{Model: "m", Stream: &streaming}, `{"include_usage":true}`},
+		{"URL-borne stream", google.GenerateContent, `{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`, apix.RequestMetadata{Model: "m", Stream: &streaming}, `{"include_usage":true}`},
 		{"ordinary request", openai.ChatCompletions, `{"model":"m","messages":[{"role":"user","content":"hi"}]}`, apix.RequestMetadata{}, ""},
 	}
 	for _, tt := range tests {

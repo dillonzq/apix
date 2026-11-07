@@ -26,7 +26,7 @@ The library is layered. The core converts and decides routes without any network
 | Package | Role |
 | --- | --- |
 | `apix` | Protocol-neutral core: `Kind`, `Protocol`, `Codec`, `Exchange`, `Registry`, errors, diagnostics |
-| `protocol/openai`, `protocol/anthropic`, `protocol/gemini` | Codecs for each vendor's protocols |
+| `protocol/openai`, `protocol/anthropic`, `protocol/google` | Codecs for each vendor's protocols |
 | `route` | Native-first endpoint selection, priorities, weights, health tracking |
 | `gateway` | Optional HTTP executor and `http.Handler` with failover |
 | `sse` | Server-Sent Events framing and decoding |
@@ -39,15 +39,15 @@ The library is layered. The core converts and decides routes without any network
 | `llm` | `openai.chat-completions` | `openai.ChatCompletions` | `POST /v1/chat/completions` |
 | `llm` | `openai.responses` | `openai.Responses` | `POST /v1/responses` |
 | `llm` | `anthropic.messages` | `anthropic.Messages` | `POST /v1/messages` |
-| `llm` | `gemini.generate-content` | `gemini.GenerateContent` | `POST /v1beta/models/{model}:generateContent` / `:streamGenerateContent` |
-| `llm` | `gemini.interactions` | `gemini.Interactions` | `POST /v1beta/interactions` (native only) |
+| `llm` | `google.generate-content` | `google.GenerateContent` | `POST /v1beta/models/{model}:generateContent` / `:streamGenerateContent` |
+| `llm` | `google.interactions` | `google.Interactions` | `POST /v1beta/interactions` (native only) |
 | `image` | `openai.images.generations` | `openai.ImagesGenerations` | `POST /v1/images/generations` |
 | `image` | `openai.images.edits` | `openai.ImagesEdits` | `POST /v1/images/edits` (multipart or JSON) |
-| `image` | `gemini.generate-content.image` | `gemini.GenerateContentImage` | `POST /v1beta/models/{model}:generateContent` to an image model |
-| `image` | `gemini.imagen` | `gemini.Imagen` | `POST /v1beta/models/{model}:predict` |
+| `image` | `google.generate-content.image` | `google.GenerateContentImage` | `POST /v1beta/models/{model}:generateContent` to an image model |
+| `image` | `google.imagen` | `google.Imagen` | `POST /v1beta/models/{model}:predict` |
 | `tokens` | `anthropic.messages.count-tokens` | `anthropic.MessagesCountTokens` | `POST /v1/messages/count_tokens` |
 | `tokens` | `openai.responses.input-tokens` | `openai.ResponsesInputTokens` | `POST /v1/responses/input_tokens` |
-| `tokens` | `gemini.count-tokens` | `gemini.CountTokens` | `POST /v1beta/models/{model}:countTokens` |
+| `tokens` | `google.count-tokens` | `google.CountTokens` | `POST /v1beta/models/{model}:countTokens` |
 
 Chat Completions, Responses, Messages, and Gemini GenerateContent convert directly in all twelve directions; Interactions is native-only. Conversion covers text, image/file/audio/video input, function and custom tools, local shell adaptation, reasoning and its replay history, usage, structured output, cache hints, and representable citations. Same-protocol requests keep provider fields; only the model and explicitly configured options change them. See [LLM protocol conversion](docs/protocols/llm.md) for mappings and limits, including GenerateContent URLs, Gemini thinking options and thought signatures, and native Interactions.
 
@@ -108,8 +108,8 @@ An `Exchange` holds one execution's state, such as tool identities restored in r
 | `Ext: anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}` | Messages | Send reasoning levels as fixed `budget_tokens` for Claude models without adaptive thinking (default: adaptive) |
 | `Ext: openai.ChatCompletionsOptions{StreamUsage: true}` | Chat Completions | Set `stream_options.include_usage` on streamed requests so the stream ends with a usage chunk; native clients receive it too |
 | `Ext: openai.ResponsesOptions{NormalizeTools: true}` | Responses | Flatten namespaces, wrap custom tools, and adapt local shell for upstreams that only accept function tools |
-| `Ext: gemini.GenerateContentOptions{ThinkingMode: gemini.ThinkingBudget}` | GenerateContent | Send reasoning as `thinkingBudget` (or `ThinkingLevel` for `thinkingLevel`), for the model in use |
-| `Ext: gemini.GenerateContentImageOptions{ResponseModalities: []gemini.Modality{gemini.ModalityText, gemini.ModalityImage}}` | GenerateContentImage | Set `responseModalities` on every image request the upstream receives, converted (default `["IMAGE"]`) or native, for models that need text alongside images |
+| `Ext: google.GenerateContentOptions{ThinkingMode: google.ThinkingBudget}` | GenerateContent | Send reasoning as `thinkingBudget` (or `ThinkingLevel` for `thinkingLevel`), for the model in use |
+| `Ext: google.GenerateContentImageOptions{ResponseModalities: []google.Modality{google.ModalityText, google.ModalityImage}}` | GenerateContentImage | Set `responseModalities` on every image request the upstream receives, converted (default `["IMAGE"]`) or native, for models that need text alongside images |
 
 `ex.Diagnostics()` lists fields that conversion omitted or approximated, with `Code`, `Path`, `Message`, `Semantic`, `From`, and `To`. Responses and streams report losses but are never rejected because of the policy.
 
@@ -224,7 +224,7 @@ make fuzz  # stream, SSE framing, image, token counting, Base64, JSON fast-path,
 Conversion behavior is pinned by 48 reviewed snapshots under `internal/llm/translate/testdata/conversion`; update them only after reviewing the output change:
 
 ```sh
-go test ./internal/llm/translate -run 'Test(Protocol|GeminiProtocol)Golden' -update
+go test ./internal/llm/translate -run 'Test(Protocol|GoogleProtocol)Golden' -update
 ```
 
 Licensed under [MIT](LICENSE).

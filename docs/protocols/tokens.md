@@ -8,7 +8,7 @@ Token counting protocols belong to `apix.KindTokens`. They count the input token
 | --- | --- | --- | --- |
 | `anthropic.messages.count-tokens` | `anthropic.MessagesCountTokens` | `POST /v1/messages/count_tokens` | `{"input_tokens": n}` |
 | `openai.responses.input-tokens` | `openai.ResponsesInputTokens` | `POST /v1/responses/input_tokens` | `{"object": "response.input_tokens", "input_tokens": n}` |
-| `gemini.count-tokens` | `gemini.CountTokens` | `POST /v1beta/models/{model}:countTokens` | `{"totalTokens": n, ...}` |
+| `google.count-tokens` | `google.CountTokens` | `POST /v1beta/models/{model}:countTokens` | `{"totalTokens": n, ...}` |
 
 Chat Completions has no count endpoint, so an upstream that only speaks Chat Completions cannot serve counts. Counts never stream: the specs declare `apix.FramingNone`, and `NewStreamConverter` returns `ClassUnsupported`.
 
@@ -55,7 +55,7 @@ g, err := gateway.New(gateway.Config{
     Upstreams: []gateway.Upstream{
         {Endpoint: route.Endpoint{ID: "anthropic", Protocol: anthropic.Messages}, BaseURL: anthropicURL, APIKey: anthropicKey},
         {Endpoint: route.Endpoint{ID: "anthropic-count", Protocol: anthropic.MessagesCountTokens}, BaseURL: anthropicURL, APIKey: anthropicKey},
-        {Endpoint: route.Endpoint{ID: "gemini-count", Protocol: gemini.CountTokens, Priority: 1}, BaseURL: geminiURL, APIKey: geminiKey},
+        {Endpoint: route.Endpoint{ID: "google-count", Protocol: google.CountTokens, Priority: 1}, BaseURL: googleURL, APIKey: googleKey},
     },
 })
 http.Handle("/v1/messages", g.Handler(anthropic.Messages))
@@ -66,7 +66,7 @@ http.Handle("/v1/responses/input_tokens", g.Handler(openai.ResponsesInputTokens)
 Gemini's generation and count operations share the `/v1beta/models/` prefix. Dispatch on the action before choosing a handler:
 
 ```go
-generate, count := g.Handler(gemini.GenerateContent), g.Handler(gemini.CountTokens)
+generate, count := g.Handler(google.GenerateContent), g.Handler(google.CountTokens)
 http.HandleFunc("/v1beta/models/", func(w http.ResponseWriter, r *http.Request) {
     if strings.HasSuffix(r.URL.Path, ":countTokens") {
         count.ServeHTTP(w, r)

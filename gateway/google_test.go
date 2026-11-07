@@ -13,13 +13,13 @@ import (
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/gateway"
 	"github.com/dillonzq/apix/protocol/anthropic"
-	"github.com/dillonzq/apix/protocol/gemini"
+	"github.com/dillonzq/apix/protocol/google"
 	"github.com/dillonzq/apix/protocol/openai"
 	"github.com/dillonzq/apix/route"
 )
 
-func TestGeminiHandlerAndFailover(t *testing.T) {
-	reg, e := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), gemini.Codecs())...)
+func TestGoogleHandlerAndFailover(t *testing.T) {
+	reg, e := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), google.Codecs())...)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -34,11 +34,11 @@ func TestGeminiHandlerAndFailover(t *testing.T) {
 				respond(200, "text/event-stream", "data: {\"responseId\":\"r\",\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"answer\"}]},\"finishReason\":\"STOP\"}]}\n\n")(w, r)
 			})
 			chat := newUpstream(t, respond(200, "text/event-stream", chatStream))
-			gw, e := gateway.New(gateway.Config{Registry: reg, Upstreams: []gateway.Upstream{{Endpoint: route.Endpoint{ID: "gemini", Protocol: gemini.GenerateContent, Priority: 50, Models: map[string]string{"public": "gem-up"}}, BaseURL: gs.URL, APIKey: "gem-key"}, {Endpoint: route.Endpoint{ID: "chat", Protocol: openai.ChatCompletions, Models: map[string]string{"public": "chat-up"}}, BaseURL: chat.URL}}})
+			gw, e := gateway.New(gateway.Config{Registry: reg, Upstreams: []gateway.Upstream{{Endpoint: route.Endpoint{ID: "google", Protocol: google.GenerateContent, Priority: 50, Models: map[string]string{"public": "gem-up"}}, BaseURL: gs.URL, APIKey: "gem-key"}, {Endpoint: route.Endpoint{ID: "chat", Protocol: openai.ChatCompletions, Models: map[string]string{"public": "chat-up"}}, BaseURL: chat.URL}}})
 			if e != nil {
 				t.Fatal(e)
 			}
-			srv := httptest.NewServer(gw.Handler(gemini.GenerateContent))
+			srv := httptest.NewServer(gw.Handler(google.GenerateContent))
 			defer srv.Close()
 			resp, e := http.Post(srv.URL+"/v1beta/models/public:streamGenerateContent", "application/json", strings.NewReader(body))
 			if e != nil {
@@ -70,7 +70,7 @@ func TestGeminiHandlerAndFailover(t *testing.T) {
 	}
 }
 func TestInteractionsHandlerPreservesState(t *testing.T) {
-	reg, _ := apix.NewRegistry(gemini.Codecs()...)
+	reg, _ := apix.NewRegistry(google.Codecs()...)
 	var received map[string]json.RawMessage
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1beta/interactions" || r.Header.Get("X-Goog-Api-Key") != "key" {
@@ -81,12 +81,12 @@ func TestInteractionsHandlerPreservesState(t *testing.T) {
 		io.WriteString(w, `{"id":"i","status":"in_progress","steps":[],"background":true}`)
 	}))
 	defer srv.Close()
-	gw, e := gateway.New(gateway.Config{Registry: reg, Upstreams: []gateway.Upstream{{Endpoint: route.Endpoint{ID: "interactions", Protocol: gemini.Interactions}, BaseURL: srv.URL, APIKey: "key"}}})
+	gw, e := gateway.New(gateway.Config{Registry: reg, Upstreams: []gateway.Upstream{{Endpoint: route.Endpoint{ID: "interactions", Protocol: google.Interactions}, BaseURL: srv.URL, APIKey: "key"}}})
 	if e != nil {
 		t.Fatal(e)
 	}
 	rr := httptest.NewRecorder()
-	gw.Handler(gemini.Interactions).ServeHTTP(rr, httptest.NewRequest("POST", "/v1beta/interactions", strings.NewReader(`{"model":"m","input":"hello","previous_interaction_id":"prior","background":true}`)))
+	gw.Handler(google.Interactions).ServeHTTP(rr, httptest.NewRequest("POST", "/v1beta/interactions", strings.NewReader(`{"model":"m","input":"hello","previous_interaction_id":"prior","background":true}`)))
 	if rr.Code != 200 || string(received["previous_interaction_id"]) != `"prior"` || string(received["background"]) != "true" {
 		t.Fatalf("%d %s %v", rr.Code, rr.Body.String(), received)
 	}

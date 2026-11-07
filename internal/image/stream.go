@@ -18,8 +18,8 @@ func (e *exchange) NewStreamConverter() (apix.StreamConverter, error) {
 		return nil, apix.Unsupported(string(e.upstream) + " was not asked to stream for " + string(e.output))
 	}
 	s := &passthrough{framer: sse.NewFramerWithLimit(true, e.maxStreamFrameBytes), usage: e.usage}
-	if protocols[e.upstream].family == familyGemini {
-		s.check = checkGeminiEvent
+	if protocols[e.upstream].family == familyGoogle {
+		s.check = checkGoogleEvent
 	} else {
 		s.check = openaiChecker(eventPrefix(e.upstream), e.expected)
 	}
@@ -151,16 +151,16 @@ func openaiChecker(prefix string, expected int) eventCheck {
 	}
 }
 
-// checkGeminiEvent validates a GenerateContent chunk. A finish reason or a
+// checkGoogleEvent validates a GenerateContent chunk. A finish reason or a
 // blocked prompt makes the stream complete; Gemini ends it at EOF.
-func checkGeminiEvent(_, data string) (bool, bool, *apix.Error) {
+func checkGoogleEvent(_, data string) (bool, bool, *apix.Error) {
 	var probe struct {
 		Error json.RawMessage `json:"error"`
 	}
 	if json.Unmarshal([]byte(data), &probe) == nil && probe.Error != nil {
 		return false, false, streamError(data)
 	}
-	r, err := decodeGeminiResponse([]byte(data))
+	r, err := decodeGoogleResponse([]byte(data))
 	if err != nil {
 		return false, false, err
 	}

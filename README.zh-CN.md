@@ -26,7 +26,7 @@ apix 在不同供应商的 API 协议之间转换请求、普通响应和流式�
 | 包 | 职责 |
 | --- | --- |
 | `apix` | 与协议无关的核心：`Kind`、`Protocol`、`Codec`、`Exchange`、`Registry`、错误、诊断 |
-| `protocol/openai`、`protocol/anthropic`、`protocol/gemini` | 各供应商协议的 Codec |
+| `protocol/openai`、`protocol/anthropic`、`protocol/google` | 各供应商协议的 Codec |
 | `route` | 同协议优先的端点选择、优先级、权重、健康统计 |
 | `gateway` | 可选的 HTTP 执行器与 `http.Handler`，支持故障切换 |
 | `sse` | Server-Sent Events 分帧与解码 |
@@ -39,15 +39,15 @@ apix 在不同供应商的 API 协议之间转换请求、普通响应和流式�
 | `llm` | `openai.chat-completions` | `openai.ChatCompletions` | `POST /v1/chat/completions` |
 | `llm` | `openai.responses` | `openai.Responses` | `POST /v1/responses` |
 | `llm` | `anthropic.messages` | `anthropic.Messages` | `POST /v1/messages` |
-| `llm` | `gemini.generate-content` | `gemini.GenerateContent` | `POST /v1beta/models/{model}:generateContent` / `:streamGenerateContent` |
-| `llm` | `gemini.interactions` | `gemini.Interactions` | `POST /v1beta/interactions`（仅原生） |
+| `llm` | `google.generate-content` | `google.GenerateContent` | `POST /v1beta/models/{model}:generateContent` / `:streamGenerateContent` |
+| `llm` | `google.interactions` | `google.Interactions` | `POST /v1beta/interactions`（仅原生） |
 | `image` | `openai.images.generations` | `openai.ImagesGenerations` | `POST /v1/images/generations` |
 | `image` | `openai.images.edits` | `openai.ImagesEdits` | `POST /v1/images/edits`（multipart 或 JSON） |
-| `image` | `gemini.generate-content.image` | `gemini.GenerateContentImage` | 发往图像模型的 `POST /v1beta/models/{model}:generateContent` |
-| `image` | `gemini.imagen` | `gemini.Imagen` | `POST /v1beta/models/{model}:predict` |
+| `image` | `google.generate-content.image` | `google.GenerateContentImage` | 发往图像模型的 `POST /v1beta/models/{model}:generateContent` |
+| `image` | `google.imagen` | `google.Imagen` | `POST /v1beta/models/{model}:predict` |
 | `tokens` | `anthropic.messages.count-tokens` | `anthropic.MessagesCountTokens` | `POST /v1/messages/count_tokens` |
 | `tokens` | `openai.responses.input-tokens` | `openai.ResponsesInputTokens` | `POST /v1/responses/input_tokens` |
-| `tokens` | `gemini.count-tokens` | `gemini.CountTokens` | `POST /v1beta/models/{model}:countTokens` |
+| `tokens` | `google.count-tokens` | `google.CountTokens` | `POST /v1beta/models/{model}:countTokens` |
 
 Chat Completions、Responses、Messages 与 Gemini GenerateContent 在全部十二个方向上直接互转；Interactions 仅支持原生。转换覆盖文本、图片/文件/音频/视频输入、函数与 custom 工具、本地 shell 适配、推理及其历史回传、用量、结构化输出、缓存提示和可表示的引用。同协议请求保留供应商字段，只有模型和显式配置的选项会改动它们。映射与限制见 [LLM 协议转换](docs/protocols/llm.zh-CN.md)，其中也包括 GenerateContent URL、Gemini 推理选项与签名，以及原生 Interactions。
 
@@ -108,8 +108,8 @@ tail, err := stream.Finish()                   // 上游 EOF 时调用
 | `Ext: anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}` | Messages | 为不支持 adaptive 的旧 Claude 模型发送固定 `budget_tokens`（默认 adaptive） |
 | `Ext: openai.ChatCompletionsOptions{StreamUsage: true}` | Chat Completions | 为流式请求设置 `stream_options.include_usage`，让流以用量块结束；原生客户端也会收到该块 |
 | `Ext: openai.ResponsesOptions{NormalizeTools: true}` | Responses | 为只接受函数工具的上游展开 namespace、包装 custom 工具并适配本地 shell |
-| `Ext: gemini.GenerateContentOptions{ThinkingMode: gemini.ThinkingBudget}` | GenerateContent | 按所用模型把推理发送为 `thinkingBudget`（`ThinkingLevel` 则为 `thinkingLevel`） |
-| `Ext: gemini.GenerateContentImageOptions{ResponseModalities: []gemini.Modality{gemini.ModalityText, gemini.ModalityImage}}` | GenerateContentImage | 设置该上游收到的所有图像请求的 `responseModalities`，包括转换后（默认 `["IMAGE"]`）和原生请求，用于需要同时输出文本的模型 |
+| `Ext: google.GenerateContentOptions{ThinkingMode: google.ThinkingBudget}` | GenerateContent | 按所用模型把推理发送为 `thinkingBudget`（`ThinkingLevel` 则为 `thinkingLevel`） |
+| `Ext: google.GenerateContentImageOptions{ResponseModalities: []google.Modality{google.ModalityText, google.ModalityImage}}` | GenerateContentImage | 设置该上游收到的所有图像请求的 `responseModalities`，包括转换后（默认 `["IMAGE"]`）和原生请求，用于需要同时输出文本的模型 |
 
 `ex.Diagnostics()` 列出转换省略或近似的字段，包含 `Code`、`Path`、`Message`、`Semantic`、`From`、`To`。响应和流式响应只报告损耗，不会因策略被拒绝。
 
@@ -223,7 +223,7 @@ make fuzz  # 流、SSE 分帧、图像、Token 计数、Base64、JSON 快路径�
 转换行为由 `internal/llm/translate/testdata/conversion` 下 48 份经过审阅的快照固定。确认输出变化符合预期后才更新：
 
 ```sh
-go test ./internal/llm/translate -run 'Test(Protocol|GeminiProtocol)Golden' -update
+go test ./internal/llm/translate -run 'Test(Protocol|GoogleProtocol)Golden' -update
 ```
 
 本库采用 [MIT 许可证](LICENSE)。

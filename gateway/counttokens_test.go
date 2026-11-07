@@ -12,13 +12,13 @@ import (
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/gateway"
 	"github.com/dillonzq/apix/protocol/anthropic"
-	"github.com/dillonzq/apix/protocol/gemini"
+	"github.com/dillonzq/apix/protocol/google"
 	"github.com/dillonzq/apix/protocol/openai"
 	"github.com/dillonzq/apix/route"
 )
 
 func TestCountTokensGateway(t *testing.T) {
-	reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), gemini.Codecs())...)
+	reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), google.Codecs())...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestCountTokensGateway(t *testing.T) {
 	llm := newUpstream(t, respond(200, "application/json", `{}`))
 	gw, err := gateway.New(gateway.Config{Registry: reg, Upstreams: []gateway.Upstream{
 		{Endpoint: route.Endpoint{ID: "llm", Protocol: anthropic.Messages}, BaseURL: llm.URL},
-		{Endpoint: route.Endpoint{ID: "gemini", Protocol: gemini.CountTokens, Models: map[string]string{"public": "gem-up"}}, BaseURL: gem.URL, APIKey: "gem-key"},
+		{Endpoint: route.Endpoint{ID: "google", Protocol: google.CountTokens, Models: map[string]string{"public": "gem-up"}}, BaseURL: gem.URL, APIKey: "gem-key"},
 		{Endpoint: route.Endpoint{ID: "openai", Protocol: openai.ResponsesInputTokens, Models: map[string]string{"gpt": ""}}, BaseURL: oai.URL, APIKey: "oai-key"},
 	}})
 	if err != nil {
@@ -37,7 +37,7 @@ func TestCountTokensGateway(t *testing.T) {
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/v1/messages/count_tokens", gw.Handler(anthropic.MessagesCountTokens))
-	mux.Handle("/v1beta/models/", gw.Handler(gemini.CountTokens))
+	mux.Handle("/v1beta/models/", gw.Handler(google.CountTokens))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	post := func(path, body string) (int, string) {

@@ -20,7 +20,7 @@ func ApplyReasoning(targetFormat, sourceFormat string, body []byte, r apix.Reaso
 	var opts reasoning.Options
 	if state != nil {
 		opts.MessagesManual = state.Options.MessagesThinkingMode == shared.MessagesThinkingManual
-		opts.GeminiMode = state.Options.GeminiThinkingMode
+		opts.GoogleMode = state.Options.GoogleThinkingMode
 	}
 	out, approximated, err := reasoning.Apply(targetFormat, body, r, opts)
 	if err != nil {

@@ -9,7 +9,7 @@ import (
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/internal/llm/translate"
 	"github.com/dillonzq/apix/protocol/anthropic"
-	"github.com/dillonzq/apix/protocol/gemini"
+	"github.com/dillonzq/apix/protocol/google"
 	"github.com/dillonzq/apix/protocol/openai"
 )
 
@@ -25,7 +25,7 @@ var fixtures = map[apix.Protocol]struct{ request, response, stream string }{
 		`{"id":"r","object":"response","model":"m","status":"completed","output":[{"type":"reasoning","summary":[{"type":"summary_text","text":"plan"}]},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hello"}]},{"type":"function_call","call_id":"c1","name":"f","arguments":"{}"}],"usage":{"input_tokens":4,"output_tokens":2}}`,
 		"event: response.created\ndata: {\"response\":{\"id\":\"r\",\"model\":\"m\"}}\n\nevent: response.output_text.delta\ndata: {\"item_id\":\"m1\",\"content_index\":0,\"delta\":\"hello\"}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"r\",\"model\":\"m\",\"object\":\"response\",\"status\":\"completed\",\"output\":[]}}\n\n",
 	},
-	gemini.GenerateContent: {
+	google.GenerateContent: {
 		`{"contents":[{"role":"user","parts":[{"text":"hello"}]}],"tools":[{"functionDeclarations":[{"name":"f","parametersJsonSchema":{"type":"object"}}]}]}`,
 		`{"responseId":"r","modelVersion":"m","candidates":[{"index":0,"content":{"role":"model","parts":[{"text":"plan","thought":true},{"text":"hello"},{"functionCall":{"id":"c1","name":"f","args":{}}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":4,"candidatesTokenCount":2,"totalTokenCount":6}}`,
 		"data: {\"responseId\":\"r\",\"modelVersion\":\"m\",\"candidates\":[{\"index\":0,\"content\":{\"parts\":[{\"text\":\"hello\"}]}}]}\n\ndata: {\"candidates\":[{\"index\":0,\"finishReason\":\"STOP\"}]}\n\n",
@@ -42,12 +42,12 @@ var internalFormat = map[apix.Protocol]string{
 	openai.ChatCompletions: translate.FormatChatCompletions,
 	openai.Responses:       translate.FormatResponses,
 	anthropic.Messages:     translate.FormatMessages,
-	gemini.GenerateContent: translate.FormatGemini,
+	google.GenerateContent: translate.FormatGenerateContent,
 }
 
 func registry(t *testing.T) *apix.Registry {
 	t.Helper()
-	reg, err := apix.NewRegistry(openai.ChatCompletionsCodec(), openai.ResponsesCodec(), anthropic.MessagesCodec(), gemini.GenerateContentCodec())
+	reg, err := apix.NewRegistry(openai.ChatCompletionsCodec(), openai.ResponsesCodec(), anthropic.MessagesCodec(), google.GenerateContentCodec())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,8 +71,8 @@ func TestSpecs(t *testing.T) {
 }
 
 // A successful ParsePath must return a nil interface, not a nil *apix.Error.
-func TestGeminiParsePath(t *testing.T) {
-	spec, ok := registry(t).Spec(gemini.GenerateContent)
+func TestGoogleParsePath(t *testing.T) {
+	spec, ok := registry(t).Spec(google.GenerateContent)
 	if !ok || spec.ParsePath == nil {
 		t.Fatal("GenerateContent has no ParsePath")
 	}

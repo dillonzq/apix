@@ -72,7 +72,7 @@ Linux runs race tests and coverage; macOS and Windows check their native product
 - Module files: run `go mod tidy`, inspect the diff, then retry `make tidy-check deps`. The dependency check includes test imports and fails if package loading itself fails.
 - Tests: download the `test-output` artifact for `test.log` and `coverage.out`, or use `make coverage` locally. The Actions summary includes package results and total coverage. Generated logs and coverage are ignored by Git.
 - Shuffled tests: copy the printed seed and reproduce with `go test -race -shuffle=<seed> -count=1 ./...`. Use `-run '<TestName>'` for a focused regression.
-- Fuzzing: download `fuzz-failures`, preserve the input under `testdata/fuzz/<TargetName>/` of the target's package (including `internal/llm/translate`, `protocol/gemini`, `internal/image`, `internal/jsonedit`, `internal/llm/reasoning`, `internal/llm/codec`, `internal/llm/adapter/shared`, `internal/usage`, `internal/tokens`, and `sse`), then run `go test ./<package> -run '<TargetName>/<hash>'` to replay it. `make fuzz FUZZTIME=2m` runs all twenty-one targets for longer.
+- Fuzzing: download `fuzz-failures`, preserve the input under `testdata/fuzz/<TargetName>/` of the target's package (including `internal/llm/translate`, `protocol/google`, `internal/image`, `internal/jsonedit`, `internal/llm/reasoning`, `internal/llm/codec`, `internal/llm/adapter/shared`, `internal/usage`, `internal/tokens`, and `sse`), then run `go test ./<package> -run '<TargetName>/<hash>'` to replay it. `make fuzz FUZZTIME=2m` runs all twenty-one targets for longer.
 - Workflow changes: run `make workflow-lint`. Changes to check commands must update the Makefile and this guide together.
 - Vulnerabilities: reproduce with `make vuln`, inspect the affected call path, and update the Go patch version or code as appropriate. Follow [SECURITY.md](SECURITY.md) for private reports.
 
@@ -83,7 +83,7 @@ The weekly run catches new vulnerability database findings even when there are n
 | Path | Contents |
 | --- | --- |
 | Root package (`apix`) | Protocol-neutral API: `Kind`, `Protocol`, `Codec`, `Exchange`, `Registry`, errors, diagnostics. |
-| `protocol/openai`, `protocol/anthropic`, `protocol/gemini` | Vendor codecs: protocol IDs, specs, and vendor exchange options. |
+| `protocol/openai`, `protocol/anthropic`, `protocol/google` | Vendor codecs: protocol IDs, specs, and vendor exchange options. |
 | `route` | Endpoint selection, the native-first strategy, health tracking. |
 | `gateway` | Optional HTTP executor and handler with failover. |
 | `sse` | SSE framing and decoding. |
@@ -116,7 +116,7 @@ Work through this list; reviewers will check it against the diff.
 4. **Preserve what the current path preserves.** Paths that use `json.RawMessage` keep unknown fields and exact numbers; do not add a full re-encode through modeled types.
 5. **Keep tool identities intact.** Register declarations and history references through the existing transaction helpers so a failed conversion leaves the registry unchanged.
 6. **Streams have their own contract.** Preserve event order, emit `[DONE]` only for Chat output, keep `sequence_number` monotonic for synthesized Responses events, validate termination in `Finish`, and never discard events that were produced before an error.
-7. **Update snapshots deliberately.** `go test ./internal/llm/translate -run 'Test(Protocol|GeminiProtocol)Golden' -update` rewrites the 48 snapshots under `internal/llm/translate/testdata/conversion/`. Read every changed line and explain it in the pull request. Never regenerate snapshots to make a red test green; if you cannot explain a diff, that is the bug.
+7. **Update snapshots deliberately.** `go test ./internal/llm/translate -run 'Test(Protocol|GoogleProtocol)Golden' -update` rewrites the 48 snapshots under `internal/llm/translate/testdata/conversion/`. Read every changed line and explain it in the pull request. Never regenerate snapshots to make a red test green; if you cannot explain a diff, that is the bug.
 8. **Update the documentation.** Each topic has one home:
    - mappings and limits per Kind: [LLM](docs/protocols/llm.md), [image](docs/protocols/image.md), and [token counting](docs/protocols/tokens.md);
    - endpoint selection and health: [routing](docs/routing.md); execution, failover, and limits: [gateway](docs/gateway.md);

@@ -20,8 +20,8 @@ type clientRequest interface {
 
 func decodeRequest(id apix.Protocol, req apix.Payload) (clientRequest, *apix.Error) {
 	switch protocols[id].family {
-	case familyGemini:
-		return decodeGemini(req.Body)
+	case familyGoogle:
+		return decodeGoogle(req.Body)
 	case familyImagen:
 		return decodeImagen(req.Body)
 	}
@@ -84,20 +84,20 @@ func (e *exchange) convertRequest(req apix.Payload, upstreamModel string) (apix.
 		switch {
 		case e.client == e.upstream:
 			payload, err = e.nativeOpenAI(req, src, model)
-		case up.family == familyGemini:
-			payload, err = e.openaiToGemini(src)
+		case up.family == familyGoogle:
+			payload, err = e.openaiToGoogle(src)
 		default:
 			payload = e.openaiToImagen(src)
 		}
-	case *geminiRequest:
+	case *googleRequest:
 		e.candidates = src.CandidateCount
 		switch {
 		case e.client == e.upstream:
-			payload, err = e.nativeGemini(req)
+			payload, err = e.nativeGoogle(req)
 		case up.family == familyOpenAI:
-			payload, err = e.geminiToOpenAI(src, model)
+			payload, err = e.googleToOpenAI(src, model)
 		default:
-			payload, err = e.geminiToImagen(src)
+			payload, err = e.googleToImagen(src)
 		}
 	case *imagenRequest:
 		switch {
@@ -106,7 +106,7 @@ func (e *exchange) convertRequest(req apix.Payload, upstreamModel string) (apix.
 		case up.family == familyOpenAI:
 			payload = e.imagenToOpenAI(src, model)
 		default:
-			payload = e.imagenToGemini(src)
+			payload = e.imagenToGoogle(src)
 		}
 	}
 	if err != nil {
@@ -197,10 +197,10 @@ func (e *exchange) nativeOpenAI(req apix.Payload, r *openaiRequest, model string
 	return rewriteOpenAI(req, model, stream)
 }
 
-// nativeGemini replaces the client's responseModalities with the
+// nativeGoogle replaces the client's responseModalities with the
 // configured ones, keeping every other field. Without configured modalities
 // the body passes unchanged.
-func (e *exchange) nativeGemini(req apix.Payload) (apix.Payload, *apix.Error) {
+func (e *exchange) nativeGoogle(req apix.Payload) (apix.Payload, *apix.Error) {
 	if len(e.options.ResponseModalities) == 0 {
 		return apix.Payload{Body: req.Body, ContentType: "application/json"}, nil
 	}
@@ -267,7 +267,7 @@ func inlineImages(images []media) ([]map[string]any, *apix.Error) {
 	return parts, nil
 }
 
-func (e *exchange) openaiToGemini(r *openaiRequest) (apix.Payload, *apix.Error) {
+func (e *exchange) openaiToGoogle(r *openaiRequest) (apix.Payload, *apix.Error) {
 	images, err := inlineImages(r.Images)
 	if err != nil {
 		return apix.Payload{}, err
@@ -277,7 +277,7 @@ func (e *exchange) openaiToGemini(r *openaiRequest) (apix.Payload, *apix.Error) 
 	if r.N > 1 {
 		config["candidateCount"] = r.N
 	}
-	aspect, imageSize, exact, known := googleSize(r.Size, geminiAspects, "4K")
+	aspect, imageSize, exact, known := googleSize(r.Size, googleAspects, "4K")
 	if !exact {
 		e.requestLoss("size", !known)
 	}
@@ -306,9 +306,9 @@ func (e *exchange) openaiToImagen(r *openaiRequest) apix.Payload {
 	return encodeJSON(body)
 }
 
-// geminiPrompt joins the text of user turns and collects their images.
+// googlePrompt joins the text of user turns and collects their images.
 // Other turns and parts are reported; media other than inline images fails.
-func (e *exchange) geminiPrompt(r *geminiRequest) (string, []media, *apix.Error) {
+func (e *exchange) googlePrompt(r *googleRequest) (string, []media, *apix.Error) {
 	var texts []string
 	var images []media
 	for i, c := range r.Contents {
@@ -346,9 +346,9 @@ func (e *exchange) geminiPrompt(r *geminiRequest) (string, []media, *apix.Error)
 	return strings.Join(texts, "\n\n"), images, nil
 }
 
-// geminiLosses reports the Gemini request fields another upstream cannot
+// googleLosses reports the Gemini request fields another upstream cannot
 // carry, beyond contents and the mapped generationConfig fields.
-func (e *exchange) geminiLosses(r *geminiRequest, imageSizeMapped bool) {
+func (e *exchange) googleLosses(r *googleRequest, imageSizeMapped bool) {
 	for _, k := range r.keys {
 		switch k {
 		case "contents", "generationConfig":
@@ -379,8 +379,8 @@ func (e *exchange) geminiLosses(r *geminiRequest, imageSizeMapped bool) {
 	}
 }
 
-func (e *exchange) geminiToOpenAI(r *geminiRequest, model string) (apix.Payload, *apix.Error) {
-	prompt, images, err := e.geminiPrompt(r)
+func (e *exchange) googleToOpenAI(r *googleRequest, model string) (apix.Payload, *apix.Error) {
+	prompt, images, err := e.googlePrompt(r)
 	if err != nil {
 		return apix.Payload{}, err
 	}
@@ -395,7 +395,7 @@ func (e *exchange) geminiToOpenAI(r *geminiRequest, model string) (apix.Payload,
 	if !exact {
 		e.requestLoss("generationConfig.imageConfig.aspectRatio", size == "")
 	}
-	e.geminiLosses(r, false)
+	e.googleLosses(r, false)
 	fields := []formField{{"prompt", prompt}}
 	if model != "" {
 		fields = append(fields, formField{"model", model})
@@ -432,8 +432,8 @@ func (e *exchange) encodeOpenAI(fields []formField, images []media) apix.Payload
 	return encodeJSON(body)
 }
 
-func (e *exchange) geminiToImagen(r *geminiRequest) (apix.Payload, *apix.Error) {
-	prompt, images, err := e.geminiPrompt(r)
+func (e *exchange) googleToImagen(r *googleRequest) (apix.Payload, *apix.Error) {
+	prompt, images, err := e.googlePrompt(r)
 	if err != nil {
 		return apix.Payload{}, err
 	}
@@ -464,7 +464,7 @@ func (e *exchange) geminiToImagen(r *geminiRequest) (apix.Payload, *apix.Error) 
 		body.Parameters.ImageSize = "2K"
 		e.requestLoss("generationConfig.imageConfig.imageSize", false)
 	}
-	e.geminiLosses(r, true)
+	e.googleLosses(r, true)
 	return encodeJSON(body), nil
 }
 
@@ -529,7 +529,7 @@ func (e *exchange) imagenToOpenAI(r *imagenRequest, model string) apix.Payload {
 	return e.encodeOpenAI(fields, nil)
 }
 
-func (e *exchange) imagenToGemini(r *imagenRequest) apix.Payload {
+func (e *exchange) imagenToGoogle(r *imagenRequest) apix.Payload {
 	config := map[string]any{"responseModalities": e.modalities()}
 	if r.SampleCount > 1 {
 		config["candidateCount"] = r.SampleCount

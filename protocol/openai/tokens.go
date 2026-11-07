@@ -8,7 +8,7 @@ import (
 // ResponsesInputTokens is "openai.responses.input-tokens":
 // POST /v1/responses/input_tokens. It belongs to apix.KindTokens and
 // converts directly to and from anthropic.MessagesCountTokens and
-// gemini.CountTokens. Its body is a Responses request without generation
+// google.CountTokens. Its body is a Responses request without generation
 // controls, and the reply is {"object": "response.input_tokens",
 // "input_tokens": n}. Chat Completions has no count endpoint.
 const ResponsesInputTokens = tokens.ResponsesInputTokens

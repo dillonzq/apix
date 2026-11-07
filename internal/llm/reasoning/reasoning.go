@@ -57,10 +57,10 @@ func EffortFromBudget(budget int64) (string, bool) {
 	}
 }
 
-// GeminiLevel returns the GenerateContent thinkingLevel for a level. Gemini
+// GoogleLevel returns the GenerateContent thinkingLevel for a level. Gemini
 // has no level above high, so xhigh and max become high and exact is false.
 // Other values are returned unchanged for the upstream to judge.
-func GeminiLevel(level string) (gemini string, exact bool) {
+func GoogleLevel(level string) (google string, exact bool) {
 	switch level {
 	case "xhigh", "max":
 		return "high", false
@@ -73,9 +73,9 @@ type Options struct {
 	// MessagesManual renders Messages controls as enabled thinking with
 	// budget_tokens instead of adaptive thinking.
 	MessagesManual bool
-	// GeminiMode is "budget" or "level" to force that GenerateContent control;
+	// GoogleMode is "budget" or "level" to force that GenerateContent control;
 	// empty renders numeric requests as budgets and levels as levels.
-	GeminiMode string
+	GoogleMode string
 }
 
 // Validate checks an override and fills Effort from Budget when only the
@@ -133,8 +133,8 @@ func applyDecoded(target string, body []byte, r apix.Reasoning, opts Options) ([
 		applyMessagesEffort(req, r, opts.MessagesManual)
 	case ids.FormatResponses:
 		applyResponsesEffort(req, r.Effort)
-	case ids.FormatGemini:
-		approximated = applyGemini(req, r, opts.GeminiMode)
+	case ids.FormatGenerateContent:
+		approximated = applyGoogle(req, r, opts.GoogleMode)
 	default:
 		return body, nil, nil
 	}
@@ -153,21 +153,21 @@ func applyDecoded(target string, body []byte, r apix.Reasoning, opts Options) ([
 // without validating it, and its siblings (display) are preserved by the
 // override.
 func Strip(target, source string, body []byte) []byte {
-	dropThinking := source == ids.FormatMessages && (target == ids.FormatChatCompletions || target == ids.FormatResponses || target == ids.FormatGemini)
-	dropEffort := (target == ids.FormatMessages || target == ids.FormatGemini) && source == ids.FormatChatCompletions
-	dropNestedEffort := (target == ids.FormatMessages || target == ids.FormatGemini) && source == ids.FormatResponses
-	dropGemini := source == ids.FormatGemini && (target == ids.FormatChatCompletions || target == ids.FormatResponses || target == ids.FormatMessages)
-	if !dropThinking && !dropEffort && !dropNestedEffort && !dropGemini {
+	dropThinking := source == ids.FormatMessages && (target == ids.FormatChatCompletions || target == ids.FormatResponses || target == ids.FormatGenerateContent)
+	dropEffort := (target == ids.FormatMessages || target == ids.FormatGenerateContent) && source == ids.FormatChatCompletions
+	dropNestedEffort := (target == ids.FormatMessages || target == ids.FormatGenerateContent) && source == ids.FormatResponses
+	dropGoogle := source == ids.FormatGenerateContent && (target == ids.FormatChatCompletions || target == ids.FormatResponses || target == ids.FormatMessages)
+	if !dropThinking && !dropEffort && !dropNestedEffort && !dropGoogle {
 		return body
 	}
 	var ops []jsonedit.Op
 	switch {
-	case dropGemini:
+	case dropGoogle:
 		// The decoded path below always leaves a thinkingConfig object.
 		if !ojson.GetBytes(body, "generationConfig.thinkingConfig").Exists() {
 			ops = append(ops, jsonedit.SetString("{}", "generationConfig", "thinkingConfig"))
 		}
-		for _, k := range geminiThinkingKeys {
+		for _, k := range googleThinkingKeys {
 			ops = append(ops, jsonedit.Delete("generationConfig", "thinkingConfig", k))
 		}
 	case dropThinking:
@@ -180,22 +180,22 @@ func Strip(target, source string, body []byte) []byte {
 	if out, ok := jsonedit.Apply(body, ops...); ok {
 		return out
 	}
-	return stripDecoded(body, dropThinking, dropEffort, dropGemini)
+	return stripDecoded(body, dropThinking, dropEffort, dropGoogle)
 }
 
 // stripDecoded is Strip through encoding/json, for bodies the edits refuse.
 // Its output has sorted keys.
-func stripDecoded(body []byte, dropThinking, dropEffort, dropGemini bool) []byte {
+func stripDecoded(body []byte, dropThinking, dropEffort, dropGoogle bool) []byte {
 	var req map[string]json.RawMessage
 	if err := json.Unmarshal(body, &req); err != nil || req == nil {
 		// Malformed input stays the adapter's to classify and report.
 		return body
 	}
 	switch {
-	case dropGemini:
+	case dropGoogle:
 		cfg := nestedObject(req, "generationConfig")
 		tc := nestedObject(cfg, "thinkingConfig")
-		for _, k := range geminiThinkingKeys {
+		for _, k := range googleThinkingKeys {
 			delete(tc, k)
 		}
 		cfg["thinkingConfig"] = jsonObject(tc)
@@ -291,30 +291,30 @@ func applyResponsesEffort(req map[string]json.RawMessage, effort string) {
 	req["reasoning"] = jsonObject(reasoning)
 }
 
-// applyGemini renders the override as thinkingBudget or thinkingLevel and
+// applyGoogle renders the override as thinkingBudget or thinkingLevel and
 // keeps includeThoughts, which controls visibility independently. The auto
 // and none sentinels are always budgets. Budget mode resolves levels through
 // the fixed table; level mode resolves positive budgets through the fixed
 // thresholds; the default renders numeric requests as budgets.
-func applyGemini(req map[string]json.RawMessage, r apix.Reasoning, mode string) []string {
+func applyGoogle(req map[string]json.RawMessage, r apix.Reasoning, mode string) []string {
 	cfg := nestedObject(req, "generationConfig")
 	tc := nestedObject(cfg, "thinkingConfig")
-	for _, k := range geminiThinkingKeys {
+	for _, k := range googleThinkingKeys {
 		delete(tc, k)
 	}
-	key, value, approximated := geminiControl(r, mode)
+	key, value, approximated := googleControl(r, mode)
 	tc[key] = value
 	cfg["thinkingConfig"] = jsonObject(tc)
 	req["generationConfig"] = jsonObject(cfg)
 	return approximated
 }
 
-// geminiThinkingKeys are the thinkingConfig controls an override replaces,
+// googleThinkingKeys are the thinkingConfig controls an override replaces,
 // in both spellings GenerateContent accepts.
-var geminiThinkingKeys = []string{"thinkingBudget", "thinkingLevel", "thinking_budget", "thinking_level"}
+var googleThinkingKeys = []string{"thinkingBudget", "thinkingLevel", "thinking_budget", "thinking_level"}
 
-// geminiControl picks the thinkingConfig member that renders r.
-func geminiControl(r apix.Reasoning, mode string) (key string, value json.RawMessage, approximated []string) {
+// googleControl picks the thinkingConfig member that renders r.
+func googleControl(r apix.Reasoning, mode string) (key string, value json.RawMessage, approximated []string) {
 	budget, _ := BudgetFromEffort(r.Effort)
 	if r.Budget != nil {
 		budget = *r.Budget
@@ -322,7 +322,7 @@ func geminiControl(r apix.Reasoning, mode string) (key string, value json.RawMes
 	if r.Effort == "auto" || r.Effort == "none" || mode == "budget" || (mode == "" && r.Budget != nil) {
 		return "thinkingBudget", jsonRaw(budget), nil
 	}
-	level, exact := GeminiLevel(r.Effort)
+	level, exact := GoogleLevel(r.Effort)
 	if !exact {
 		approximated = []string{"generationConfig.thinkingConfig.thinkingLevel"}
 	}
@@ -351,13 +351,13 @@ func applyEdits(target string, body []byte, r apix.Reasoning, opts Options) ([]b
 		} else {
 			ops = append(ops, jsonedit.Set(jsonRaw(r.Effort), "reasoning", "effort"))
 		}
-	case ids.FormatGemini:
-		for _, k := range geminiThinkingKeys {
+	case ids.FormatGenerateContent:
+		for _, k := range googleThinkingKeys {
 			ops = append(ops, jsonedit.Delete("generationConfig", "thinkingConfig", k))
 		}
 		var key string
 		var value json.RawMessage
-		key, value, approximated = geminiControl(r, opts.GeminiMode)
+		key, value, approximated = googleControl(r, opts.GoogleMode)
 		ops = append(ops, jsonedit.Set(value, "generationConfig", "thinkingConfig", key))
 	}
 	if len(ops) == 0 {

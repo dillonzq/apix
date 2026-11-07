@@ -41,22 +41,22 @@ func (e *exchange) convertResponse(status int, resp apix.Payload) (apix.Payload,
 		if err != nil {
 			return apix.Payload{}, err
 		}
-		if out.family == familyGemini {
-			g, err := e.openaiToGeminiResponse(r)
-			return e.renderGemini(g), err
+		if out.family == familyGoogle {
+			g, err := e.openaiToGoogleResponse(r)
+			return e.renderGoogle(g), err
 		}
 		p, err := e.openaiToImagenResponse(r)
 		return encodeJSON(p), err
-	case familyGemini:
-		r, err := decodeGeminiResponse(resp.Body)
+	case familyGoogle:
+		r, err := decodeGoogleResponse(resp.Body)
 		if err != nil {
 			return apix.Payload{}, err
 		}
 		if out.family == familyOpenAI {
-			o, err := e.geminiToOpenAIResponse(r)
+			o, err := e.googleToOpenAIResponse(r)
 			return e.renderOpenAI(o), err
 		}
-		p, err := e.geminiToImagenResponse(r)
+		p, err := e.googleToImagenResponse(r)
 		return encodeJSON(p), err
 	default:
 		r, err := decodeImagenResponse(resp.Body)
@@ -67,8 +67,8 @@ func (e *exchange) convertResponse(status int, resp apix.Payload) (apix.Payload,
 			o, err := e.imagenToOpenAIResponse(r)
 			return e.renderOpenAI(o), err
 		}
-		g, err := e.imagenToGeminiResponse(r)
-		return e.renderGemini(g), err
+		g, err := e.imagenToGoogleResponse(r)
+		return e.renderGoogle(g), err
 	}
 }
 
@@ -77,8 +77,8 @@ func validateResponse(f family, body []byte) *apix.Error {
 	switch f {
 	case familyOpenAI:
 		_, err = decodeOpenAIResponse(body)
-	case familyGemini:
-		_, err = decodeGeminiResponse(body)
+	case familyGoogle:
+		_, err = decodeGoogleResponse(body)
 	default:
 		_, err = decodeImagenResponse(body)
 	}
@@ -92,9 +92,9 @@ func (e *exchange) renderOpenAI(r openaiResponse) apix.Payload {
 	return encodeJSON(r)
 }
 
-func (e *exchange) renderGemini(r geminiResponse) apix.Payload {
+func (e *exchange) renderGoogle(r googleResponse) apix.Payload {
 	if e.emulate {
-		return apix.Payload{Body: renderGeminiStream(r), ContentType: "text/event-stream"}
+		return apix.Payload{Body: renderGoogleStream(r), ContentType: "text/event-stream"}
 	}
 	return encodeJSON(r)
 }
@@ -119,37 +119,37 @@ func (e *exchange) openaiImages(r openaiResponse) ([]string, *apix.Error) {
 	return images, nil
 }
 
-// geminiCandidates places images in one candidate, or one candidate per image
+// googleCandidates places images in one candidate, or one candidate per image
 // when the client asked for several candidates.
-func (e *exchange) geminiCandidates(blobs []geminiBlob) []geminiCandidate {
-	part := func(b geminiBlob) geminiOutPart {
-		return geminiOutPart{InlineData: &geminiBlob{MIMEType: b.MIMEType, Data: b.Data}}
+func (e *exchange) googleCandidates(blobs []googleBlob) []googleCandidate {
+	part := func(b googleBlob) googleOutPart {
+		return googleOutPart{InlineData: &googleBlob{MIMEType: b.MIMEType, Data: b.Data}}
 	}
 	if e.candidates > 1 {
-		out := make([]geminiCandidate, len(blobs))
+		out := make([]googleCandidate, len(blobs))
 		for i, b := range blobs {
-			out[i] = geminiCandidate{Content: geminiOutContent{Role: "model", Parts: []geminiOutPart{part(b)}}, FinishReason: "STOP", Index: i}
+			out[i] = googleCandidate{Content: googleOutContent{Role: "model", Parts: []googleOutPart{part(b)}}, FinishReason: "STOP", Index: i}
 		}
 		return out
 	}
-	c := geminiCandidate{Content: geminiOutContent{Role: "model"}, FinishReason: "STOP"}
+	c := googleCandidate{Content: googleOutContent{Role: "model"}, FinishReason: "STOP"}
 	for _, b := range blobs {
 		c.Content.Parts = append(c.Content.Parts, part(b))
 	}
-	return []geminiCandidate{c}
+	return []googleCandidate{c}
 }
 
-func (e *exchange) openaiToGeminiResponse(r openaiResponse) (geminiResponse, *apix.Error) {
+func (e *exchange) openaiToGoogleResponse(r openaiResponse) (googleResponse, *apix.Error) {
 	images, err := e.openaiImages(r)
 	if err != nil {
-		return geminiResponse{}, err
+		return googleResponse{}, err
 	}
 	mimeType := mimeOf(r.OutputFormat)
-	blobs := make([]geminiBlob, len(images))
+	blobs := make([]googleBlob, len(images))
 	for i, data := range images {
-		blobs[i] = geminiBlob{MIMEType: mimeType, Data: data}
+		blobs[i] = googleBlob{MIMEType: mimeType, Data: data}
 	}
-	return geminiResponse{Candidates: e.geminiCandidates(blobs), UsageMetadata: geminiUsageOf(r.Usage), ModelVersion: e.model}, nil
+	return googleResponse{Candidates: e.googleCandidates(blobs), UsageMetadata: googleUsageOf(r.Usage), ModelVersion: e.model}, nil
 }
 
 func (e *exchange) openaiToImagenResponse(r openaiResponse) (imagenResponse, *apix.Error) {
@@ -168,9 +168,9 @@ func (e *exchange) openaiToImagenResponse(r openaiResponse) (imagenResponse, *ap
 	return out, nil
 }
 
-// geminiImages returns the images of a Gemini response and reports dropped
+// googleImages returns the images of a Gemini response and reports dropped
 // text; a response without images is an error.
-func (e *exchange) geminiImages(r geminiResponse) ([]geminiBlob, *apix.Error) {
+func (e *exchange) googleImages(r googleResponse) ([]googleBlob, *apix.Error) {
 	images := r.images()
 	if len(images) == 0 {
 		return nil, r.noImage()
@@ -181,8 +181,8 @@ func (e *exchange) geminiImages(r geminiResponse) ([]geminiBlob, *apix.Error) {
 	return images, nil
 }
 
-func (e *exchange) geminiToOpenAIResponse(r geminiResponse) (openaiResponse, *apix.Error) {
-	images, err := e.geminiImages(r)
+func (e *exchange) googleToOpenAIResponse(r googleResponse) (openaiResponse, *apix.Error) {
+	images, err := e.googleImages(r)
 	if err != nil {
 		return openaiResponse{}, err
 	}
@@ -193,8 +193,8 @@ func (e *exchange) geminiToOpenAIResponse(r geminiResponse) (openaiResponse, *ap
 	return out, nil
 }
 
-func (e *exchange) geminiToImagenResponse(r geminiResponse) (imagenResponse, *apix.Error) {
-	images, err := e.geminiImages(r)
+func (e *exchange) googleToImagenResponse(r googleResponse) (imagenResponse, *apix.Error) {
+	images, err := e.googleImages(r)
 	if err != nil {
 		return imagenResponse{}, err
 	}
@@ -220,28 +220,28 @@ func (e *exchange) imagenToOpenAIResponse(r imagenResponse) (openaiResponse, *ap
 	return out, nil
 }
 
-func (e *exchange) imagenToGeminiResponse(r imagenResponse) (geminiResponse, *apix.Error) {
+func (e *exchange) imagenToGoogleResponse(r imagenResponse) (googleResponse, *apix.Error) {
 	images := r.images()
 	if len(images) == 0 {
-		return geminiResponse{}, r.noImage()
+		return googleResponse{}, r.noImage()
 	}
-	blobs := make([]geminiBlob, len(images))
+	blobs := make([]googleBlob, len(images))
 	for i, p := range images {
 		mimeType := p.MIMEType
 		if mimeType == "" {
 			mimeType = "image/png"
 		}
-		blobs[i] = geminiBlob{MIMEType: mimeType, Data: p.BytesBase64Encoded}
+		blobs[i] = googleBlob{MIMEType: mimeType, Data: p.BytesBase64Encoded}
 	}
-	return geminiResponse{Candidates: e.geminiCandidates(blobs), ModelVersion: e.model}, nil
+	return googleResponse{Candidates: e.googleCandidates(blobs), ModelVersion: e.model}, nil
 }
 
-// geminiUsageOf maps OpenAI image token usage onto usageMetadata.
-func geminiUsageOf(u *openaiUsage) *geminiUsage {
+// googleUsageOf maps OpenAI image token usage onto usageMetadata.
+func googleUsageOf(u *openaiUsage) *googleUsage {
 	if u == nil {
 		return nil
 	}
-	out := &geminiUsage{PromptTokenCount: u.InputTokens, CandidatesTokenCount: u.OutputTokens, TotalTokenCount: u.TotalTokens}
+	out := &googleUsage{PromptTokenCount: u.InputTokens, CandidatesTokenCount: u.OutputTokens, TotalTokenCount: u.TotalTokens}
 	if out.TotalTokenCount == 0 {
 		out.TotalTokenCount = u.InputTokens + u.OutputTokens
 	}
@@ -250,23 +250,23 @@ func geminiUsageOf(u *openaiUsage) *geminiUsage {
 	return out
 }
 
-func modalities(d *openaiTokenDetails) []geminiModalityUse {
+func modalities(d *openaiTokenDetails) []googleModalityUse {
 	if d == nil {
 		return nil
 	}
-	var out []geminiModalityUse
+	var out []googleModalityUse
 	if d.TextTokens > 0 {
-		out = append(out, geminiModalityUse{Modality: "TEXT", TokenCount: d.TextTokens})
+		out = append(out, googleModalityUse{Modality: "TEXT", TokenCount: d.TextTokens})
 	}
 	if d.ImageTokens > 0 {
-		out = append(out, geminiModalityUse{Modality: "IMAGE", TokenCount: d.ImageTokens})
+		out = append(out, googleModalityUse{Modality: "IMAGE", TokenCount: d.ImageTokens})
 	}
 	return out
 }
 
 // openaiUsageOf maps usageMetadata onto OpenAI image token usage. Thought
 // tokens are billed as output.
-func openaiUsageOf(u *geminiUsage) *openaiUsage {
+func openaiUsageOf(u *googleUsage) *openaiUsage {
 	if u == nil {
 		return nil
 	}
@@ -279,7 +279,7 @@ func openaiUsageOf(u *geminiUsage) *openaiUsage {
 	return out
 }
 
-func tokenDetails(in []geminiModalityUse) *openaiTokenDetails {
+func tokenDetails(in []googleModalityUse) *openaiTokenDetails {
 	if len(in) == 0 {
 		return nil
 	}

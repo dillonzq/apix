@@ -1,4 +1,4 @@
-package gemini
+package generatecontent
 
 import (
 	"bytes"
@@ -56,7 +56,7 @@ func (c *conversion) aliases(o object, pairs ...string) {
 
 // Normalize only protocol envelopes. Tool args, results, schema properties and
 // other user data are never searched for field names or rewritten.
-func (c *conversion) normalizeGemini(root object) {
+func (c *conversion) normalizeGoogle(root object) {
 	c.aliases(root, "system_instruction", "systemInstruction", "generation_config", "generationConfig", "tool_config", "toolConfig", "response_id", "responseId", "model_version", "modelVersion", "usage_metadata", "usageMetadata", "prompt_feedback", "promptFeedback")
 	normalizeParts := func(content object) {
 		for _, pv := range list(content["parts"]) {

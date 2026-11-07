@@ -1,4 +1,4 @@
-package gemini
+package generatecontent
 
 import (
 	"fmt"
@@ -28,7 +28,7 @@ func ConvertRequest(from, to, model string, body []byte, ctx *shared.ConversionC
 			return nil, err
 		}
 		if from == Format {
-			c.normalizeGemini(root)
+			c.normalizeGoogle(root)
 		}
 		c.validateConfig(root)
 		if c.err != nil {
@@ -37,7 +37,7 @@ func ConvertRequest(from, to, model string, body []byte, ctx *shared.ConversionC
 		if from == Format && to == Format {
 			c.nativeRequest(root)
 			options := work.Options
-			if options.GeminiThinkingMode != "" || options.GeminiIncludeThoughts != nil {
+			if options.GoogleThinkingMode != "" || options.GoogleIncludeThoughts != nil {
 				cfg := ensure(c.object(first(root, "generationConfig", "generation_config"), "generationConfig"))
 				tc := ensure(c.object(first(cfg, "thinkingConfig", "thinking_config"), "thinkingConfig"))
 				for _, pair := range [][2]string{{"thinking_budget", "thinkingBudget"}, {"thinking_level", "thinkingLevel"}, {"include_thoughts", "includeThoughts"}} {
@@ -47,8 +47,8 @@ func ConvertRequest(from, to, model string, body []byte, ctx *shared.ConversionC
 					}
 				}
 				tc = c.thinkingMode(tc)
-				if options.GeminiIncludeThoughts != nil {
-					tc["includeThoughts"] = *options.GeminiIncludeThoughts
+				if options.GoogleIncludeThoughts != nil {
+					tc["includeThoughts"] = *options.GoogleIncludeThoughts
 				}
 				delete(cfg, "thinking_config")
 				cfg["thinkingConfig"] = tc
@@ -63,9 +63,9 @@ func ConvertRequest(from, to, model string, body []byte, ctx *shared.ConversionC
 		}
 		var out object
 		if to == Format {
-			out = c.toGemini(root)
+			out = c.toGoogle(root)
 		} else if from == Format {
-			out = c.fromGemini(root, model)
+			out = c.fromGoogle(root, model)
 		} else {
 			return nil, unsupported("expected a Gemini conversion path")
 		}
@@ -94,14 +94,14 @@ func (c *conversion) nativeRequest(root object) {
 			if p == nil {
 				c.fail("parts must contain objects")
 			}
-			if c.ctx.Options.GeminiRequireThoughtSignatures && p["functionCall"] != nil && signature(p) == "" {
+			if c.ctx.Options.GoogleRequireThoughtSignatures && p["functionCall"] != nil && signature(p) == "" {
 				c.reject("Gemini function call history requires thoughtSignature")
 			}
 		}
 	}
 }
 
-func (c *conversion) toGemini(root object) object {
+func (c *conversion) toGoogle(root object) object {
 	out := object{}
 	var contents, system []any
 	calls := map[string]string{}
@@ -261,7 +261,7 @@ func (c *conversion) toGemini(root object) object {
 	c.toConfig(root, out)
 	c.toTools(root, out)
 	c.checkSourceFields(root)
-	if c.ctx.Options.GeminiRequireThoughtSignatures {
+	if c.ctx.Options.GoogleRequireThoughtSignatures {
 		for _, cv := range contents {
 			for _, pv := range list(obj(cv)["parts"]) {
 				part := obj(pv)
@@ -301,7 +301,7 @@ func (c *conversion) toolResult(v any) object {
 	return nil
 }
 
-func (c *conversion) fromGemini(root object, model string) object {
+func (c *conversion) fromGoogle(root object, model string) object {
 	out := object{"model": model}
 	var msgs, items []any
 	if c.to != chat && c.to != messages && c.to != responses {

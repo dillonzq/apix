@@ -1,4 +1,4 @@
-package gemini
+package google
 
 import (
 	"github.com/dillonzq/apix"
@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	// GenerateContentImage is "gemini.generate-content.image": GenerateContent
+	// GenerateContentImage is "google.generate-content.image": GenerateContent
 	// sent to an image model, such as gemini-2.5-flash-image, for image
 	// generation and editing. It shares GenerateContent's wire format and URL
 	// (the model and mode live in the URL; pass them as apix.Payload.Metadata)
@@ -14,8 +14,8 @@ const (
 	// openai.ImagesGenerations, openai.ImagesEdits and Imagen. Converted
 	// requests ask for responseModalities ["IMAGE"], and native ones keep
 	// the client's, unless GenerateContentImageOptions says otherwise.
-	GenerateContentImage = image.GeminiImage
-	// Imagen is "gemini.imagen": POST /v1beta/models/{model}:predict. It
+	GenerateContentImage = image.GoogleImage
+	// Imagen is "google.imagen": POST /v1beta/models/{model}:predict. It
 	// belongs to apix.KindImage, generates without input images, does not
 	// stream, and converts directly to and from openai.ImagesGenerations and
 	// GenerateContentImage.
