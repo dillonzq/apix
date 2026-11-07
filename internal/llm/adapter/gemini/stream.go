@@ -53,8 +53,13 @@ type StreamConverter struct {
 	itemID        string
 }
 
-func NewStreamConverter(from, to string, ctx *shared.ConversionContext) *StreamConverter {
-	return &StreamConverter{from: from, to: to, ctx: shared.ContextOrNew([]*shared.ConversionContext{ctx}), framer: shared.NewSSEFramer(true), created: time.Now().Unix(), candidates: map[int]*streamCandidate{}, blocks: map[int]*streamBlock{}, usage: object{}, activePart: -1}
+func NewStreamConverter(from, to string, ctx *shared.ConversionContext, maxFrameBytes ...int) *StreamConverter {
+	ctx = shared.ContextOrNew([]*shared.ConversionContext{ctx})
+	maximum := ctx.Options.MaxStreamFrameBytes
+	if len(maxFrameBytes) > 0 {
+		maximum = maxFrameBytes[0]
+	}
+	return &StreamConverter{from: from, to: to, ctx: ctx, framer: shared.NewSSEFramer(true, maximum), created: time.Now().Unix(), candidates: map[int]*streamCandidate{}, blocks: map[int]*streamBlock{}, usage: object{}, activePart: -1}
 }
 
 func (s *StreamConverter) candidate(index int) *streamCandidate {
@@ -91,7 +96,7 @@ func (s *StreamConverter) drain() ([][]byte, *errclass.Error) {
 	for {
 		name, data, raw, ok := s.framer.Next()
 		if !ok {
-			return events, nil
+			return events, shared.SSEFrameError(s.framer)
 		}
 		if data == "" {
 			if s.from == Format && s.to == Format {

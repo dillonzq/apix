@@ -159,11 +159,16 @@ http.Handle("/v1/chat/completions", g.Handler(openai.ChatCompletions))
 | --- | --- |
 | `CommitTimeout` | Cancel an attempt that has not reached the commit point in time, and fail over |
 | `MaxResponseBytes` | Limit ordinary response bodies (default 64 MiB); a larger one fails over |
+| `MaxStreamFrameBytes` | Limit each upstream SSE frame (default 64 MiB), not the whole stream; a negative value explicitly disables the limit |
 | `ForwardHeaders` | Upstream response headers to pass to clients, such as `"X-Request-Id"` or `"X-Ratelimit-*"`; `Response.UpstreamHeader` holds them all |
 | `ReasoningSuffix` | Route `model(high)` by `model` and apply the suffix as `Request.Reasoning` |
 | `OnUsage` | Receive the committed attempt's [token usage](#token-usage): when `Do` returns an ordinary response, and once a stream ends, fails, or is closed (counts seen so far); also works with `Handler`. `Response.Usage()` returns the same value |
 
 An upstream's `Retry-After` reaches the error as `RetryAfter`, pauses that endpoint, and is relayed by `Handler`. Stored responses and interactions are remembered per endpoint, so follow-up turns return to it.
+
+The default HTTP client follows redirects only within the original scheme, host, and port. A supplied `Config.Client` owns its redirect policy and must protect custom authentication headers. Stream health is reported at completion, not at the commit point; caller cancellation and early `Body.Close` do not penalize the endpoint.
+
+`route.EndpointOptions.MaxStreamFrameBytes` overrides the gateway limit for one endpoint. Direct codec users set `apix.ExchangeOptions.MaxStreamFrameBytes`. Raise the limit explicitly for larger image frames; it includes comments and wire line separators, but not separators supplied at EOF.
 
 ## Errors
 
@@ -185,6 +190,8 @@ for _, frame := range events {
 }
 decoder.Finish() // after all converter output
 ```
+
+Check `decoder.Err()` after consuming events and after `Finish`; `sse.ErrFrameTooLarge` is terminal, but earlier events remain valid. `Decoder.MaxFrameBytes` and `sse.NewFramerWithLimit` configure the same default 64 MiB frame limit. A negative limit explicitly allows trusted, unbounded input.
 
 ## Documentation
 

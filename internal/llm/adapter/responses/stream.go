@@ -50,16 +50,17 @@ type StreamConverter struct {
 // "messages", "responses"); unknown formats fail on first Feed with
 // ClassUnsupported (same classes as BuildRequest).
 func NewStreamConverter(outputFormat string, tools ...*shared.ConversionContext) *StreamConverter {
+	context := shared.ContextOrNew(tools)
 	sc := &StreamConverter{
 		// wantRaw only for the Responses passthrough, which
 		// forwards verbatim blocks; a rebuilt single data line would
 		// embed raw newlines from legally multi-data-line frames and
 		// corrupt native framing. Conversion targets parse the joined
 		// payload and never read raw.
-		framer:       shared.NewSSEFramer(outputFormat == "responses"),
+		framer:       shared.NewSSEFramer(outputFormat == "responses", context.Options.MaxStreamFrameBytes),
 		outputFormat: outputFormat,
 		id:           "apix",
-		context:      shared.ContextOrNew(tools),
+		context:      context,
 	}
 	sc.native = newNativeOutput()
 	alloc := sc.allocIndex
@@ -288,7 +289,7 @@ func (sc *StreamConverter) Feed(chunk []byte) (events [][]byte, done bool, eErr 
 	for {
 		eventType, payload, raw, ok := sc.framer.Next()
 		if !ok {
-			return events, done, nil
+			return events, done, shared.SSEFrameError(sc.framer)
 		}
 		if (eventType == "response.completed" || eventType == "response.incomplete" || sc.ending && payload != "") && !shared.IsJSONObject(payload) {
 			return events, false, errclass.Translation("Responses stream has an incomplete event payload")

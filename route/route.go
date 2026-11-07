@@ -10,7 +10,10 @@
 package route
 
 import (
+	"cmp"
 	"fmt"
+	"math"
+	"math/big"
 	"math/rand/v2"
 	"slices"
 	"sync"
@@ -51,6 +54,9 @@ type Endpoint struct {
 // EndpointOptions are the exchange options that belong to an endpoint. The
 // response protocol and reasoning overrides belong to each request instead.
 type EndpointOptions struct {
+	// MaxStreamFrameBytes overrides the gateway's upstream SSE frame limit.
+	// Zero uses the gateway default; a negative value disables the limit.
+	MaxStreamFrameBytes int
 	// LossPolicy selects which known request conversion losses are permitted.
 	LossPolicy apix.LossPolicy
 	// Ext holds options defined by the endpoint protocol's package, such as
@@ -60,7 +66,7 @@ type EndpointOptions struct {
 
 // Exchange returns the options as apix.ExchangeOptions.
 func (o EndpointOptions) Exchange() apix.ExchangeOptions {
-	return apix.ExchangeOptions{LossPolicy: o.LossPolicy, Ext: o.Ext}
+	return apix.ExchangeOptions{LossPolicy: o.LossPolicy, Ext: o.Ext, MaxStreamFrameBytes: o.MaxStreamFrameBytes}
 }
 
 // UpstreamModel returns the upstream model for a client model and whether the
@@ -351,7 +357,7 @@ func (NativeFirst) Order(_ apix.RequestInfo, candidates []Candidate, intn func(i
 			}
 			return 1
 		}
-		return a.Endpoint.Priority - b.Endpoint.Priority
+		return cmp.Compare(a.Endpoint.Priority, b.Endpoint.Priority)
 	})
 	for start := 0; start < len(out); {
 		end := start + 1
@@ -371,6 +377,10 @@ func weightedShuffle(group []Candidate, intn func(int) int) {
 	for i := 0; i < len(group)-1; i++ {
 		total := 0
 		for _, c := range group[i:] {
+			if weight(c) > math.MaxInt-total {
+				weightedShuffleLarge(group[i:], intn)
+				return
+			}
 			total += weight(c)
 		}
 		pick := intn(total)
@@ -380,6 +390,42 @@ func weightedShuffle(group []Candidate, intn func(int) int) {
 				break
 			}
 			pick -= weight(group[j])
+		}
+	}
+}
+
+func weightedShuffleLarge(group []Candidate, intn func(int) int) {
+	var total, current big.Int
+	for _, candidate := range group {
+		total.Add(&total, current.SetInt64(int64(weight(candidate))))
+	}
+	for index := 0; index < len(group)-1; index++ {
+		pick := randomBelow(&total, intn)
+		for selected := index; selected < len(group); selected++ {
+			current.SetInt64(int64(weight(group[selected])))
+			if pick.Cmp(&current) < 0 {
+				group[index], group[selected] = group[selected], group[index]
+				total.Sub(&total, &current)
+				break
+			}
+			pick.Sub(pick, &current)
+		}
+	}
+}
+
+func randomBelow(total *big.Int, intn func(int) int) *big.Int {
+	var pick, part big.Int
+	for {
+		pick.SetInt64(0)
+		for remaining := total.BitLen(); remaining > 0; {
+			width := min(remaining, 30)
+			pick.Lsh(&pick, uint(width))
+			part.SetInt64(int64(intn(1 << width)))
+			pick.Or(&pick, &part)
+			remaining -= width
+		}
+		if pick.Cmp(total) < 0 {
+			return &pick
 		}
 	}
 }

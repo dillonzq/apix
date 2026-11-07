@@ -116,13 +116,8 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          # go test writes a crashing input to internal/llm/translate/testdata/fuzz/<Target>/; keeping
-          # it lets the failure become a permanent regression case.
           name: fuzz-failures
-          path: |
-            internal/llm/translate/testdata/fuzz/**
-            protocol/gemini/testdata/fuzz/**
-            internal/image/testdata/fuzz/**
+          path: '**/testdata/fuzz/**'
           if-no-files-found: ignore
           retention-days: 14
 

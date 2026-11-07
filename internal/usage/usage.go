@@ -10,6 +10,7 @@ import (
 
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/internal/jsonedit"
+	"github.com/dillonzq/apix/sse"
 )
 
 // Dialect names the usage fields of one family of protocols.
@@ -48,6 +49,7 @@ var paths = map[Dialect][][]string{
 // keeps only data payloads, in buffers it reuses, and decodes a frame only
 // when it may hold a usage key.
 type Tracker struct {
+	limit   sse.FrameLimiter
 	dialect Dialect
 	partial []byte // a line split across chunks
 	cr      bool   // the last chunk ended a line with '\r'
@@ -61,11 +63,15 @@ type Tracker struct {
 
 // New returns a tracker for d, or nil for the zero Dialect: a protocol that
 // reports no usage.
-func New(d Dialect) *Tracker {
+func New(d Dialect, maxFrameBytes ...int) *Tracker {
 	if d == 0 {
 		return nil
 	}
-	return &Tracker{dialect: d}
+	tracker := &Tracker{dialect: d}
+	if len(maxFrameBytes) > 0 {
+		tracker.limit.MaxBytes = maxFrameBytes[0]
+	}
+	return tracker
 }
 
 // Body merges usage from an ordinary response, replacing previously recorded
@@ -85,6 +91,16 @@ func (t *Tracker) Feed(chunk []byte) {
 	if t == nil {
 		return
 	}
+	accepted, err := t.limit.Feed(chunk)
+	t.feed(accepted)
+	if err != nil {
+		t.partial = nil
+		t.data = nil
+		t.lines = 0
+	}
+}
+
+func (t *Tracker) feed(chunk []byte) {
 	for len(chunk) > 0 {
 		if t.cr {
 			// A '\r' ended the previous chunk's line; a '\n' here belongs
@@ -120,7 +136,17 @@ func (t *Tracker) Feed(chunk []byte) {
 
 // End frames a final event whose separator the stream omitted.
 func (t *Tracker) End() {
-	t.Feed([]byte("\n\n"))
+	if t != nil && t.Err() == nil {
+		t.feed([]byte("\n\n"))
+	}
+}
+
+// Err returns a terminal frame-size error, or nil for a nil tracker.
+func (t *Tracker) Err() error {
+	if t == nil {
+		return nil
+	}
+	return t.limit.Err()
 }
 
 // line handles one SSE line as sse.Framer does, for the data it joins: a

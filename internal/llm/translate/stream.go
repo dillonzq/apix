@@ -27,14 +27,20 @@ func NewStreamConverter(upstreamFormat, outputFormat string, state *RequestState
 	if err := validateFormats(upstreamFormat, outputFormat); err != nil {
 		return nil, err
 	}
+	maximum := 0
+	if state != nil {
+		maximum = state.Options.MaxStreamFrameBytes
+	}
 	if upstreamFormat == FormatGemini || outputFormat == FormatGemini {
-		converted := gemini.NewStreamConverter(upstreamFormat, outputFormat, conversionContext(state))
 		if upstreamFormat == FormatGemini {
-			return converted, nil
+			return gemini.NewStreamConverter(upstreamFormat, outputFormat, conversionContext(state)), nil
 		}
+		converted := gemini.NewStreamConverter(upstreamFormat, outputFormat, conversionContext(state), -1)
 		// Reuse source validation and complete source frames. Conversion remains
 		// direct; validation must run before a target terminal can be emitted.
-		validator, err := NewStreamConverter(upstreamFormat, upstreamFormat, nil)
+		validationState := NewRequestState()
+		validationState.Options.MaxStreamFrameBytes = maximum
+		validator, err := NewStreamConverter(upstreamFormat, upstreamFormat, validationState)
 		if err != nil {
 			return nil, err
 		}
@@ -52,7 +58,7 @@ func NewStreamConverter(upstreamFormat, outputFormat string, state *RequestState
 	if outputFormat == FormatChatCompletions {
 		converter = &chatSSEConverter{converter: converter}
 	}
-	return newPublicStreamConverter(converter, upstreamFormat, outputFormat), nil
+	return newPublicStreamConverter(converter, upstreamFormat, outputFormat, maximum), nil
 }
 
 type validatedGeminiStream struct {
@@ -140,10 +146,10 @@ type publicStreamConverter struct {
 	failure   *Error
 }
 
-func newPublicStreamConverter(converter StreamConverter, from, to string) *publicStreamConverter {
+func newPublicStreamConverter(converter StreamConverter, from, to string, maxFrameBytes ...int) *publicStreamConverter {
 	sc := &publicStreamConverter{converter: converter, sequenced: to == FormatResponses && from != to}
 	if from == FormatChatCompletions {
-		sc.input = shared.NewSSEFramer(false)
+		sc.input = shared.NewSSEFramer(false, maxFrameBytes...)
 	}
 	return sc
 }
@@ -176,7 +182,7 @@ func (sc *publicStreamConverter) drain() ([][]byte, bool, *Error) {
 	for {
 		_, data, _, ok := sc.input.Next()
 		if !ok {
-			return events, false, nil
+			return events, false, shared.SSEFrameError(sc.input)
 		}
 		if data == "" {
 			continue
@@ -240,7 +246,7 @@ func (sc *publicStreamConverter) encode(events [][]byte) [][]byte {
 	for i, frame := range events {
 		name, data, ok := splitFrame(frame)
 		if !ok {
-			framer := shared.NewSSEFramer(false)
+			framer := shared.NewSSEFramer(false, -1)
 			framer.Push(frame)
 			var payload string
 			if name, payload, _, ok = framer.Next(); !ok {

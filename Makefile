@@ -81,6 +81,7 @@ fuzz:
 	$(GO) test ./internal/usage -run '^$$' -fuzz '^FuzzTrackerChunkBoundaries$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./internal/usage -run '^$$' -fuzz '^FuzzTrackerMatchesFramer$$' -fuzztime=$(FUZZTIME)
 	$(GO) test ./sse -run '^$$' -fuzz '^FuzzFramerMatchesReference$$' -fuzztime=$(FUZZTIME)
+	$(GO) test ./sse -run '^$$' -fuzz '^FuzzFrameLimitChunkBoundaries$$' -fuzztime=$(FUZZTIME)
 
 bench:
 	$(GO) test ./... -run '^$$' -bench . -benchmem -count=$(BENCHCOUNT)

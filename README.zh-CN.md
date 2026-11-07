@@ -158,11 +158,16 @@ http.Handle("/v1/chat/completions", g.Handler(openai.ChatCompletions))
 | --- | --- |
 | `CommitTimeout` | 单次尝试在限定时间内未到达提交点时取消并切换 |
 | `MaxResponseBytes` | 限制普通响应体大小（默认 64 MiB），超出时切换 |
+| `MaxStreamFrameBytes` | 限制单个上游 SSE 帧（默认 64 MiB），不限制流的总长度；负值显式关闭限制 |
 | `ForwardHeaders` | 透传给客户端的上游响应头，如 `"X-Request-Id"`、`"X-Ratelimit-*"`；`Response.UpstreamHeader` 保留全部响应头 |
 | `ReasoningSuffix` | 按去掉后缀的模型名路由 `model(high)`，并把后缀作为 `Request.Reasoning` |
 | `OnUsage` | 接收已提交尝试的 [Token 用量](#token-用量)：普通响应在 `Do` 返回时触发，流式响应在结束、失败或被关闭时触发一次（提前结束时为已观察到的用量）；`Handler` 同样适用。`Response.Usage()` 返回同一结果 |
 
 上游的 `Retry-After` 会写入错误的 `RetryAfter`，让该端点暂停接收流量，并由 `Handler` 转告客户端。已存储的 response 和 interaction 会记住所属端点，后续轮次回到同一端点。
+
+默认 HTTP 客户端只跟随原始协议、主机和端口内的重定向。自带 `Config.Client` 时，调用方负责其重定向策略和自定义鉴权头的保护。流式健康结果在终态上报，而不是在提交点上报；调用方取消或提前 `Body.Close` 不会惩罚端点。
+
+`route.EndpointOptions.MaxStreamFrameBytes` 可覆盖单个端点的网关限制；直接使用 Codec 时设置 `apix.ExchangeOptions.MaxStreamFrameBytes`。较大的图像帧可显式提高限制；计数包含注释和线路上的换行分隔符，不含 EOF 时补入的分隔符。
 
 ## 错误
 
@@ -184,6 +189,8 @@ for _, frame := range events {
 }
 decoder.Finish() // 处理完所有转换输出后调用
 ```
+
+消费事件后及 `Finish` 后检查 `decoder.Err()`；`sse.ErrFrameTooLarge` 是终态错误，但之前的事件仍然有效。`Decoder.MaxFrameBytes` 和 `sse.NewFramerWithLimit` 可配置同样默认 64 MiB 的帧上限。负值显式允许可信来源的不受限输入。
 
 ## 文档
 

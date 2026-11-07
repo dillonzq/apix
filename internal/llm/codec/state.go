@@ -49,7 +49,7 @@ func (r *recorder) events(events [][]byte) {
 		return
 	}
 	for _, event := range events {
-		framer := shared.NewSSEFramer(false)
+		framer := shared.NewSSEFramer(false, -1)
 		framer.Push(event)
 		framer.End()
 		for {

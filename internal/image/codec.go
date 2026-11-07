@@ -223,5 +223,5 @@ func (c *Codec) NewExchange(client apix.Protocol, opts apix.ExchangeOptions) (ap
 	if opts.Output != "" {
 		output = opts.Output
 	}
-	return &exchange{client: client, upstream: c.id, output: output, policy: opts.LossPolicy, options: o, usage: usage.New(c.proto.usage())}, nil
+	return &exchange{client: client, upstream: c.id, output: output, policy: opts.LossPolicy, options: o, usage: usage.New(c.proto.usage(), opts.MaxStreamFrameBytes), maxStreamFrameBytes: opts.MaxStreamFrameBytes}, nil
 }

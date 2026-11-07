@@ -107,7 +107,11 @@ Before the commit point:
 
 A 404 is retryable because model catalogs and stored state differ between upstreams; it does not count against the endpoint's health.
 
-After the commit point nothing is retried, because the client may already have output. A failure surfaces from `Response.Body.Read` as an `*apix.Error` and is reported to health tracking.
+After the commit point nothing is retried, because the client may already have output. A failure surfaces from `Response.Body.Read` as an `*apix.Error`. A stream reports one health outcome when it ends, fails, or is closed: only full completion counts as success. Caller cancellation and early close are inconclusive, release any half-open trial, and do not clear prior failures or penalize the endpoint. Cancellation errors preserve both `context.Canceled` or `context.DeadlineExceeded` and a custom cancellation cause through `errors.Is`.
+
+`Config.MaxStreamFrameBytes` limits each upstream SSE frame to 64 MiB by default, including comments and wire line separators, without limiting the stream's total length. `route.EndpointOptions.MaxStreamFrameBytes` overrides it per endpoint; a negative value explicitly disables the limit for trusted upstreams. Direct codec users set `apix.ExchangeOptions.MaxStreamFrameBytes`. An oversized frame fails over before commit and becomes a terminal read error after commit, preserving valid earlier events. `sse.ErrFrameTooLarge` is available through `errors.Is`.
+
+The default HTTP client follows at most ten requests in a redirect chain and permits only the original scheme, hostname, and effective port. Cross-origin redirects, including HTTPS downgrades, fail before another host can receive credentials. A caller supplying `Config.Client` is responsible for its redirect policy, especially for custom authentication headers.
 
 Authentication follows the protocol's default scheme: `Authorization: Bearer <key>` for OpenAI, `x-api-key: <key>` plus `anthropic-version` for Anthropic, and `x-goog-api-key` for Gemini. `Upstream.Auth` overrides the scheme. `Upstream.Path` overrides the default path for protocols whose path is fixed; it is rejected for protocols whose path depends on the model or the streaming mode, such as GenerateContent, where a prefix belongs in `BaseURL`. The upstream path is built from the converted payload's metadata, so the model and mode in the URL always match what the exchange produced. Headers are layered in this order:
 
