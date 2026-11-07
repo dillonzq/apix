@@ -11,7 +11,7 @@
 [Install](#installation) · [Quick start](#quick-start) · [Routing](#routing) · [Gateway](#gateway) · [Docs](#documentation)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-64748b?style=flat-square)](LICENSE)
-[![Release: v0.3.0](https://img.shields.io/badge/release-v0.3.0-6366f1?style=flat-square)](https://github.com/dillonzq/apix/releases/tag/v0.3.0)
+[![Release: v0.4.0](https://img.shields.io/badge/release-v0.4.0-6366f1?style=flat-square)](https://github.com/dillonzq/apix/releases/tag/v0.4.0)
 [![Go: 1.26.10+](https://img.shields.io/badge/Go-1.26.10%2B-0891b2?style=flat-square&logo=go&logoColor=white)](go.mod)
 [![Dependencies: standard library + moego](https://img.shields.io/badge/dependencies-stdlib_%2B_moego-0d9488?style=flat-square)](go.mod)
 
@@ -60,7 +60,7 @@ Speech and other kinds plug in through the same interfaces; see [adding protocol
 ## Installation
 
 ```sh
-go get github.com/dillonzq/apix@v0.3.0
+go get github.com/dillonzq/apix@v0.4.0
 ```
 
 ## Quick start
@@ -212,7 +212,7 @@ Development:
 - [Architecture](docs/architecture.md): layers, dispatch, and state contracts
 - [Adding protocols and kinds](docs/extending.md): the `Codec` contract and a worked example
 - [CONTRIBUTING.md](CONTRIBUTING.md): checks, design rules, and releases
-- [Release notes](docs/releases): the latest is [v0.3.0](docs/releases/v0.3.0.md), token usage reporting and faster SSE streams
+- [Release notes](docs/releases): the latest is [v0.4.0](docs/releases/v0.4.0.md), the Google namespace, token counting, and gateway hardening
 
 ## Development
 

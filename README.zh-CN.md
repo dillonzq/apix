@@ -11,7 +11,7 @@
 [安装](#安装) · [快速开始](#快速开始) · [路由](#路由) · [网关](#网关) · [文档](#文档)
 
 [![许可证：MIT](https://img.shields.io/badge/license-MIT-64748b?style=flat-square)](LICENSE)
-[![版本：v0.3.0](https://img.shields.io/badge/release-v0.3.0-6366f1?style=flat-square)](https://github.com/dillonzq/apix/releases/tag/v0.3.0)
+[![版本：v0.4.0](https://img.shields.io/badge/release-v0.4.0-6366f1?style=flat-square)](https://github.com/dillonzq/apix/releases/tag/v0.4.0)
 [![Go：1.26.10+](https://img.shields.io/badge/Go-1.26.10%2B-0891b2?style=flat-square&logo=go&logoColor=white)](go.mod)
 [![依赖：标准库 + moego](https://img.shields.io/badge/dependencies-stdlib_%2B_moego-0d9488?style=flat-square)](go.mod)
 
@@ -60,7 +60,7 @@ Token 计数在 Anthropic `count_tokens`、OpenAI Responses `input_tokens` 与 G
 ## 安装
 
 ```sh
-go get github.com/dillonzq/apix@v0.3.0
+go get github.com/dillonzq/apix@v0.4.0
 ```
 
 ## 快速开始
@@ -211,7 +211,7 @@ decoder.Finish() // 处理完所有转换输出后调用
 - [架构](docs/architecture.zh-CN.md)：分层、分派与状态约定
 - [新增协议与 Kind](docs/extending.zh-CN.md)：`Codec` 约定与完整示例
 - [CONTRIBUTING.md](CONTRIBUTING.md)：检查、设计规则与发布流程（英文）
-- [发布说明](docs/releases)：最新为 [v0.3.0](docs/releases/v0.3.0.zh-CN.md)，Token 用量报告与更快的 SSE 流
+- [发布说明](docs/releases)：最新为 [v0.4.0](docs/releases/v0.4.0.zh-CN.md)，Google 命名空间、Token 计数与网关加固
 
 ## 开发
 
