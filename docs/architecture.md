@@ -104,7 +104,7 @@ Each adapter groups its target output state separately:
 - Chat Completions adapter: `messagesOutput`, `responsesOutput`
 - Messages adapter: `chatOutput`, `responsesOutput`
 - Responses adapter: `messagesOutput`, `nativeOutput`
-- Gemini adapter: one `StreamConverter` per direction; with GenerateContent as the target, the source protocol's native converter validates complete frames first (`validatedGeminiStream`)
+- GenerateContent adapter: one `StreamConverter` per direction; with GenerateContent as the target, the source protocol's native converter validates complete frames first (`validatedGoogleStream`)
 
 Source tool identities, argument reconciliation, and termination remain upstream-adapter responsibilities. Chat → Messages and Responses → Messages share `MessagesBlocks`.
 

@@ -104,7 +104,7 @@ SSE 事件在添加 `sequence_number` 或恢复工具名后，若 JSON 跨行，
 - Chat Completions 适配器：`messagesOutput`、`responsesOutput`；
 - Messages 适配器：`chatOutput`、`responsesOutput`；
 - Responses 适配器：`messagesOutput`、`nativeOutput`；
-- Gemini 适配器：每个方向一个 `StreamConverter`；以 GenerateContent 为目标时，先由源协议的原生转换器校验完整帧（`validatedGeminiStream`）。
+- GenerateContent 适配器：每个方向一个 `StreamConverter`；以 GenerateContent 为目标时，先由源协议的原生转换器校验完整帧（`validatedGoogleStream`）。
 
 源工具身份、参数补齐和协议结束判断由上游适配器负责。Chat → Messages 与 Responses → Messages 共用 `MessagesBlocks`。
 
