@@ -81,6 +81,12 @@ Client credentials are never forwarded. Upstream response headers reach clients 
 
 `Request.Output` converts the response to another protocol of the same Kind; empty means the request's protocol. Routing still prefers endpoints that speak the request's protocol, because that is what decides whether the request needs conversion. `Request.Reasoning` overrides the reasoning control for every upstream; with `Config.ReasoningSuffix`, `Do` sets it from a `model(high)` suffix and routes by the model without the suffix.
 
+## Model-dependent paths
+
+Gemini's GenerateContent, GenerateContentImage, and countTokens protocols carry the model, and for generation the streaming mode, in the URL rather than the body. Their `ProtocolSpec.ParsePath` reads `/v1beta/models/{model}:{action}` (`/v1/models/` is also accepted) into `Payload.Metadata`, where the action is `generateContent` or `streamGenerateContent` for generation and `countTokens` for counting; other actions are rejected. `Handler` calls it automatically. Mount these handlers under `/v1beta/models/`. Generation and counting share that prefix, so dispatch on the action before choosing a handler, as shown in [token counting](protocols/tokens.md#gateway-setup).
+
+Outbound, the path is built from the converted payload's metadata: `/v1beta/models/{upstreamModel}:generateContent`, or `:streamGenerateContent?alt=sse` for streams. `Upstream.Path` cannot replace a path that depends on the model or the streaming mode; put any prefix in `BaseURL`. Callers that convert GenerateContent bodies without the gateway pass the metadata themselves; see [GenerateContent URLs](protocols/llm.md#generatecontent-urls).
+
 ## Stream frame limits
 
 `Config.MaxStreamFrameBytes` limits each upstream SSE frame to 64 MiB by default, counting comments and wire line separators but not separators supplied at EOF. It does not limit the stream's total length. `route.EndpointOptions.MaxStreamFrameBytes` overrides it per endpoint, and direct codec users set `apix.ExchangeOptions.MaxStreamFrameBytes`. A negative value explicitly disables the limit for trusted upstreams; raise it explicitly for large image frames.

@@ -40,7 +40,7 @@ Two optional extensions plug into routing:
 
 An `Exchange` must follow these rules:
 
-- `ConvertRequest(req, upstreamModel)` keeps the client's model when `upstreamModel` is empty.
+- `ConvertRequest(req, upstreamModel)` keeps the client's model when `upstreamModel` is empty. A protocol that carries its model or streaming mode in the URL implements `ProtocolSpec.ParsePath` so `gateway.Handler` can fill `Payload.Metadata`; its exchange honors that metadata and writes the effective model and stream mode into the converted payload's `Metadata`, from which the gateway builds the upstream path (see [model-dependent paths](gateway.md#model-dependent-paths)).
 - `ConvertResponse(status, resp)` returns the classified upstream error for statuses of 400 and above. The gateway uses that classification to decide whether to fail over.
 - `NewStreamConverter()` returns `ClassUnsupported` when the protocol does not stream; the spec should then declare `Stream: apix.FramingNone`.
 - Stream converters emit byte events. SSE protocols emit complete SSE frames; binary streams, such as audio, emit raw chunks.

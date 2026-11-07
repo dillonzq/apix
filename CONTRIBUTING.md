@@ -118,7 +118,7 @@ Work through this list; reviewers will check it against the diff.
 6. **Streams have their own contract.** Preserve event order, emit `[DONE]` only for Chat output, keep `sequence_number` monotonic for synthesized Responses events, validate termination in `Finish`, and never discard events that were produced before an error.
 7. **Update snapshots deliberately.** `go test ./internal/llm/translate -run 'Test(Protocol|GeminiProtocol)Golden' -update` rewrites the 48 snapshots under `internal/llm/translate/testdata/conversion/`. Read every changed line and explain it in the pull request. Never regenerate snapshots to make a red test green; if you cannot explain a diff, that is the bug.
 8. **Update the documentation.** Each topic has one home:
-   - mappings and limits per protocol: [LLM](docs/protocols/llm.md), [Gemini](docs/protocols/gemini.md), [image](docs/protocols/image.md), and [token counting](docs/protocols/tokens.md);
+   - mappings and limits per Kind: [LLM](docs/protocols/llm.md), [image](docs/protocols/image.md), and [token counting](docs/protocols/tokens.md);
    - endpoint selection and health: [routing](docs/routing.md); execution, failover, and limits: [gateway](docs/gateway.md);
    - module responsibilities and invariants: [architecture](docs/architecture.md); the `Codec` contract: [extending](docs/extending.md).
 

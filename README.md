@@ -49,7 +49,7 @@ The library is layered. The core converts and decides routes without any network
 | `tokens` | `openai.responses.input-tokens` | `openai.ResponsesInputTokens` | `POST /v1/responses/input_tokens` |
 | `tokens` | `gemini.count-tokens` | `gemini.CountTokens` | `POST /v1beta/models/{model}:countTokens` |
 
-Chat Completions, Responses, Messages, and Gemini GenerateContent convert directly in all twelve directions; Interactions is native-only. Conversion covers text, image/file/audio/video input, function and custom tools, local shell adaptation, reasoning and its replay history, usage, structured output, cache hints, and representable citations. Same-protocol requests keep provider fields; only the model and explicitly configured options change them. See [LLM protocol conversion](docs/protocols/llm.md) for mappings and limits, and [Gemini protocols](docs/protocols/gemini.md) for URL handling, thinking options, and signed replay.
+Chat Completions, Responses, Messages, and Gemini GenerateContent convert directly in all twelve directions; Interactions is native-only. Conversion covers text, image/file/audio/video input, function and custom tools, local shell adaptation, reasoning and its replay history, usage, structured output, cache hints, and representable citations. Same-protocol requests keep provider fields; only the model and explicitly configured options change them. See [LLM protocol conversion](docs/protocols/llm.md) for mappings and limits, including GenerateContent URLs, Gemini thinking options and thought signatures, and native Interactions.
 
 Image generation and editing convert between OpenAI Images, GenerateContent with image models (such as `gemini-2.5-flash-image`), and Imagen: prompts, input images, counts, sizes and aspect ratios, output formats, and usage. Generations and Imagen take no input image, so edits route only to edits and GenerateContent endpoints. Cross-protocol streams are emulated as one complete event stream. See [image protocol conversion](docs/protocols/image.md).
 
@@ -203,8 +203,7 @@ Usage:
 
 - [Routing](docs/routing.md): endpoint selection, health, affinity, and updates
 - [Gateway](docs/gateway.md): configuration, commit point and failover, headers, and limits
-- [LLM protocol conversion](docs/protocols/llm.md): field mappings, tools, reasoning, streams, and limits
-- [Gemini protocols](docs/protocols/gemini.md): GenerateContent URLs, thinking options, signed replay, and native Interactions
+- [LLM protocol conversion](docs/protocols/llm.md): field mappings, tools, reasoning, streams, and limits, for all four generation protocols and native Interactions
 - [Image protocol conversion](docs/protocols/image.md): generation and editing paths, sizes, losses, and emulated streams
 - [Token counting](docs/protocols/tokens.md): count endpoints, request shaping, and gateway setup
 

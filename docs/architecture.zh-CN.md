@@ -127,4 +127,4 @@ SSE 事件在添加 `sequence_number` 或恢复工具名后，若 JSON 跨行，
 - 流式测试覆盖以下输入：完整输入、逐字节输入、缺少最终分隔符、EOF 前没有终止事件。
 - gateway 用 `httptest` 模拟上游，覆盖同协议优先、各类切换条件、提交点前后的流式失败、熔断、提交超时、亲和性和取消。
 
-验证命令见 [CONTRIBUTING.md](../CONTRIBUTING.md)。执行层见[路由](routing.zh-CN.md)与[网关](gateway.zh-CN.md)，GenerateContent 与 Interactions 的细节见 [Gemini](protocols/gemini.zh-CN.md)，`KindImage` 见[图像协议转换](protocols/image.zh-CN.md)，`KindTokens` 见 [Token 计数](protocols/tokens.zh-CN.md)。
+验证命令见 [CONTRIBUTING.md](../CONTRIBUTING.md)。执行层见[路由](routing.zh-CN.md)与[网关](gateway.zh-CN.md)，`KindLLM`（包括 GenerateContent 与 Interactions）见 [LLM 协议转换](protocols/llm.zh-CN.md)，`KindImage` 见[图像协议转换](protocols/image.zh-CN.md)，`KindTokens` 见 [Token 计数](protocols/tokens.zh-CN.md)。

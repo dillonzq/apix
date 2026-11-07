@@ -40,7 +40,7 @@ type Codec interface {
 
 `Exchange` 的要求：
 
-- `ConvertRequest(req, upstreamModel)`：`upstreamModel` 为空时沿用客户端的模型名。
+- `ConvertRequest(req, upstreamModel)`：`upstreamModel` 为空时沿用客户端的模型名。模型或流式模式位于 URL 的协议应实现 `ProtocolSpec.ParsePath`，让 `gateway.Handler` 填充 `Payload.Metadata`；转换时读取这份元信息，并把有效的模型和流式模式写回转换后 Payload 的 `Metadata`，网关据此生成上游路径（见[随模型变化的路径](gateway.zh-CN.md#随模型变化的路径)）。
 - `ConvertResponse(status, resp)`：遇到错误状态码（≥ 400）时，返回已经分类的上游错误，网关据此判断是否切换候选。
 - `NewStreamConverter()`：不支持流式时返回 `ClassUnsupported`；Spec 应同时声明 `Stream: apix.FramingNone`。
 - 流式转换器的输出是字节事件：SSE 协议输出完整的 SSE 帧，二进制流（如音频）直接输出数据块。

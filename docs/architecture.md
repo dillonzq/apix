@@ -127,4 +127,4 @@ The commit point and failover rules are documented for users in [gateway](gatewa
 - Stream tests cover whole input, bytewise input, a missing final separator, and EOF without a terminal event.
 - Gateway tests use `httptest` upstreams to cover native preference, each failover condition, stream failures before and after the commit point, the breaker, commit timeouts, affinity, and cancellation.
 
-Validation commands are in [CONTRIBUTING.md](../CONTRIBUTING.md). See [routing](routing.md) and [gateway](gateway.md) for the execution layers, [Gemini](protocols/gemini.md) for GenerateContent and Interactions specifics, [image protocol conversion](protocols/image.md) for `KindImage`, and [token counting](protocols/tokens.md) for `KindTokens`.
+Validation commands are in [CONTRIBUTING.md](../CONTRIBUTING.md). See [routing](routing.md) and [gateway](gateway.md) for the execution layers, [LLM protocol conversion](protocols/llm.md) for `KindLLM`, including GenerateContent and Interactions, [image protocol conversion](protocols/image.md) for `KindImage`, and [token counting](protocols/tokens.md) for `KindTokens`.

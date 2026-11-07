@@ -81,6 +81,12 @@ http.Handle("/v1/chat/completions", g.Handler(openai.ChatCompletions))
 
 `Request.Output` 把响应转换为同 Kind 的另一种协议，为空时即请求协议。路由仍然优先选择与请求协议相同的端点，因为请求是否需要转换取决于请求协议。`Request.Reasoning` 会为每个上游覆盖推理控制；开启 `Config.ReasoningSuffix` 后，`Do` 从 `model(high)` 后缀生成它，并按去掉后缀的模型名路由。
 
+## 随模型变化的路径
+
+Gemini 的 GenerateContent、GenerateContentImage 和 countTokens 协议把模型（生成协议还有流式模式）放在 URL 而不是请求体中。它们的 `ProtocolSpec.ParsePath` 把 `/v1beta/models/{model}:{action}`（也接受 `/v1/models/` 前缀）解析到 `Payload.Metadata`：生成协议的 action 为 `generateContent` 或 `streamGenerateContent`，计数协议为 `countTokens`，其他 action 会被拒绝。`Handler` 会自动调用它。这些 Handler 应挂载在 `/v1beta/models/` 下。生成与计数共用这个前缀，需要先按操作分发再选择 Handler，示例见 [Token 计数](protocols/tokens.zh-CN.md#网关配置)。
+
+发往上游时，路径由转换后 Payload 的元信息生成：`/v1beta/models/{upstreamModel}:generateContent`，流式为 `:streamGenerateContent?alt=sse`。`Upstream.Path` 不能替换随模型或流式模式变化的路径，前缀应放进 `BaseURL`。不经网关直接转换 GenerateContent 请求体的调用方需要自行传入元信息，见 [GenerateContent URL](protocols/llm.zh-CN.md#generatecontent-url)。
+
 ## 流式帧上限
 
 `Config.MaxStreamFrameBytes` 默认把单个上游 SSE 帧限制为 64 MiB，计数包含注释和线路上的换行分隔符，不含 EOF 时补入的分隔符，也不限制整条流的长度。`route.EndpointOptions.MaxStreamFrameBytes` 可按端点覆盖；直接使用 Codec 时设置 `apix.ExchangeOptions.MaxStreamFrameBytes`。负值显式为可信上游关闭限制；较大的图像帧应显式提高上限。
