@@ -14,7 +14,7 @@ func StripReasoning(targetFormat, sourceFormat string, body []byte) []byte {
 
 // ApplyReasoning replaces the reasoning control of a request already
 // converted from sourceFormat to targetFormat, rendering it with the
-// execution's Messages and Gemini thinking modes. Approximated values are
+// execution's Messages and Google thinking modes. Approximated values are
 // request losses under the execution's loss policy.
 func ApplyReasoning(targetFormat, sourceFormat string, body []byte, r apix.Reasoning, state *RequestState) ([]byte, *Error) {
 	var opts reasoning.Options

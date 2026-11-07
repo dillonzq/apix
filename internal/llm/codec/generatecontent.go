@@ -27,7 +27,7 @@ func parseGooglePath(path string) (apix.RequestMetadata, error) {
 	}
 	model, action, found := strings.Cut(suffix, ":")
 	if !ok || !found || model == "" || strings.ContainsAny(model, "/\\?#") || model == ".." {
-		return apix.RequestMetadata{}, apix.Unsupported("invalid Gemini model path")
+		return apix.RequestMetadata{}, apix.Unsupported("invalid Google model path")
 	}
 	stream := false
 	switch action {
@@ -35,7 +35,7 @@ func parseGooglePath(path string) (apix.RequestMetadata, error) {
 	case "streamGenerateContent":
 		stream = true
 	default:
-		return apix.RequestMetadata{}, apix.Unsupported("unsupported Gemini operation")
+		return apix.RequestMetadata{}, apix.Unsupported("unsupported Google operation")
 	}
 	return apix.RequestMetadata{Model: model, Stream: &stream}, nil
 }
@@ -44,7 +44,7 @@ func validateGoogle(root map[string]json.RawMessage) *apix.Error {
 	// root holds checked JSON; contents must be a non-empty array.
 	contents := jsonedit.Parse(root["contents"])
 	if !contents.IsArray() || !contents.Get("0").Exists() {
-		return apix.Translation("Gemini request requires contents")
+		return apix.Translation("Google request requires contents")
 	}
 	return nil
 }

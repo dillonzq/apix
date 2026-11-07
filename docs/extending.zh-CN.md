@@ -6,7 +6,7 @@ apix 的核心与协议无关。新增一种协议或一种 Kind（如图像生�
 
 ## 放在哪里
 
-- 协议按供应商组织，放在 `protocol/<vendor>/`。例如 OpenAI 图像生成放在 `protocol/openai/images.go`，Gemini 的各类接口放在 `protocol/google/`。
+- 协议按供应商组织，放在 `protocol/<vendor>/`。例如 OpenAI 图像生成放在 `protocol/openai/images.go`，Google 的各类接口放在 `protocol/google/`。
 - 协议 ID 带命名空间，格式为 `<vendor>.<api>`，例如 `openai.images.generations`、`google.generate-content`。
 - 多家供应商共用的同类转换代码放在 `internal/<kind>/`，例如 `internal/image/`。LLM 的现有实现就在 `internal/llm/`。
 - 每个供应商包都提供 `Codecs() []apix.Codec`，调用方用 `apix.NewRegistry(slices.Concat(...))` 显式注册。

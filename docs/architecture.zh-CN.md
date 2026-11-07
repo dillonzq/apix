@@ -43,7 +43,7 @@ flowchart TD
 
 这与引擎原有的分派方式一致：请求按**目标协议**分派，普通响应和流式响应按**上游协议**分派。因此「客户端 X → 上游 Y」一次交换的两个方向都由 Y 的适配器实现。响应默认转回 X；宿主若单独指定了响应格式，可以通过 `ExchangeOptions.Output` 转为同 Kind 的另一协议 Z，这一方向同样由 Y 的适配器实现。转换始终是直接路径，不经过中间表示。同协议请求保留供应商字段，仅改写模型以及显式配置的推理覆盖或工具规范化字段。
 
-GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/generatecontent` 负责任一端为 GenerateContent 的全部路径（双向），引擎入口会先把这些路径交给它。Gemini wire 对象始终是源或目标，不经其他协议中转。GenerateContent 的模型和流式模式通过 `Payload.Metadata` 单独传递；可选的 HTTP Handler 通过 `ProtocolSpec.ParsePath` 从 URL 中取回。
+GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/generatecontent` 负责任一端为 GenerateContent 的全部路径（双向），引擎入口会先把这些路径交给它。Google wire 对象始终是源或目标，不经其他协议中转。GenerateContent 的模型和流式模式通过 `Payload.Metadata` 单独传递；可选的 HTTP Handler 通过 `ProtocolSpec.ParsePath` 从 URL 中取回。
 
 四种生成协议共用一个 Codec 类型，各协议在 Codec 边界上的差异（路径、鉴权、固定头、错误信封、URL 中的模型、额外的请求校验）是 `internal/llm/codec/codec.go` 中 `protocols` 表的一行。Interactions 不与任何协议转换，单独实现于 `internal/llm/codec/interactions.go`，底层是 `internal/llm/adapter/interactions`。
 
@@ -67,9 +67,9 @@ GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/generatec
 | `internal/llm/adapter/generatecontent` | GenerateContent 的全部双向路径：请求、配置、媒体、引用、响应、流 |
 | `internal/llm/adapter/interactions` | 原生 Interactions 响应与流的校验 |
 | `internal/llm/adapter/shared` | 协议类型、内容与媒体、事件构造、工具身份、推理、shell、缓存提示、诊断规则 |
-| `internal/llm/reasoning` | 档位/预算表、Gemini 档位上限、按协议渲染推理覆盖、剥离被取代的推理控制 |
+| `internal/llm/reasoning` | 档位/预算表、Google 档位上限、按协议渲染推理覆盖、剥离被取代的推理控制 |
 | `internal/image` | `KindImage` 的 Codec：OpenAI generations 与 edits、图像模型的 GenerateContent、Imagen；直接的请求与响应转换、原生流校验、模拟流 |
-| `internal/tokens` | `KindTokens` 的 Codec：Messages count_tokens、Responses input_tokens、Gemini countTokens；请求经 `internal/llm/translate` 转换后按计数端点整形 |
+| `internal/tokens` | `KindTokens` 的 Codec：Messages count_tokens、Responses input_tokens、Google countTokens；请求经 `internal/llm/translate` 转换后按计数端点整形 |
 | `internal/usage` | 按方言从上游响应体和 SSE 字节读取 usage 对象，并归一化为 `apix.Usage` |
 | `internal/jsonedit` | 基于 moego/ojson 保序读取和编辑 JSON 字段；无法走快路径时由调用方回退到 `encoding/json` |
 | `internal/vendorerr` | 各供应商错误信封与上游错误体分类，所有 Kind 共用 |
@@ -85,7 +85,7 @@ GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/generatec
 
 原生 Responses 规范化（`openai.ResponsesOptions{NormalizeTools: true}`）使用 `json.RawMessage` 保留未知字段和精确数值；跨协议路径使用已建模类型。两条路径共享工具名称展开、声明去重、身份碰撞，以及历史和 tool choice 引用的校验。它们都通过 `WithToolTransaction` 执行：成功时提交注册表，失败时保留原身份，两种结果都保留诊断。损耗策略只影响请求，其取值只由 `ConversionContext.ValidatePolicy` 一处检查。
 
-`ExchangeOptions.Reasoning` 在 `ConvertRequest` 中分三步执行：先在转换会据此推导目标推理控制的路径上剥离客户端自己的控制，再转换请求，最后按 Exchange 的 Messages、Gemini 推理模式在转换结果上渲染覆盖值。目标无法精确表达的值（如 Gemini 档位中的 `max`）会被近似，并作为请求损耗报告。
+`ExchangeOptions.Reasoning` 在 `ConvertRequest` 中分三步执行：先在转换会据此推导目标推理控制的路径上剥离客户端自己的控制，再转换请求，最后按 Exchange 的 Messages、Google 推理模式在转换结果上渲染覆盖值。目标无法精确表达的值（如 Google 档位中的 `max`）会被近似，并作为请求损耗报告。
 
 上游会存储状态的 Exchange 实现 `apix.StateReporter`。原生 Responses Exchange 从转换后的响应体或 `response.created` 中捕获 response ID，Interactions Exchange 捕获 interaction ID。跨协议输出的 Responses 不报告任何状态，因为它的 ID 并不对应上游存储的对象。
 

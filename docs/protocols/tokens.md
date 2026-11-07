@@ -16,7 +16,7 @@ Chat Completions has no count endpoint, so an upstream that only speaks Chat Com
 
 The three protocols convert in all six directions. A count request carries the same content as a generation request of the same vendor, so conversion reuses the LLM engine:
 
-1. The client's count body is read as its generation request: Messages and Responses bodies as they are, and a Gemini body either as `contents` or as the request inside `generateContentRequest` (`generate_content_request` is also accepted).
+1. The client's count body is read as its generation request: Messages and Responses bodies as they are, and a Google body either as `contents` or as the request inside `generateContentRequest` (`generate_content_request` is also accepted).
 2. That request converts as it would for generation, with the same mappings, diagnostics and loss policy as [LLM protocol conversion](llm.md).
 3. The result is reshaped into the upstream's count body.
 
@@ -24,9 +24,9 @@ The three protocols convert in all six directions. A count request carries the s
 | --- | --- |
 | Messages | `model`, `messages`, `system`, `tools`, `tool_choice`, `thinking`, and `output_config.format` when structured output adds a schema. Generation controls such as `max_tokens`, `stream`, sampling and `output_config.effort` are dropped, because the endpoint rejects them and they do not change the input. |
 | Responses | `model`, `input`, `instructions`, `tools`, `tool_choice`, `parallel_tool_calls`, `reasoning`, `text`. |
-| Gemini | `{"generateContentRequest": {...}}` with `model` set to `models/{upstreamModel}`, so system instructions and tools are counted, not only `contents`. The request keeps `contents`, `systemInstruction`, `tools` and `toolConfig`; `generationConfig` keeps only the response schema fields (`responseMimeType`, `responseSchema`, `responseJsonSchema`), and generation controls such as `maxOutputTokens`, sampling and `thinkingConfig` are dropped. The model also travels in `Payload.Metadata` for the URL. |
+| Google | `{"generateContentRequest": {...}}` with `model` set to `models/{upstreamModel}`, so system instructions and tools are counted, not only `contents`. The request keeps `contents`, `systemInstruction`, `tools` and `toolConfig`; `generationConfig` keeps only the response schema fields (`responseMimeType`, `responseSchema`, `responseJsonSchema`), and generation controls such as `maxOutputTokens`, sampling and `thinkingConfig` are dropped. The model also travels in `Payload.Metadata` for the URL. |
 
-Native requests keep their bytes; only the model changes. For a native Gemini body in the `generateContentRequest` form, the inner `model` is pointed at the upstream model as well.
+Native requests keep their bytes; only the model changes. For a native Google body in the `generateContentRequest` form, the inner `model` is pointed at the upstream model as well.
 
 The count is the upstream's, in its own tokenizer. When a request routes to another vendor, the count is accurate for the model that would serve it there, not for the model the client named.
 
@@ -35,9 +35,9 @@ The count is the upstream's, in its own tokenizer. When a request routes to anot
 | Upstream reply | Count read |
 | --- | --- |
 | Messages, Responses | `input_tokens`, a non-negative integer |
-| Gemini | `totalTokens` (or `total_tokens`), which proto JSON may write as a string; a missing count is 0, because proto JSON omits zero |
+| Google | `totalTokens` (or `total_tokens`), which proto JSON may write as a string; a missing count is 0, because proto JSON omits zero |
 
-Native replies pass through unchanged once the count is checked. Converted replies carry only the count, so Gemini's `cachedContentTokenCount` and `promptTokensDetails` do not reach other protocols. A reply without a valid count is a `ClassUpstream` error, which the gateway treats as a retryable upstream fault. Error statuses are classified like generation errors, and `Handler` renders them in the client protocol's envelope.
+Native replies pass through unchanged once the count is checked. Converted replies carry only the count, so Google's `cachedContentTokenCount` and `promptTokensDetails` do not reach other protocols. A reply without a valid count is a `ClassUpstream` error, which the gateway treats as a retryable upstream fault. Error statuses are classified like generation errors, and `Handler` renders them in the client protocol's envelope.
 
 Count exchanges do not implement `apix.UsageReporter`: counting is not billed usage.
 
@@ -63,7 +63,7 @@ http.Handle("/v1/messages/count_tokens", g.Handler(anthropic.MessagesCountTokens
 http.Handle("/v1/responses/input_tokens", g.Handler(openai.ResponsesInputTokens))
 ```
 
-Gemini's generation and count operations share the `/v1beta/models/` prefix. Dispatch on the action before choosing a handler:
+Google's generation and count operations share the `/v1beta/models/` prefix. Dispatch on the action before choosing a handler:
 
 ```go
 generate, count := g.Handler(google.GenerateContent), g.Handler(google.CountTokens)

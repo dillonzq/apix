@@ -109,7 +109,7 @@ func TestMatrixAndIndependentOutput(t *testing.T) {
 					}
 					if up == google.GenerateContent {
 						if bytes.Contains(req.Body, []byte(`"model"`)) || req.Metadata.Model != "up" {
-							t.Fatalf("Gemini transport metadata %s %+v", req.Body, req.Metadata)
+							t.Fatalf("Google transport metadata %s %+v", req.Body, req.Metadata)
 						}
 					} else if decode(t, req.Body)["model"] != "up" {
 						t.Fatal("model not rewritten")

@@ -33,7 +33,7 @@ type streamBlock struct {
 }
 
 // StreamConverter preserves incremental content while retaining final usage and
-// signatures. A Gemini finishReason is a semantic terminal, not transport EOF.
+// signatures. A Google finishReason is a semantic terminal, not transport EOF.
 // Later signature/usage frames are processed before Finish renders the terminal.
 type StreamConverter struct {
 	from, to      string
@@ -243,7 +243,7 @@ func (s *StreamConverter) googleChunk(root object, raw []byte) ([][]byte, *errcl
 		return nil, errclass.Translation("candidates must be an array")
 	}
 	if feedback := obj(root["promptFeedback"]); str(feedback["blockReason"]) != "" {
-		candidates = []any{object{"index": 0, "content": object{"parts": []any{object{"text": "Request blocked by Gemini."}}}, "finishReason": "SAFETY"}}
+		candidates = []any{object{"index": 0, "content": object{"parts": []any{object{"text": "Request blocked by Google."}}}, "finishReason": "SAFETY"}}
 	}
 	for ci, cv := range candidates {
 		candidate := obj(cv)
@@ -257,7 +257,7 @@ func (s *StreamConverter) googleChunk(root object, raw []byte) ([][]byte, *errcl
 		state := s.candidate(index)
 		if reason := str(candidate["finishReason"]); reason != "" {
 			if reason == "MALFORMED_FUNCTION_CALL" {
-				return out, errclass.UpstreamFallback("Gemini produced a malformed function call")
+				return out, errclass.UpstreamFallback("Google produced a malformed function call")
 			}
 			state.finish = reason
 		}
@@ -412,7 +412,7 @@ func (s *StreamConverter) googlePart(index int, state *streamCandidate, part obj
 			return out, conv.err
 		}
 		if len(items) != 1 {
-			return out, unsupported("unsupported Gemini stream part for Responses")
+			return out, unsupported("unsupported Google stream part for Responses")
 		}
 		item := obj(items[0])
 		item["id"] = s.itemID
@@ -490,7 +490,7 @@ func (s *StreamConverter) closePart(state *streamCandidate) ([][]byte, *errclass
 		return nil, conv.err
 	}
 	if len(items) != 1 {
-		return nil, unsupported("unsupported Gemini stream item")
+		return nil, unsupported("unsupported Google stream item")
 	}
 	item := obj(items[0])
 	item["id"] = s.itemID
@@ -762,7 +762,7 @@ func (s *StreamConverter) otherChunk(name string, root object) ([][]byte, *errcl
 			}
 		}
 	default:
-		return out, unsupported("unsupported Gemini stream source")
+		return out, unsupported("unsupported Google stream source")
 	}
 	return out, nil
 }

@@ -168,7 +168,7 @@ func (e *exchange) openaiToImagenResponse(r openaiResponse) (imagenResponse, *ap
 	return out, nil
 }
 
-// googleImages returns the images of a Gemini response and reports dropped
+// googleImages returns the images of a Google response and reports dropped
 // text; a response without images is an error.
 func (e *exchange) googleImages(r googleResponse) ([]googleBlob, *apix.Error) {
 	images := r.images()

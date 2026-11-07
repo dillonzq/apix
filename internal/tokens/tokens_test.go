@@ -77,12 +77,12 @@ func TestRequestDirections(t *testing.T) {
 					}
 					inner, _ := body["generateContentRequest"].(map[string]any)
 					if len(body) != 1 || inner["model"] != "models/up" || inner["contents"] == nil || inner["systemInstruction"] == nil || inner["tools"] == nil {
-						t.Fatalf("Gemini body %s", out.Body)
+						t.Fatalf("Google body %s", out.Body)
 					}
 					// Generation controls are dropped on converted requests;
 					// native bodies keep theirs.
 					if client != up && inner["generationConfig"] != nil {
-						t.Fatalf("Gemini body keeps generationConfig: %s", out.Body)
+						t.Fatalf("Google body keeps generationConfig: %s", out.Body)
 					}
 					return
 				}
@@ -290,7 +290,7 @@ func TestGoogleRequestForms(t *testing.T) {
 	}
 	toGoogle, _ := reg.NewExchange(tokens.MessagesCountTokens, tokens.CountTokens, apix.ExchangeOptions{})
 	if _, err := toGoogle.ConvertRequest(apix.Payload{Body: []byte(`{"messages":[{"role":"user","content":"hi"}]}`)}, ""); class(err) != apix.ClassTranslation {
-		t.Fatalf("a Gemini upstream needs a model: %v", err)
+		t.Fatalf("a Google upstream needs a model: %v", err)
 	}
 }
 

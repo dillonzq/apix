@@ -49,11 +49,11 @@ apix 在不同供应商的 API 协议之间转换请求、普通响应和流式�
 | `tokens` | `openai.responses.input-tokens` | `openai.ResponsesInputTokens` | `POST /v1/responses/input_tokens` |
 | `tokens` | `google.count-tokens` | `google.CountTokens` | `POST /v1beta/models/{model}:countTokens` |
 
-Chat Completions、Responses、Messages 与 Gemini GenerateContent 在全部十二个方向上直接互转；Interactions 仅支持原生。转换覆盖文本、图片/文件/音频/视频输入、函数与 custom 工具、本地 shell 适配、推理及其历史回传、用量、结构化输出、缓存提示和可表示的引用。同协议请求保留供应商字段，只有模型和显式配置的选项会改动它们。映射与限制见 [LLM 协议转换](docs/protocols/llm.zh-CN.md)，其中也包括 GenerateContent URL、Gemini 推理选项与签名，以及原生 Interactions。
+Chat Completions、Responses、Messages 与 Google GenerateContent 在全部十二个方向上直接互转；Interactions 仅支持原生。转换覆盖文本、图片/文件/音频/视频输入、函数与 custom 工具、本地 shell 适配、推理及其历史回传、用量、结构化输出、缓存提示和可表示的引用。同协议请求保留供应商字段，只有模型和显式配置的选项会改动它们。映射与限制见 [LLM 协议转换](docs/protocols/llm.zh-CN.md)，其中也包括 GenerateContent URL、Google 推理选项与签名，以及原生 Interactions。
 
 图像生成与编辑在 OpenAI Images、图像模型（如 `gemini-2.5-flash-image`）的 GenerateContent 与 Imagen 之间转换：提示词、输入图像、数量、尺寸与宽高比、输出格式和用量。generations 与 Imagen 不接受输入图像，因此编辑请求只会路由到 edits 和 GenerateContent 端点。跨协议的流以一次完整的事件流模拟。详见[图像协议转换](docs/protocols/image.zh-CN.md)。
 
-Token 计数在 Anthropic `count_tokens`、OpenAI Responses `input_tokens` 与 Gemini `countTokens` 之间六个方向直接互转：请求内容按生成请求的方式转换，计数来自上游自己的 tokenizer。Chat Completions 没有计数端点。详见 [Token 计数](docs/protocols/tokens.zh-CN.md)。
+Token 计数在 Anthropic `count_tokens`、OpenAI Responses `input_tokens` 与 Google `countTokens` 之间六个方向直接互转：请求内容按生成请求的方式转换，计数来自上游自己的 tokenizer。Chat Completions 没有计数端点。详见 [Token 计数](docs/protocols/tokens.zh-CN.md)。
 
 语音等其他 Kind 通过同一套接口接入，见[新增协议与 Kind](docs/extending.zh-CN.md)。
 
@@ -123,7 +123,7 @@ if u, ok := ex.(apix.UsageReporter).Usage(); ok {
 }
 ```
 
-`InputTokens` 包含缓存读取和写入，`OutputTokens` 包含推理，因此 Anthropic 单独列出的缓存计数、Gemini 的 thought 和工具调用提示计数都会被计入。`TotalTokens` 取上游给出的总数，没有时取两者之和；`Raw` 保留上游原始 usage 对象，供需要供应商细节的场景使用。流式响应会合并多个事件中的用量，例如 Messages 的 `message_start` 和 `message_delta`。Chat Completions 流只有在请求时才报告用量，见上文 `StreamUsage`。Imagen 不报告用量；Token 计数 Exchange 不实现 `UsageReporter`，因为计数不属于计费用量。
+`InputTokens` 包含缓存读取和写入，`OutputTokens` 包含推理，因此 Anthropic 单独列出的缓存计数、Google 的 thought 和工具调用提示计数都会被计入。`TotalTokens` 取上游给出的总数，没有时取两者之和；`Raw` 保留上游原始 usage 对象，供需要供应商细节的场景使用。流式响应会合并多个事件中的用量，例如 Messages 的 `message_start` 和 `message_delta`。Chat Completions 流只有在请求时才报告用量，见上文 `StreamUsage`。Imagen 不报告用量；Token 计数 Exchange 不实现 `UsageReporter`，因为计数不属于计费用量。
 
 ## 路由
 

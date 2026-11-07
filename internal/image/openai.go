@@ -22,7 +22,7 @@ import (
 type media struct {
 	MIME   string
 	Data   []byte
-	URI    string // remote URL or Gemini fileData URI
+	URI    string // remote URL or Google fileData URI
 	FileID string // OpenAI file ID
 }
 

@@ -39,7 +39,7 @@ type Payload struct {
 	Body        []byte
 	ContentType string
 	// Metadata carries request information that may live outside the body,
-	// for example the model and operation in a Gemini URL. It is ignored on
+	// for example the model and operation in a Google URL. It is ignored on
 	// responses. Metadata takes precedence over body fields when supplied.
 	Metadata RequestMetadata
 }

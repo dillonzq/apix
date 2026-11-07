@@ -208,7 +208,7 @@ func TestErrorsAndSuffixPriority(t *testing.T) {
 	if object(t, body)["thinking"].(map[string]any)["budget_tokens"] != float64(8192) {
 		t.Fatalf("suffix budget: %s", body)
 	}
-	// Gemini has no level above high: the override is approximated and
+	// Google has no level above high: the override is approximated and
 	// reported, and strict policies reject the approximation.
 	for _, policy := range []translate.LossPolicy{translate.LossPolicyAllow, translate.LossPolicyStrict} {
 		state := translate.NewRequestState()

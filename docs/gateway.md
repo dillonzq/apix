@@ -70,7 +70,7 @@ After the commit point nothing is retried, because the client may already have o
 
 ## Requests and headers
 
-Authentication follows the protocol's default scheme: `Authorization: Bearer <key>` for OpenAI, `x-api-key: <key>` plus `anthropic-version` for Anthropic, and `x-goog-api-key` for Gemini. `Upstream.Auth` overrides it. The upstream path is built from the converted payload's metadata, so the model and streaming mode in the URL always match what the exchange produced. Headers are layered in this order, later ones replacing earlier ones:
+Authentication follows the protocol's default scheme: `Authorization: Bearer <key>` for OpenAI, `x-api-key: <key>` plus `anthropic-version` for Anthropic, and `x-goog-api-key` for Google. `Upstream.Auth` overrides it. The upstream path is built from the converted payload's metadata, so the model and streaming mode in the URL always match what the exchange produced. Headers are layered in this order, later ones replacing earlier ones:
 
 1. protocol headers;
 2. `Request.Header`;
@@ -83,7 +83,7 @@ Client credentials are never forwarded. Upstream response headers reach clients 
 
 ## Model-dependent paths
 
-Gemini's GenerateContent, GenerateContentImage, and countTokens protocols carry the model, and for generation the streaming mode, in the URL rather than the body. Their `ProtocolSpec.ParsePath` reads `/v1beta/models/{model}:{action}` (`/v1/models/` is also accepted) into `Payload.Metadata`, where the action is `generateContent` or `streamGenerateContent` for generation and `countTokens` for counting; other actions are rejected. `Handler` calls it automatically. Mount these handlers under `/v1beta/models/`. Generation and counting share that prefix, so dispatch on the action before choosing a handler, as shown in [token counting](protocols/tokens.md#gateway-setup).
+Google's GenerateContent, GenerateContentImage, and countTokens protocols carry the model, and for generation the streaming mode, in the URL rather than the body. Their `ProtocolSpec.ParsePath` reads `/v1beta/models/{model}:{action}` (`/v1/models/` is also accepted) into `Payload.Metadata`, where the action is `generateContent` or `streamGenerateContent` for generation and `countTokens` for counting; other actions are rejected. `Handler` calls it automatically. Mount these handlers under `/v1beta/models/`. Generation and counting share that prefix, so dispatch on the action before choosing a handler, as shown in [token counting](protocols/tokens.md#gateway-setup).
 
 Outbound, the path is built from the converted payload's metadata: `/v1beta/models/{upstreamModel}:generateContent`, or `:streamGenerateContent?alt=sse` for streams. `Upstream.Path` cannot replace a path that depends on the model or the streaming mode; put any prefix in `BaseURL`. Callers that convert GenerateContent bodies without the gateway pass the metadata themselves; see [GenerateContent URLs](protocols/llm.md#generatecontent-urls).
 

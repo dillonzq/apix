@@ -32,7 +32,7 @@ type Options struct {
 	// GoogleMode matches google.GenerateContentOptions.ThinkingMode: budget
 	// mode sends levels as thinkingBudget, level mode sends positive budgets
 	// as thinkingLevel. Empty sends numeric suffixes as budgets and levels as
-	// levels. Gemini has no level above high, so xhigh and max become high.
+	// levels. Google has no level above high, so xhigh and max become high.
 	GoogleMode google.ThinkingMode
 }
 

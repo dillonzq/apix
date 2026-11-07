@@ -49,7 +49,7 @@ func TestVendorProtocols(t *testing.T) {
 	}
 }
 
-// Gemini suffixes follow the exchange's ThinkingMode and never send a level
+// Google suffixes follow the exchange's ThinkingMode and never send a level
 // GenerateContent does not define.
 func TestGoogleModes(t *testing.T) {
 	for _, tc := range []struct {

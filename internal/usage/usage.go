@@ -25,7 +25,7 @@ const (
 	// Messages reads input_tokens, output_tokens and the separate cache
 	// counts, which it adds to the input.
 	Messages
-	// Gemini reads usageMetadata.
+	// Google reads usageMetadata.
 	Google
 	// Interactions reads total_input_tokens and total_output_tokens.
 	Interactions

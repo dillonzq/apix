@@ -1,4 +1,4 @@
-// Package interactions validates the native Gemini Interactions path.
+// Package interactions validates the native Google Interactions path.
 // It intentionally has no cross-protocol conversion or session storage.
 package interactions
 

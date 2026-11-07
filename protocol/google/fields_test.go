@@ -158,7 +158,7 @@ func TestStreamErrorIsTerminal(t *testing.T) {
 		sc, _ = ex.NewStreamConverter()
 		sc.Feed([]byte(strings.Split(wire, "\n\n")[0] + "\n\n"))
 		if _, err = sc.Finish(); err == nil {
-			t.Fatal("accepted truncated Gemini stream")
+			t.Fatal("accepted truncated Google stream")
 		}
 	}
 }
@@ -274,7 +274,7 @@ func TestInvalidReasoningTypesAndSourceTerminals(t *testing.T) {
 		t.Fatal("invalid source terminal accepted")
 	}
 	if bytes.Contains(bytes.Join(events, nil), []byte("finishReason")) {
-		t.Fatal("source validation failure emitted a successful Gemini terminal")
+		t.Fatal("source validation failure emitted a successful Google terminal")
 	}
 }
 

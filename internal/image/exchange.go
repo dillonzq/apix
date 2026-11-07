@@ -36,13 +36,13 @@ type exchange struct {
 	diagnostics              []apix.Diagnostic
 
 	// Set by ConvertRequest for the response.
-	model string // upstream model, reported as Gemini modelVersion
+	model string // upstream model, reported as Google modelVersion
 	// upstreamStream reports that the upstream was asked to stream; it only
 	// happens when the upstream speaks the output protocol.
 	upstreamStream bool
 	// emulate renders the converted response as the output's event stream.
 	emulate bool
-	// candidates is the candidateCount a Gemini client asked for.
+	// candidates is the candidateCount a Google client asked for.
 	candidates int
 	// expected is how many completed images a native OpenAI stream carries.
 	expected int
@@ -250,7 +250,7 @@ func (e *exchange) openaiLosses(r *openaiRequest, mapped ...string) {
 	}
 }
 
-// inlineImages renders input images as Gemini inlineData parts. Stored
+// inlineImages renders input images as Google inlineData parts. Stored
 // OpenAI files and remote URLs cannot be read without I/O.
 func inlineImages(images []media) ([]map[string]any, *apix.Error) {
 	parts := make([]map[string]any, 0, len(images))
@@ -341,12 +341,12 @@ func (e *exchange) googlePrompt(r *googleRequest) (string, []media, *apix.Error)
 		}
 	}
 	if len(texts) == 0 {
-		return "", nil, apix.Translation("Gemini request has no text prompt")
+		return "", nil, apix.Translation("Google request has no text prompt")
 	}
 	return strings.Join(texts, "\n\n"), images, nil
 }
 
-// googleLosses reports the Gemini request fields another upstream cannot
+// googleLosses reports the Google request fields another upstream cannot
 // carry, beyond contents and the mapped generationConfig fields.
 func (e *exchange) googleLosses(r *googleRequest, imageSizeMapped bool) {
 	for _, k := range r.keys {

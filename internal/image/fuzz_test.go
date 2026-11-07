@@ -40,7 +40,7 @@ var streamCases = []streamCase{
 		completedEvent("image_edit")},
 	{google.GenerateContentImage, apix.Payload{Body: []byte(`{"contents":[{"parts":[{"text":"p"}]}]}`)},
 		"data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"ok\"}]}}]}\n\ndata: {\"candidates\":[{\"content\":{\"parts\":[{\"inlineData\":{\"mimeType\":\"image/png\",\"data\":\"aW1n\"}}]},\"finishReason\":\"STOP\"}]}\n\n",
-		// A loose check: Gemini accepts camelCase and snake_case names.
+		// A loose check: Google accepts camelCase and snake_case names.
 		func(_, data string) bool {
 			return strings.Contains(data, "inishReason") || strings.Contains(data, "inish_reason") ||
 				strings.Contains(data, "lockReason") || strings.Contains(data, "lock_reason")

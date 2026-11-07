@@ -1,5 +1,5 @@
 // Package image implements the apix.KindImage protocols: OpenAI image
-// generations and edits, Gemini GenerateContent with image models, and Gemini
+// generations and edits, Google GenerateContent with image models, and Google
 // Imagen. The vendor packages protocol/openai and protocol/google construct
 // these codecs.
 //
@@ -144,11 +144,11 @@ func parseModelPath(path string, actions map[string]bool) (apix.RequestMetadata,
 	}
 	model, action, found := strings.Cut(suffix, ":")
 	if !ok || !found || model == "" || strings.ContainsAny(model, "/\\?#") || model == ".." {
-		return apix.RequestMetadata{}, apix.Unsupported("invalid Gemini model path")
+		return apix.RequestMetadata{}, apix.Unsupported("invalid Google model path")
 	}
 	stream, ok := actions[action]
 	if !ok {
-		return apix.RequestMetadata{}, apix.Unsupported("unsupported Gemini operation")
+		return apix.RequestMetadata{}, apix.Unsupported("unsupported Google operation")
 	}
 	return apix.RequestMetadata{Model: model, Stream: &stream}, nil
 }

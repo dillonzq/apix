@@ -9,7 +9,7 @@ import (
 	"github.com/dillonzq/apix/internal/llm/adapter/shared"
 )
 
-// ConvertResponse converts ordinary responses directly to or from Gemini.
+// ConvertResponse converts ordinary responses directly to or from Google.
 func ConvertResponse(from, to string, status int, body []byte, ctx *shared.ConversionContext) ([]byte, *errclass.Error) {
 	if status >= 400 {
 		return nil, shared.UpstreamStatusError(status, body)
@@ -52,7 +52,7 @@ func responseError(root object, body []byte) *errclass.Error {
 	e := obj(root["error"])
 	if e == nil {
 		if root["error"] != nil {
-			return errclass.UpstreamFallback("malformed Gemini error envelope")
+			return errclass.UpstreamFallback("malformed Google error envelope")
 		}
 		return nil
 	}
@@ -81,7 +81,7 @@ func responseError(root object, body []byte) *errclass.Error {
 func (c *conversion) validateResponse(root object) {
 	candidates := c.array(root["candidates"], "candidates")
 	if len(candidates) == 0 && str(obj(root["promptFeedback"])["blockReason"]) == "" {
-		c.fail("Gemini response has no candidates or prompt feedback")
+		c.fail("Google response has no candidates or prompt feedback")
 	}
 	for _, cv := range candidates {
 		candidate := c.object(cv, "candidates[]")
@@ -90,7 +90,7 @@ func (c *conversion) validateResponse(root object) {
 			c.validateParts(c.array(content["parts"], "candidate.parts"))
 		}
 		if str(candidate["finishReason"]) == "MALFORMED_FUNCTION_CALL" {
-			c.err = errclass.UpstreamFallback("Gemini produced a malformed function call")
+			c.err = errclass.UpstreamFallback("Google produced a malformed function call")
 		}
 	}
 }
@@ -195,11 +195,11 @@ func (c *conversion) renderedParts(parts []any, offset ...int) (content, tools, 
 		if media != nil {
 			mime := str(first(obj(media), "mimeType", "mime_type"))
 			if !strings.HasPrefix(mime, "image/") {
-				c.reject("non-image Gemini output media is not supported")
+				c.reject("non-image Google output media is not supported")
 				continue
 			}
 			if c.to == responses {
-				c.reject("Gemini image output cannot be represented by this Responses path")
+				c.reject("Google image output cannot be represented by this Responses path")
 				continue
 			}
 			v := c.fromMedia(p)
@@ -208,7 +208,7 @@ func (c *conversion) renderedParts(parts []any, offset ...int) (content, tools, 
 			}
 			continue
 		}
-		c.reject("unsupported actual Gemini output part")
+		c.reject("unsupported actual Google output part")
 	}
 	return
 }
@@ -218,7 +218,7 @@ func (c *conversion) renderResponse(root object) object {
 	usage := obj(root["usageMetadata"])
 	candidates := list(root["candidates"])
 	if len(candidates) == 0 {
-		candidates = []any{object{"content": object{"parts": []any{object{"text": "Request blocked by Gemini."}}}, "finishReason": "SAFETY"}}
+		candidates = []any{object{"content": object{"parts": []any{object{"text": "Request blocked by Google."}}}, "finishReason": "SAFETY"}}
 	}
 	var choices []any
 	for ci, cv := range candidates {
@@ -277,7 +277,7 @@ func (c *conversion) renderResponse(root object) object {
 			c.applyCitations(candidate, content, items)
 			return out
 		default:
-			c.reject("unsupported Gemini response target")
+			c.reject("unsupported Google response target")
 		}
 	}
 	return object{"id": id, "object": "chat.completion", "created": time.Now().Unix(), "model": model, "choices": choices, "usage": renderUsage(usage, chat)}
@@ -419,7 +419,7 @@ func (c *conversion) responseToGoogle(root object) object {
 			case "function_call":
 				parts = append(parts, object{"functionCall": object{"id": str(item["call_id"]), "name": str(item["name"]), "args": c.args(item["arguments"])}})
 			default:
-				c.reject("unsupported actual Responses output for Gemini")
+				c.reject("unsupported actual Responses output for Google")
 			}
 		}
 		reason := "stop"
@@ -428,7 +428,7 @@ func (c *conversion) responseToGoogle(root object) object {
 		}
 		add(parts, reason, 0)
 	default:
-		c.reject("unsupported Gemini response source")
+		c.reject("unsupported Google response source")
 	}
 	if len(candidates) > 0 {
 		candidate := obj(candidates[0])

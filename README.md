@@ -49,11 +49,11 @@ The library is layered. The core converts and decides routes without any network
 | `tokens` | `openai.responses.input-tokens` | `openai.ResponsesInputTokens` | `POST /v1/responses/input_tokens` |
 | `tokens` | `google.count-tokens` | `google.CountTokens` | `POST /v1beta/models/{model}:countTokens` |
 
-Chat Completions, Responses, Messages, and Gemini GenerateContent convert directly in all twelve directions; Interactions is native-only. Conversion covers text, image/file/audio/video input, function and custom tools, local shell adaptation, reasoning and its replay history, usage, structured output, cache hints, and representable citations. Same-protocol requests keep provider fields; only the model and explicitly configured options change them. See [LLM protocol conversion](docs/protocols/llm.md) for mappings and limits, including GenerateContent URLs, Gemini thinking options and thought signatures, and native Interactions.
+Chat Completions, Responses, Messages, and Google GenerateContent convert directly in all twelve directions; Interactions is native-only. Conversion covers text, image/file/audio/video input, function and custom tools, local shell adaptation, reasoning and its replay history, usage, structured output, cache hints, and representable citations. Same-protocol requests keep provider fields; only the model and explicitly configured options change them. See [LLM protocol conversion](docs/protocols/llm.md) for mappings and limits, including GenerateContent URLs, Google thinking options and thought signatures, and native Interactions.
 
 Image generation and editing convert between OpenAI Images, GenerateContent with image models (such as `gemini-2.5-flash-image`), and Imagen: prompts, input images, counts, sizes and aspect ratios, output formats, and usage. Generations and Imagen take no input image, so edits route only to edits and GenerateContent endpoints. Cross-protocol streams are emulated as one complete event stream. See [image protocol conversion](docs/protocols/image.md).
 
-Token counting converts directly between Anthropic `count_tokens`, OpenAI Responses `input_tokens` and Gemini `countTokens` in all six directions. The request content converts as it would for generation, and the count comes from the upstream's own tokenizer. Chat Completions has no count endpoint. See [token counting](docs/protocols/tokens.md).
+Token counting converts directly between Anthropic `count_tokens`, OpenAI Responses `input_tokens` and Google `countTokens` in all six directions. The request content converts as it would for generation, and the count comes from the upstream's own tokenizer. Chat Completions has no count endpoint. See [token counting](docs/protocols/tokens.md).
 
 Speech and other kinds plug in through the same interfaces; see [adding protocols and kinds](docs/extending.md).
 
@@ -123,7 +123,7 @@ if u, ok := ex.(apix.UsageReporter).Usage(); ok {
 }
 ```
 
-`InputTokens` includes cache reads and writes, and `OutputTokens` includes reasoning, so Anthropic's separate cache counts and Gemini's thought and tool-use prompt counts are added in. `TotalTokens` is the upstream's total, or the sum when it reports none, and `Raw` keeps the upstream's usage object for vendor-specific detail. Streams merge usage across events, such as Messages `message_start` and `message_delta`. Chat Completions streams report usage only when requested; see `StreamUsage` above. Imagen reports no usage, and token count exchanges do not implement `UsageReporter`, because counting is not billed usage.
+`InputTokens` includes cache reads and writes, and `OutputTokens` includes reasoning, so Anthropic's separate cache counts and Google's thought and tool-use prompt counts are added in. `TotalTokens` is the upstream's total, or the sum when it reports none, and `Raw` keeps the upstream's usage object for vendor-specific detail. Streams merge usage across events, such as Messages `message_start` and `message_delta`. Chat Completions streams report usage only when requested; see `StreamUsage` above. Imagen reports no usage, and token count exchanges do not implement `UsageReporter`, because counting is not billed usage.
 
 ## Routing
 

@@ -57,7 +57,7 @@ When nothing qualifies, `Route` fails:
 
 ## Upstream-owned state
 
-`Inspect` reports the upstream state a request refers to in `RequestInfo.Affinity`, as keys such as `response:resp_1`, `conversation:conv_1`, `interaction:i1`, `file:file-1` or `cached-content:cachedContents/c1`. References to context that conversion cannot carry (`previous_response_id`, `conversation`, `prompt` and `item_reference` in Responses, `previous_interaction_id`, Messages `container`, Gemini `cachedContent`) also set `RequestInfo.Stateful`.
+`Inspect` reports the upstream state a request refers to in `RequestInfo.Affinity`, as keys such as `response:resp_1`, `conversation:conv_1`, `interaction:i1`, `file:file-1` or `cached-content:cachedContents/c1`. References to context that conversion cannot carry (`previous_response_id`, `conversation`, `prompt` and `item_reference` in Responses, `previous_interaction_id`, Messages `container`, Google `cachedContent`) also set `RequestInfo.Stateful`.
 
 - **Native only**: a `Stateful` request only goes to endpoints of the client's protocol. Converting it would silently drop the context.
 - **Owner first**: `route.Affinity` remembers which endpoint owns a key. The owner of the first known key moves to the front. For a `Stateful` request it is returned even while unhealthy, because no other endpoint can serve it.

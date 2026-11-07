@@ -70,7 +70,7 @@ http.Handle("/v1/chat/completions", g.Handler(openai.ChatCompletions))
 
 ## 请求与请求头
 
-鉴权头按协议默认方案注入：OpenAI 用 `Authorization: Bearer <key>`，Anthropic 用 `x-api-key: <key>` 加 `anthropic-version`，Gemini 用 `x-goog-api-key`。`Upstream.Auth` 可以覆盖默认方案。上游路径由转换后 Payload 的元信息生成，URL 中的模型和流式模式总与 Exchange 的输出一致。请求头按以下顺序叠加，后者覆盖前者：
+鉴权头按协议默认方案注入：OpenAI 用 `Authorization: Bearer <key>`，Anthropic 用 `x-api-key: <key>` 加 `anthropic-version`，Google 用 `x-goog-api-key`。`Upstream.Auth` 可以覆盖默认方案。上游路径由转换后 Payload 的元信息生成，URL 中的模型和流式模式总与 Exchange 的输出一致。请求头按以下顺序叠加，后者覆盖前者：
 
 1. 协议固定头；
 2. `Request.Header`；
@@ -83,7 +83,7 @@ http.Handle("/v1/chat/completions", g.Handler(openai.ChatCompletions))
 
 ## 随模型变化的路径
 
-Gemini 的 GenerateContent、GenerateContentImage 和 countTokens 协议把模型（生成协议还有流式模式）放在 URL 而不是请求体中。它们的 `ProtocolSpec.ParsePath` 把 `/v1beta/models/{model}:{action}`（也接受 `/v1/models/` 前缀）解析到 `Payload.Metadata`：生成协议的 action 为 `generateContent` 或 `streamGenerateContent`，计数协议为 `countTokens`，其他 action 会被拒绝。`Handler` 会自动调用它。这些 Handler 应挂载在 `/v1beta/models/` 下。生成与计数共用这个前缀，需要先按操作分发再选择 Handler，示例见 [Token 计数](protocols/tokens.zh-CN.md#网关配置)。
+Google 的 GenerateContent、GenerateContentImage 和 countTokens 协议把模型（生成协议还有流式模式）放在 URL 而不是请求体中。它们的 `ProtocolSpec.ParsePath` 把 `/v1beta/models/{model}:{action}`（也接受 `/v1/models/` 前缀）解析到 `Payload.Metadata`：生成协议的 action 为 `generateContent` 或 `streamGenerateContent`，计数协议为 `countTokens`，其他 action 会被拒绝。`Handler` 会自动调用它。这些 Handler 应挂载在 `/v1beta/models/` 下。生成与计数共用这个前缀，需要先按操作分发再选择 Handler，示例见 [Token 计数](protocols/tokens.zh-CN.md#网关配置)。
 
 发往上游时，路径由转换后 Payload 的元信息生成：`/v1beta/models/{upstreamModel}:generateContent`，流式为 `:streamGenerateContent?alt=sse`。`Upstream.Path` 不能替换随模型或流式模式变化的路径，前缀应放进 `BaseURL`。不经网关直接转换 GenerateContent 请求体的调用方需要自行传入元信息，见 [GenerateContent URL](protocols/llm.zh-CN.md#generatecontent-url)。
 

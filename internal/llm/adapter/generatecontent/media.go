@@ -62,7 +62,7 @@ func (c *conversion) toParts(value any, role string) []any {
 				// Freshly encoded text is valid Base64 by construction.
 				part = c.inlineEncoded("text/plain", base64.StdEncoding.EncodeToString([]byte(c.text(source["data"], "source.data"))))
 			default:
-				c.reject("unsupported Gemini media source")
+				c.reject("unsupported Google media source")
 			}
 			for _, k := range []string{"context", "citations"} {
 				if p[k] != nil {
@@ -84,13 +84,13 @@ func (c *conversion) toParts(value any, role string) []any {
 				f = c.object(p["file"], "file")
 			}
 			if f["file_id"] != nil {
-				c.reject("provider-scoped file_id cannot be sent to Gemini")
+				c.reject("provider-scoped file_id cannot be sent to Google")
 				continue
 			}
 			if data := str(f["file_data"]); data != "" {
 				part = c.mediaURL("", data)
 				if !strings.HasPrefix(data, "data:") {
-					c.reject("Gemini inline files require a data URI with a MIME type")
+					c.reject("Google inline files require a data URI with a MIME type")
 				}
 			} else {
 				part = c.file("", c.text(f["file_url"], "file_url"))
@@ -115,14 +115,14 @@ func (c *conversion) toParts(value any, role string) []any {
 				c.loss("content.video.processing", true)
 			}
 		default:
-			c.reject("unsupported content part for Gemini")
+			c.reject("unsupported content part for Google")
 		}
 		if part != nil {
 			if sig := signatureFrom(p); sig != "" {
 				part["thoughtSignature"] = sig
 			}
 			if (role == "system" || role == "developer") && part["text"] == nil {
-				c.reject("Gemini system instructions require text")
+				c.reject("Google system instructions require text")
 			}
 			if p["cache_control"] != nil {
 				c.loss("content.cache_control", false)
@@ -195,7 +195,7 @@ func (c *conversion) fromMedia(part object) object {
 	inline := c.object(first(part, "inlineData", "inline_data"), "inlineData")
 	file := c.object(first(part, "fileData", "file_data"), "fileData")
 	if inline == nil && file == nil {
-		c.reject("unsupported Gemini part")
+		c.reject("unsupported Google part")
 		return nil
 	}
 	source := inline
@@ -250,7 +250,7 @@ func (c *conversion) fromMedia(part object) object {
 			}
 			return object{"type": "document", "source": s}
 		}
-		c.reject("Messages cannot represent this Gemini media type")
+		c.reject("Messages cannot represent this Google media type")
 		return nil
 	}
 	if strings.HasPrefix(mime, "image/") {
@@ -284,7 +284,7 @@ func (c *conversion) fromMedia(part object) object {
 		return object{"type": "input_file", "file_url": uri}
 	}
 	if inline == nil {
-		c.reject("Chat Completions cannot represent a Gemini file URI")
+		c.reject("Chat Completions cannot represent a Google file URI")
 		return nil
 	}
 	return object{"type": "file", "file": object{"file_data": uri}}
