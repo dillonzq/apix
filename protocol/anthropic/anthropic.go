@@ -1,6 +1,7 @@
 // Package anthropic provides codecs for Anthropic wire protocols. Messages
 // belongs to apix.KindLLM and converts directly to and from every other LLM
-// protocol in this module.
+// protocol in this module. MessagesCountTokens belongs to
+// apix.KindCountTokens; see counttokens.go.
 package anthropic
 
 import (
@@ -66,4 +67,4 @@ func MessagesCodec() apix.Codec {
 }
 
 // Codecs returns every Anthropic codec, for apix.NewRegistry.
-func Codecs() []apix.Codec { return []apix.Codec{MessagesCodec()} }
+func Codecs() []apix.Codec { return []apix.Codec{MessagesCodec(), MessagesCountTokensCodec()} }

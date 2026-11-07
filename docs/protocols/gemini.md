@@ -9,7 +9,7 @@
 | `GenerateContentCodec()` | `gemini.generate-content` | Native and direct bidirectional request, response and SSE conversion with Chat Completions, Responses and Messages |
 | `InteractionsCodec()` | `gemini.interactions` | Native only; other protocols, including GenerateContent, are rejected |
 
-`gemini.Codecs()` returns both LLM codecs plus `GenerateContentImageCodec()` and `ImagenCodec()` for `KindImage`; see [image protocols](image.md). Register the other vendors' codecs explicitly when using cross-protocol exchanges. `ExchangeOptions.Output` also works with GenerateContent. Routing still filters eligible endpoints and prefers the client's own protocol.
+`gemini.Codecs()` returns both LLM codecs plus `GenerateContentImageCodec()` and `ImagenCodec()` for `KindImage` (see [image protocols](image.md)) and `CountTokensCodec()` for `KindCountTokens` (see [token counting](count-tokens.md)). Register the other vendors' codecs explicitly when using cross-protocol exchanges. `ExchangeOptions.Output` also works with GenerateContent. Routing still filters eligible endpoints and prefers the client's own protocol.
 
 ## Request metadata and HTTP
 
@@ -26,7 +26,7 @@ info, err := reg.Inspect(gemini.GenerateContent, payload)
 
 A nonempty metadata model and a non-nil stream value override body routing values. Metadata is request-only and is not serialized into the body. `Registry.Inspect` overlays it on the routing information after the codec reads the body; a custom codec's exchange should honor it during conversion.
 
-The Gemini codec's `ProtocolSpec.ParsePath` extracts metadata from `/v1beta/models/{model}:generateContent` or `:streamGenerateContent` (`/v1/models/` is also accepted). `gateway.Handler(gemini.GenerateContent)` calls it automatically. Register that handler at `/v1beta/models/` in an HTTP mux. Other operations such as `countTokens` are rejected.
+The Gemini codec's `ProtocolSpec.ParsePath` extracts metadata from `/v1beta/models/{model}:generateContent` or `:streamGenerateContent` (`/v1/models/` is also accepted). `gateway.Handler(gemini.GenerateContent)` calls it automatically. Register that handler at `/v1beta/models/` in an HTTP mux. Other operations are rejected; `countTokens` belongs to `gemini.CountTokens`, see [token counting](count-tokens.md) for dispatching both from one prefix.
 
 The outbound `ProtocolSpec.Path` chooses `/v1beta/models/{upstreamModel}:generateContent` or `:streamGenerateContent?alt=sse`. Authentication uses `x-goog-api-key`. The converted Gemini payload carries its effective model and stream mode in `Metadata`, and the gateway builds the upstream path from it. `Upstream.Path` cannot replace this model-dependent path; put a prefix in `BaseURL`. Native bodies keep their bytes unless an explicit thinking option changes them. For a Gemini client sent to another protocol, the stream flag is written into the converted JSON request.
 
