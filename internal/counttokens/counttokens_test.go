@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/dillonzq/apix"
@@ -77,6 +78,11 @@ func TestRequestDirections(t *testing.T) {
 					inner, _ := body["generateContentRequest"].(map[string]any)
 					if len(body) != 1 || inner["model"] != "models/up" || inner["contents"] == nil || inner["systemInstruction"] == nil || inner["tools"] == nil {
 						t.Fatalf("Gemini body %s", out.Body)
+					}
+					// Generation controls are dropped on converted requests;
+					// native bodies keep theirs.
+					if client != up && inner["generationConfig"] != nil {
+						t.Fatalf("Gemini body keeps generationConfig: %s", out.Body)
 					}
 					return
 				}
@@ -154,6 +160,25 @@ func TestMessagesOutputConfig(t *testing.T) {
 	}
 }
 
+func TestGeminiOutputSchema(t *testing.T) {
+	ex, _ := registry(t).NewExchange(counttokens.ResponsesInputTokens, counttokens.CountTokens, apix.ExchangeOptions{})
+	out, err := ex.ConvertRequest(apix.Payload{Body: []byte(`{"model":"gpt","input":"hi","max_output_tokens":64,"temperature":0.5,` +
+		`"text":{"format":{"type":"json_schema","name":"r","schema":{"type":"object"}}}}`)}, "gem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner, _ := decode(t, out.Body)["generateContentRequest"].(map[string]any)
+	cfg, _ := inner["generationConfig"].(map[string]any)
+	for k := range cfg {
+		if !strings.HasPrefix(k, "response") {
+			t.Fatalf("generationConfig keeps %s: %s", k, out.Body)
+		}
+	}
+	if cfg["responseMimeType"] == nil || (cfg["responseSchema"] == nil && cfg["responseJsonSchema"] == nil) {
+		t.Fatalf("generationConfig drops the schema: %s", out.Body)
+	}
+}
+
 func TestResponseDirections(t *testing.T) {
 	reg := registry(t)
 	replies := map[apix.Protocol]string{
@@ -216,7 +241,7 @@ func TestHostileResponses(t *testing.T) {
 	reg := registry(t)
 	for up, bodies := range map[apix.Protocol][]string{
 		counttokens.MessagesCountTokens:  {``, `null`, `[]`, `{}`, `{"input_tokens":"x"}`, `{"input_tokens":-1}`, `{"input_tokens":1.5}`, `{"input_tokens":null}`},
-		counttokens.ResponsesInputTokens: {`{"object":"response.input_tokens"}`, `{"input_tokens":1e40}`},
+		counttokens.ResponsesInputTokens: {`{"object":"response.input_tokens"}`, `{"input_tokens":1e40}`, `{"input_tokens":"12"}`},
 		counttokens.CountTokens:          {`null`, `{"totalTokens":-2}`, `{"totalTokens":"many"}`, `{"totalTokens":{}}`},
 	} {
 		for _, client := range all {

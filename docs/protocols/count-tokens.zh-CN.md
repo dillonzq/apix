@@ -24,7 +24,7 @@ Chat Completions 没有计数端点，因此只支持 Chat Completions 的上游
 | --- | --- |
 | Messages | `model`、`messages`、`system`、`tools`、`tool_choice`、`thinking`；结构化输出会增加 schema，因此保留 `output_config.format`。`max_tokens`、`stream`、采样参数和 `output_config.effort` 等生成控制会被丢弃：端点不接受它们，它们也不影响输入。 |
 | Responses | `model`、`input`、`instructions`、`tools`、`tool_choice`、`parallel_tool_calls`、`reasoning`、`text`。 |
-| Gemini | `{"generateContentRequest": {...}}`，其中 `model` 为 `models/{upstreamModel}`，这样系统指令、工具和配置都会计入，而不只是 `contents`。模型同时通过 `Payload.Metadata` 进入 URL。 |
+| Gemini | `{"generateContentRequest": {...}}`，其中 `model` 为 `models/{upstreamModel}`，这样系统指令和工具都会计入，而不只是 `contents`。请求保留 `contents`、`systemInstruction`、`tools` 与 `toolConfig`；`generationConfig` 只保留响应 schema 相关字段（`responseMimeType`、`responseSchema`、`responseJsonSchema`），`maxOutputTokens`、采样参数和 `thinkingConfig` 等生成控制会被丢弃。模型同时通过 `Payload.Metadata` 进入 URL。 |
 
 原生请求保留原始字节，只改模型。原生 Gemini body 若使用 `generateContentRequest` 形式，其内部的 `model` 也会改为上游模型。
 

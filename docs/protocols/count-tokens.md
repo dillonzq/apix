@@ -24,7 +24,7 @@ The three protocols convert in all six directions. A count request carries the s
 | --- | --- |
 | Messages | `model`, `messages`, `system`, `tools`, `tool_choice`, `thinking`, and `output_config.format` when structured output adds a schema. Generation controls such as `max_tokens`, `stream`, sampling and `output_config.effort` are dropped, because the endpoint rejects them and they do not change the input. |
 | Responses | `model`, `input`, `instructions`, `tools`, `tool_choice`, `parallel_tool_calls`, `reasoning`, `text`. |
-| Gemini | `{"generateContentRequest": {...}}` with `model` set to `models/{upstreamModel}`, so system instructions, tools and configuration are counted, not only `contents`. The model also travels in `Payload.Metadata` for the URL. |
+| Gemini | `{"generateContentRequest": {...}}` with `model` set to `models/{upstreamModel}`, so system instructions and tools are counted, not only `contents`. The request keeps `contents`, `systemInstruction`, `tools` and `toolConfig`; `generationConfig` keeps only the response schema fields (`responseMimeType`, `responseSchema`, `responseJsonSchema`), and generation controls such as `maxOutputTokens`, sampling and `thinkingConfig` are dropped. The model also travels in `Payload.Metadata` for the URL. |
 
 Native requests keep their bytes; only the model changes. For a native Gemini body in the `generateContentRequest` form, the inner `model` is pointed at the upstream model as well.
 

@@ -18,6 +18,10 @@ import (
 var (
 	messagesFields  = []string{"model", "messages", "system", "tools", "tool_choice", "thinking"}
 	responsesFields = []string{"model", "input", "instructions", "tools", "tool_choice", "parallel_tool_calls", "reasoning", "text"}
+	geminiFields    = []string{"contents", "systemInstruction", "system_instruction", "tools", "toolConfig", "tool_config"}
+	// geminiSchemaFields are the generationConfig members that add a response
+	// schema to the input; the other members only steer generation.
+	geminiSchemaFields = []string{"responseMimeType", "response_mime_type", "responseSchema", "response_schema", "responseJsonSchema", "response_json_schema"}
 )
 
 // Gemini wraps a full generation request in generateContentRequest; the
@@ -218,8 +222,17 @@ func countBody(format string, gen []byte, model string) ([]byte, *apix.Error) {
 	case ids.FormatResponses:
 		out = pick(root, responsesFields)
 	default:
-		root["model"], _ = json.Marshal("models/" + strings.TrimPrefix(model, "models/"))
-		inner, _ := json.Marshal(root)
+		req := pick(root, geminiFields)
+		for _, key := range []string{"generationConfig", "generation_config"} {
+			var cfg map[string]json.RawMessage
+			if raw, ok := root[key]; ok && json.Unmarshal(raw, &cfg) == nil {
+				if schema := pick(cfg, geminiSchemaFields); len(schema) > 0 {
+					req[key], _ = json.Marshal(schema)
+				}
+			}
+		}
+		req["model"], _ = json.Marshal("models/" + strings.TrimPrefix(model, "models/"))
+		inner, _ := json.Marshal(req)
 		out = map[string]json.RawMessage{"generateContentRequest": inner}
 	}
 	body, _ := json.Marshal(out)
@@ -287,8 +300,8 @@ func readCount(format string, body []byte) (int64, *apix.Error) {
 		return 0, apix.UpstreamFallback(string(byFormat(format)) + " response has no " + key)
 	}
 	var n int64
-	// Proto JSON may encode integers as strings.
-	if len(raw) > 0 && raw[0] == '"' {
+	// Gemini's proto JSON may encode integers as strings.
+	if format == ids.FormatGemini && len(raw) > 0 && raw[0] == '"' {
 		var s string
 		if json.Unmarshal(raw, &s) == nil {
 			raw = json.RawMessage(s)
