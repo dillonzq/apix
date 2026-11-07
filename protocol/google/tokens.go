@@ -1,11 +1,11 @@
-package gemini
+package google
 
 import (
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/internal/tokens"
 )
 
-// CountTokens is "gemini.count-tokens": POST
+// CountTokens is "google.count-tokens": POST
 // /v1beta/models/{model}:countTokens. It belongs to apix.KindTokens and
 // converts directly to and from anthropic.MessagesCountTokens and
 // openai.ResponsesInputTokens. The model lives in the URL; pass it as

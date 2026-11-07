@@ -7,13 +7,13 @@ import (
 
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/protocol/anthropic"
-	"github.com/dillonzq/apix/protocol/gemini"
+	"github.com/dillonzq/apix/protocol/google"
 	"github.com/dillonzq/apix/protocol/openai"
 )
 
 func fullRegistry(t *testing.T) *apix.Registry {
 	t.Helper()
-	reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), gemini.Codecs())...)
+	reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), google.Codecs())...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,9 +36,9 @@ func TestInspectStateReferences(t *testing.T) {
 		{openai.ChatCompletions, `{"model":"m","messages":[{"role":"user","content":[{"type":"file","file":{"file_id":"file-1"}}]}]}`, []string{"file:file-1"}, false},
 		{anthropic.Messages, `{"model":"m","messages":[{"role":"user","content":[{"type":"document","source":{"type":"file","file_id":"file_1"}}]}]}`, []string{"file:file_1"}, false},
 		{anthropic.Messages, `{"model":"m","container":"ctr_1","messages":[]}`, []string{"container:ctr_1"}, true},
-		{gemini.GenerateContent, `{"cachedContent":"cachedContents/c1","contents":[{"role":"user","parts":[{"fileData":{"mimeType":"application/pdf","fileUri":"https://generativelanguage.googleapis.com/v1beta/files/f1"}},{"fileData":{"mimeType":"video/mp4","fileUri":"https://youtu.be/x"}}]}]}`,
+		{google.GenerateContent, `{"cachedContent":"cachedContents/c1","contents":[{"role":"user","parts":[{"fileData":{"mimeType":"application/pdf","fileUri":"https://generativelanguage.googleapis.com/v1beta/files/f1"}},{"fileData":{"mimeType":"video/mp4","fileUri":"https://youtu.be/x"}}]}]}`,
 			[]string{"cached-content:cachedContents/c1", "file:https://generativelanguage.googleapis.com/v1beta/files/f1"}, true},
-		{gemini.Interactions, `{"model":"m","input":"hi","previous_interaction_id":"i1"}`, []string{"interaction:i1"}, true},
+		{google.Interactions, `{"model":"m","input":"hi","previous_interaction_id":"i1"}`, []string{"interaction:i1"}, true},
 	} {
 		info, err := reg.Inspect(tc.protocol, apix.Payload{Body: []byte(tc.body)})
 		if err != nil || !slices.Equal(info.Affinity, tc.affinity) || info.Stateful != tc.stateful {
@@ -77,14 +77,14 @@ func TestCreatedState(t *testing.T) {
 	if got := created(converted); got != nil {
 		t.Fatalf("converted state %v", got)
 	}
-	interaction, _ := reg.NewExchange(gemini.Interactions, gemini.Interactions, apix.ExchangeOptions{})
+	interaction, _ := reg.NewExchange(google.Interactions, google.Interactions, apix.ExchangeOptions{})
 	if _, err := interaction.ConvertResponse(200, apix.Payload{Body: []byte(`{"id":"i1","status":"completed"}`)}); err != nil {
 		t.Fatal(err)
 	}
 	if got := created(interaction); !slices.Equal(got, []string{"interaction:i1"}) {
 		t.Fatalf("interaction state %v", got)
 	}
-	interaction, _ = reg.NewExchange(gemini.Interactions, gemini.Interactions, apix.ExchangeOptions{})
+	interaction, _ = reg.NewExchange(google.Interactions, google.Interactions, apix.ExchangeOptions{})
 	sc, _ = interaction.NewStreamConverter()
 	drain(t, sc, "event: interaction.created\ndata: {\"event_type\":\"interaction.created\",\"interaction\":{\"id\":\"i2\",\"status\":\"in_progress\"}}\n\nevent: interaction.completed\ndata: {\"event_type\":\"interaction.completed\",\"interaction\":{\"id\":\"i2\",\"status\":\"completed\"}}\n\n")
 	if got := created(interaction); !slices.Equal(got, []string{"interaction:i2"}) {
@@ -105,8 +105,8 @@ func TestReasoningOverride(t *testing.T) {
 		{"responses", openai.Responses, apix.ExchangeOptions{Reasoning: &apix.Reasoning{Effort: "high"}}, `"effort":"high"`},
 		{"messages adaptive", anthropic.Messages, apix.ExchangeOptions{Reasoning: &apix.Reasoning{Effort: "high"}}, `"effort":"high"`},
 		{"messages manual", anthropic.Messages, apix.ExchangeOptions{Reasoning: &apix.Reasoning{Effort: "high"}, Ext: anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}}, `"budget_tokens":24576`},
-		{"gemini budget", gemini.GenerateContent, apix.ExchangeOptions{Reasoning: &apix.Reasoning{Effort: "max"}, Ext: gemini.GenerateContentOptions{ThinkingMode: gemini.ThinkingBudget}}, `"thinkingBudget":128000`},
-		{"gemini level", gemini.GenerateContent, apix.ExchangeOptions{Reasoning: &apix.Reasoning{Budget: ptr(3000)}, Ext: gemini.GenerateContentOptions{ThinkingMode: gemini.ThinkingLevel}}, `"thinkingLevel":"medium"`},
+		{"google budget", google.GenerateContent, apix.ExchangeOptions{Reasoning: &apix.Reasoning{Effort: "max"}, Ext: google.GenerateContentOptions{ThinkingMode: google.ThinkingBudget}}, `"thinkingBudget":128000`},
+		{"google level", google.GenerateContent, apix.ExchangeOptions{Reasoning: &apix.Reasoning{Budget: ptr(3000)}, Ext: google.GenerateContentOptions{ThinkingMode: google.ThinkingLevel}}, `"thinkingLevel":"medium"`},
 	} {
 		ex, err := reg.NewExchange(openai.ChatCompletions, tc.upstream, tc.opts)
 		if err != nil {
@@ -122,7 +122,7 @@ func TestReasoningOverride(t *testing.T) {
 			t.Errorf("accepted reasoning %+v", r)
 		}
 	}
-	if _, err := reg.NewExchange(gemini.Interactions, gemini.Interactions, apix.ExchangeOptions{Reasoning: &apix.Reasoning{Effort: "high"}}); err == nil {
+	if _, err := reg.NewExchange(google.Interactions, google.Interactions, apix.ExchangeOptions{Reasoning: &apix.Reasoning{Effort: "high"}}); err == nil {
 		t.Error("Interactions accepted a reasoning override")
 	}
 }
@@ -139,11 +139,11 @@ func TestValidateOptions(t *testing.T) {
 		{anthropic.Messages, apix.ExchangeOptions{Ext: anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}}, true},
 		{anthropic.Messages, apix.ExchangeOptions{Ext: anthropic.MessagesOptions{ThinkingMode: "budget"}}, false},
 		{openai.ChatCompletions, apix.ExchangeOptions{Ext: anthropic.MessagesOptions{}}, false},
-		{gemini.GenerateContent, apix.ExchangeOptions{Ext: &gemini.GenerateContentOptions{ThinkingMode: "fast"}}, false},
-		{gemini.GenerateContent, apix.ExchangeOptions{Reasoning: &apix.Reasoning{Effort: "turbo"}}, false},
-		{gemini.Interactions, apix.ExchangeOptions{LossPolicy: apix.LossPolicyStrict}, true},
-		{gemini.Interactions, apix.ExchangeOptions{Ext: gemini.GenerateContentOptions{}}, false},
-		{gemini.Interactions, apix.ExchangeOptions{Output: openai.Responses}, false},
+		{google.GenerateContent, apix.ExchangeOptions{Ext: &google.GenerateContentOptions{ThinkingMode: "fast"}}, false},
+		{google.GenerateContent, apix.ExchangeOptions{Reasoning: &apix.Reasoning{Effort: "turbo"}}, false},
+		{google.Interactions, apix.ExchangeOptions{LossPolicy: apix.LossPolicyStrict}, true},
+		{google.Interactions, apix.ExchangeOptions{Ext: google.GenerateContentOptions{}}, false},
+		{google.Interactions, apix.ExchangeOptions{Output: openai.Responses}, false},
 	} {
 		if err := reg.ValidateOptions(tc.upstream, tc.opts); (err == nil) != tc.ok {
 			t.Errorf("%s %+v: %v", tc.upstream, tc.opts, err)
@@ -153,18 +153,18 @@ func TestValidateOptions(t *testing.T) {
 
 func TestInteractionsEnvelopeAndDiagnostics(t *testing.T) {
 	reg := fullRegistry(t)
-	body := reg.EncodeError(gemini.Interactions, apix.FromStatus(429, "slow"))
+	body := reg.EncodeError(google.Interactions, apix.FromStatus(429, "slow"))
 	if !strings.Contains(string(body.Body), `"RESOURCE_EXHAUSTED"`) {
 		t.Fatalf("envelope %s", body.Body)
 	}
-	ex, err := reg.NewExchange(gemini.Interactions, gemini.Interactions, apix.ExchangeOptions{})
+	ex, err := reg.NewExchange(google.Interactions, google.Interactions, apix.ExchangeOptions{})
 	if err != nil || ex.Diagnostics() != nil {
 		t.Fatalf("diagnostics %v %v", ex, err)
 	}
-	if _, err := reg.Inspect(gemini.Interactions, apix.Payload{Body: []byte(`{"model":"m","agent":"a"}`)}); err == nil {
+	if _, err := reg.Inspect(google.Interactions, apix.Payload{Body: []byte(`{"model":"m","agent":"a"}`)}); err == nil {
 		t.Fatal("model and agent accepted together")
 	}
-	if _, err := reg.Inspect(gemini.Interactions, apix.Payload{Body: []byte(`{"agent":7}`)}); err == nil {
+	if _, err := reg.Inspect(google.Interactions, apix.Payload{Body: []byte(`{"agent":7}`)}); err == nil {
 		t.Fatal("non-string agent accepted")
 	}
 }

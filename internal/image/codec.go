@@ -1,6 +1,6 @@
 // Package image implements the apix.KindImage protocols: OpenAI image
 // generations and edits, Gemini GenerateContent with image models, and Gemini
-// Imagen. The vendor packages protocol/openai and protocol/gemini construct
+// Imagen. The vendor packages protocol/openai and protocol/google construct
 // these codecs.
 //
 // Conversion paths are direct: each request converter reads one source wire
@@ -25,8 +25,8 @@ import (
 const (
 	OpenAIGenerations apix.Protocol = "openai.images.generations"
 	OpenAIEdits       apix.Protocol = "openai.images.edits"
-	GeminiImage       apix.Protocol = "gemini.generate-content.image"
-	Imagen            apix.Protocol = "gemini.imagen"
+	GoogleImage       apix.Protocol = "google.generate-content.image"
+	Imagen            apix.Protocol = "google.imagen"
 )
 
 // family groups protocols that share wire types.
@@ -34,7 +34,7 @@ type family int
 
 const (
 	familyOpenAI family = iota // generations and edits share request fields and the response
-	familyGemini               // GenerateContent with an image model
+	familyGoogle               // GenerateContent with an image model
 	familyImagen               // Imagen :predict
 )
 
@@ -52,13 +52,13 @@ type protocol struct {
 
 var protocols = map[apix.Protocol]protocol{
 	OpenAIGenerations: {family: familyOpenAI, path: "/v1/images/generations", auth: apix.AuthBearer, envelope: vendorerr.OpenAI,
-		stream: apix.FramingSSE, accepts: []apix.Protocol{GeminiImage, Imagen}},
+		stream: apix.FramingSSE, accepts: []apix.Protocol{GoogleImage, Imagen}},
 	OpenAIEdits: {family: familyOpenAI, edit: true, path: "/v1/images/edits", auth: apix.AuthBearer, envelope: vendorerr.OpenAI,
-		stream: apix.FramingSSE, accepts: []apix.Protocol{GeminiImage}},
-	GeminiImage: {family: familyGemini, auth: apix.AuthScheme{Header: "x-goog-api-key"}, envelope: vendorerr.Google,
+		stream: apix.FramingSSE, accepts: []apix.Protocol{GoogleImage}},
+	GoogleImage: {family: familyGoogle, auth: apix.AuthScheme{Header: "x-goog-api-key"}, envelope: vendorerr.Google,
 		stream: apix.FramingSSE, accepts: []apix.Protocol{OpenAIGenerations, OpenAIEdits, Imagen}},
 	Imagen: {family: familyImagen, auth: apix.AuthScheme{Header: "x-goog-api-key"}, envelope: vendorerr.Google,
-		stream: apix.FramingNone, accepts: []apix.Protocol{OpenAIGenerations, GeminiImage}},
+		stream: apix.FramingNone, accepts: []apix.Protocol{OpenAIGenerations, GoogleImage}},
 }
 
 // urlModel reports whether the protocol carries the model in its URL.
@@ -69,8 +69,8 @@ func (p protocol) usage() usage.Dialect {
 	switch p.family {
 	case familyOpenAI:
 		return usage.Responses
-	case familyGemini:
-		return usage.Gemini
+	case familyGoogle:
+		return usage.Google
 	}
 	return 0
 }
@@ -109,7 +109,7 @@ func New(id apix.Protocol, ext ExtFunc) *Codec {
 func (c *Codec) Spec() apix.ProtocolSpec {
 	spec := apix.ProtocolSpec{ID: c.id, Kind: apix.KindImage, Method: "POST", Auth: c.proto.auth, Stream: c.proto.stream}
 	switch c.proto.family {
-	case familyGemini:
+	case familyGoogle:
 		spec.Path = func(info apix.RequestInfo, model string) string {
 			if info.Stream {
 				return modelPath(model, "streamGenerateContent?alt=sse")

@@ -1,4 +1,4 @@
-package gemini
+package generatecontent
 
 import (
 	"fmt"
@@ -126,7 +126,7 @@ func (s *StreamConverter) drain() ([][]byte, *errclass.Error) {
 		}
 		var out [][]byte
 		if s.from == Format {
-			out, err = s.geminiChunk(root, raw)
+			out, err = s.googleChunk(root, raw)
 		} else {
 			out, err = s.otherChunk(name, root)
 		}
@@ -200,9 +200,9 @@ func (s *StreamConverter) chatChunk(index int, delta object, reason any, usage o
 	return dataFrame(out)
 }
 
-func (s *StreamConverter) geminiChunk(root object, raw []byte) ([][]byte, *errclass.Error) {
+func (s *StreamConverter) googleChunk(root object, raw []byte) ([][]byte, *errclass.Error) {
 	normalizer := s.converter()
-	normalizer.normalizeGemini(root)
+	normalizer.normalizeGoogle(root)
 	normalizer.object(root["usageMetadata"], "usageMetadata")
 	normalizer.object(root["promptFeedback"], "promptFeedback")
 	for _, cv := range normalizer.array(root["candidates"], "candidates") {
@@ -289,7 +289,7 @@ func (s *StreamConverter) geminiChunk(root object, raw []byte) ([][]byte, *errcl
 				out = append(out, s.chatChunk(index, object{"role": "assistant", "content": ""}, nil, nil))
 				state.started = true
 			}
-			frames, err := s.geminiPart(index, state, part)
+			frames, err := s.googlePart(index, state, part)
 			out = append(out, frames...)
 			if err != nil {
 				return out, err
@@ -318,7 +318,7 @@ func partKind(p object) string {
 	return "media"
 }
 
-func (s *StreamConverter) geminiPart(index int, state *streamCandidate, part object) ([][]byte, *errclass.Error) {
+func (s *StreamConverter) googlePart(index int, state *streamCandidate, part object) ([][]byte, *errclass.Error) {
 	if part["text"] == nil && part["functionCall"] == nil && signature(part) != "" && len(part) == 1 {
 		if len(state.parts) > 0 {
 			obj(state.parts[len(state.parts)-1])["thoughtSignature"] = signature(part)
@@ -512,7 +512,7 @@ func (s *StreamConverter) closePart(state *streamCandidate) ([][]byte, *errclass
 	return out, nil
 }
 
-func (s *StreamConverter) emitGemini(index int, parts []any) [][]byte {
+func (s *StreamConverter) emitGoogle(index int, parts []any) [][]byte {
 	if len(parts) == 0 {
 		return nil
 	}
@@ -544,7 +544,7 @@ func (s *StreamConverter) appendText(index int, key, text string, thought, snaps
 	if thought {
 		p["thought"] = true
 	}
-	return s.emitGemini(index, []any{p})
+	return s.emitGoogle(index, []any{p})
 }
 
 func (s *StreamConverter) call(index int, key string) *streamCall {
@@ -602,7 +602,7 @@ func (s *StreamConverter) otherChunk(name string, root object) ([][]byte, *errcl
 				call.args += str(f["arguments"])
 			}
 			if reason := str(ch["finish_reason"]); reason != "" {
-				state.finish = geminiFinish(reason)
+				state.finish = googleFinish(reason)
 			}
 		}
 	case messages:
@@ -673,7 +673,7 @@ func (s *StreamConverter) otherChunk(name string, root object) ([][]byte, *errcl
 			}
 		case "message_delta":
 			if reason := str(obj(root["delta"])["stop_reason"]); reason != "" {
-				s.candidate(0).finish = geminiFinish(reason)
+				s.candidate(0).finish = googleFinish(reason)
 			}
 			for k, v := range obj(root["usage"]) {
 				s.usage[k] = v
@@ -865,7 +865,7 @@ func (s *StreamConverter) flushCalls(index int, final bool) ([][]byte, *errclass
 		if id == "" {
 			id = "call_" + key
 		}
-		out = append(out, s.emitGemini(index, []any{object{"functionCall": object{"id": id, "name": call.name, "args": args}}})...)
+		out = append(out, s.emitGoogle(index, []any{object{"functionCall": object{"id": id, "name": call.name, "args": args}}})...)
 		call.emitted = true
 	}
 	return out, nil
@@ -896,7 +896,7 @@ func (s *StreamConverter) complete() ([][]byte, *errclass.Error) {
 				return out, err
 			}
 			state := s.candidates[i]
-			out = append(out, dataFrame(object{"responseId": s.id, "modelVersion": s.model, "candidates": []any{object{"index": i, "content": object{"role": "model", "parts": []any{}}, "finishReason": state.finish}}, "usageMetadata": usageToGemini(s.usage, s.from)}))
+			out = append(out, dataFrame(object{"responseId": s.id, "modelVersion": s.model, "candidates": []any{object{"index": i, "content": object{"role": "model", "parts": []any{}}, "finishReason": state.finish}}, "usageMetadata": usageToGoogle(s.usage, s.from)}))
 		}
 	} else {
 		out = append(out, s.start()...)

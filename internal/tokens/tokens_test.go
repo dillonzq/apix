@@ -160,7 +160,7 @@ func TestMessagesOutputConfig(t *testing.T) {
 	}
 }
 
-func TestGeminiOutputSchema(t *testing.T) {
+func TestGoogleOutputSchema(t *testing.T) {
 	ex, _ := registry(t).NewExchange(tokens.ResponsesInputTokens, tokens.CountTokens, apix.ExchangeOptions{})
 	out, err := ex.ConvertRequest(apix.Payload{Body: []byte(`{"model":"gpt","input":"hi","max_output_tokens":64,"temperature":0.5,` +
 		`"text":{"format":{"type":"json_schema","name":"r","schema":{"type":"object"}}}}`)}, "gem")
@@ -222,7 +222,7 @@ func TestOutputOption(t *testing.T) {
 	}
 }
 
-func TestGeminiCounts(t *testing.T) {
+func TestGoogleCounts(t *testing.T) {
 	ex, _ := registry(t).NewExchange(tokens.MessagesCountTokens, tokens.CountTokens, apix.ExchangeOptions{})
 	for body, want := range map[string]string{
 		`{}`:                      `{"input_tokens":0}`, // proto JSON omits a zero count
@@ -265,7 +265,7 @@ func TestUpstreamErrors(t *testing.T) {
 	}
 }
 
-func TestGeminiRequestForms(t *testing.T) {
+func TestGoogleRequestForms(t *testing.T) {
 	reg := registry(t)
 	ex, _ := reg.NewExchange(tokens.CountTokens, tokens.MessagesCountTokens, apix.ExchangeOptions{})
 	out, err := ex.ConvertRequest(apix.Payload{Body: []byte(`{"generate_content_request":{"model":"models/gem","contents":[{"parts":[{"text":"hi"}]}]}}`)}, "")
@@ -288,8 +288,8 @@ func TestGeminiRequestForms(t *testing.T) {
 			t.Errorf("ConvertRequest accepted %s", body)
 		}
 	}
-	toGemini, _ := reg.NewExchange(tokens.MessagesCountTokens, tokens.CountTokens, apix.ExchangeOptions{})
-	if _, err := toGemini.ConvertRequest(apix.Payload{Body: []byte(`{"messages":[{"role":"user","content":"hi"}]}`)}, ""); class(err) != apix.ClassTranslation {
+	toGoogle, _ := reg.NewExchange(tokens.MessagesCountTokens, tokens.CountTokens, apix.ExchangeOptions{})
+	if _, err := toGoogle.ConvertRequest(apix.Payload{Body: []byte(`{"messages":[{"role":"user","content":"hi"}]}`)}, ""); class(err) != apix.ClassTranslation {
 		t.Fatalf("a Gemini upstream needs a model: %v", err)
 	}
 }

@@ -18,15 +18,15 @@ import (
 var (
 	messagesFields  = []string{"model", "messages", "system", "tools", "tool_choice", "thinking"}
 	responsesFields = []string{"model", "input", "instructions", "tools", "tool_choice", "parallel_tool_calls", "reasoning", "text"}
-	geminiFields    = []string{"contents", "systemInstruction", "system_instruction", "tools", "toolConfig", "tool_config"}
-	// geminiSchemaFields are the generationConfig members that add a response
+	googleFields    = []string{"contents", "systemInstruction", "system_instruction", "tools", "toolConfig", "tool_config"}
+	// googleSchemaFields are the generationConfig members that add a response
 	// schema to the input; the other members only steer generation.
-	geminiSchemaFields = []string{"responseMimeType", "response_mime_type", "responseSchema", "response_schema", "responseJsonSchema", "response_json_schema"}
+	googleSchemaFields = []string{"responseMimeType", "response_mime_type", "responseSchema", "response_schema", "responseJsonSchema", "response_json_schema"}
 )
 
 // Gemini wraps a full generation request in generateContentRequest; the
 // proto JSON mapping also accepts the snake_case spelling.
-var geminiWrappers = []string{"generateContentRequest", "generate_content_request"}
+var googleWrappers = []string{"generateContentRequest", "generate_content_request"}
 
 // request is a client count request read as its generation request.
 type request struct {
@@ -50,7 +50,7 @@ func decodeRequest(id apix.Protocol, body []byte) (request, *apix.Error) {
 		return request{}, apix.Translation("malformed " + string(id) + " request JSON")
 	}
 	r := request{body: body}
-	for _, key := range geminiWrappers {
+	for _, key := range googleWrappers {
 		raw, ok := root[key]
 		if !ok || string(raw) == "null" {
 			continue
@@ -143,7 +143,7 @@ func (e *exchange) convertRequest(req apix.Payload, upstreamModel string) ([]byt
 	}
 	if e.clientID == e.upstreamID {
 		if e.clientID == CountTokens {
-			out, err := geminiNative(req.Body, r.wrapper, upstreamModel)
+			out, err := googleNative(req.Body, r.wrapper, upstreamModel)
 			return out, upstreamModel, err
 		}
 		out, err := translate.ConvertRequest(e.upstream.format, upstreamModel, e.client.format, r.body, e.state)
@@ -180,9 +180,9 @@ func bodyModel(body []byte) (string, *apix.Error) {
 	return *doc.Model, nil
 }
 
-// geminiNative keeps a native countTokens body and points the model named
+// googleNative keeps a native countTokens body and points the model named
 // inside generateContentRequest, if any, at the upstream model.
-func geminiNative(body []byte, wrapper, model string) ([]byte, *apix.Error) {
+func googleNative(body []byte, wrapper, model string) ([]byte, *apix.Error) {
 	if wrapper == "" {
 		return body, nil
 	}
@@ -222,11 +222,11 @@ func countBody(format string, gen []byte, model string) ([]byte, *apix.Error) {
 	case ids.FormatResponses:
 		out = pick(root, responsesFields)
 	default:
-		req := pick(root, geminiFields)
+		req := pick(root, googleFields)
 		for _, key := range []string{"generationConfig", "generation_config"} {
 			var cfg map[string]json.RawMessage
 			if raw, ok := root[key]; ok && json.Unmarshal(raw, &cfg) == nil {
-				if schema := pick(cfg, geminiSchemaFields); len(schema) > 0 {
+				if schema := pick(cfg, googleSchemaFields); len(schema) > 0 {
 					req[key], _ = json.Marshal(schema)
 				}
 			}
@@ -285,7 +285,7 @@ func readCount(format string, body []byte) (int64, *apix.Error) {
 		return 0, apix.UpstreamFallback("malformed " + string(byFormat(format)) + " response JSON")
 	}
 	key := "input_tokens"
-	if format == ids.FormatGemini {
+	if format == ids.FormatGenerateContent {
 		key = "totalTokens"
 		if _, ok := root[key]; !ok {
 			if _, ok := root["total_tokens"]; ok {
@@ -301,7 +301,7 @@ func readCount(format string, body []byte) (int64, *apix.Error) {
 	}
 	var n int64
 	// Gemini's proto JSON may encode integers as strings.
-	if format == ids.FormatGemini && len(raw) > 0 && raw[0] == '"' {
+	if format == ids.FormatGenerateContent && len(raw) > 0 && raw[0] == '"' {
 		var s string
 		if json.Unmarshal(raw, &s) == nil {
 			raw = json.RawMessage(s)

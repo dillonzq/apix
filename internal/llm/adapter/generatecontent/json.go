@@ -1,6 +1,6 @@
-// Package gemini implements direct GenerateContent conversions. Gemini wire
+// Package generatecontent implements direct GenerateContent conversions. Gemini wire
 // objects are the source or destination, never an intermediate protocol.
-package gemini
+package generatecontent
 
 import (
 	"bytes"
@@ -15,7 +15,7 @@ import (
 )
 
 // Format is the internal format name of GenerateContent.
-const Format = shared.FormatGemini
+const Format = shared.FormatGenerateContent
 
 const (
 	chat      = shared.FormatChatCompletions

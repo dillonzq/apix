@@ -34,13 +34,13 @@ body:
         - label: openai.responses -> anthropic.messages
         - label: anthropic.messages -> openai.chat-completions
         - label: anthropic.messages -> openai.responses
-        - label: gemini.generate-content -> openai.chat-completions
-        - label: gemini.generate-content -> openai.responses
-        - label: gemini.generate-content -> anthropic.messages
-        - label: openai.chat-completions -> gemini.generate-content
-        - label: openai.responses -> gemini.generate-content
-        - label: anthropic.messages -> gemini.generate-content
-        - label: gemini.interactions (native only)
+        - label: google.generate-content -> openai.chat-completions
+        - label: google.generate-content -> openai.responses
+        - label: google.generate-content -> anthropic.messages
+        - label: openai.chat-completions -> google.generate-content
+        - label: openai.responses -> google.generate-content
+        - label: anthropic.messages -> google.generate-content
+        - label: google.interactions (native only)
         - label: same-protocol passthrough or native Responses normalization
         - label: a new protocol or kind (image, audio, another vendor)
         - label: routing or gateway

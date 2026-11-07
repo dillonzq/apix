@@ -8,13 +8,13 @@ import (
 const (
 	// ImagesGenerations is "openai.images.generations": POST
 	// /v1/images/generations with a JSON body. It belongs to apix.KindImage
-	// and converts directly to and from gemini.GenerateContentImage and
-	// gemini.Imagen.
+	// and converts directly to and from google.GenerateContentImage and
+	// google.Imagen.
 	ImagesGenerations = image.OpenAIGenerations
 	// ImagesEdits is "openai.images.edits": POST /v1/images/edits with a
 	// multipart form, or a JSON body whose images are data URLs or file IDs.
 	// It belongs to apix.KindImage and converts directly to and from
-	// gemini.GenerateContentImage. Converted requests are multipart forms.
+	// google.GenerateContentImage. Converted requests are multipart forms.
 	ImagesEdits = image.OpenAIEdits
 )
 

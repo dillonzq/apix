@@ -1,6 +1,6 @@
 // Package codec adapts the LLM conversion engine in internal/llm/translate to
 // apix.Codec. The vendor packages protocol/openai, protocol/anthropic and
-// protocol/gemini construct these codecs and translate their public option
+// protocol/google construct these codecs and translate their public option
 // types into Options.
 //
 // The four generation protocols share one Codec type; their differences at
@@ -44,8 +44,8 @@ var protocols = map[apix.Protocol]protocol{
 		usage: usage.Responses},
 	ids.Messages: {format: ids.FormatMessages, path: "/v1/messages", auth: apix.AuthScheme{Header: "x-api-key"},
 		headers: map[string]string{"anthropic-version": "2023-06-01"}, envelope: vendorerr.Anthropic, usage: usage.Messages},
-	ids.GenerateContent: {format: ids.FormatGemini, auth: apix.AuthScheme{Header: "x-goog-api-key"}, urlModel: true,
-		envelope: vendorerr.Google, validate: validateGemini, usage: usage.Gemini},
+	ids.GenerateContent: {format: ids.FormatGenerateContent, auth: apix.AuthScheme{Header: "x-goog-api-key"}, urlModel: true,
+		envelope: vendorerr.Google, validate: validateGoogle, usage: usage.Google},
 }
 
 // Options are the engine options an upstream protocol's package may set.
@@ -59,15 +59,15 @@ type Options struct {
 	// NormalizeResponsesTools adapts native Responses requests for upstreams
 	// that only accept function tools (client and upstream Responses only).
 	NormalizeResponsesTools bool
-	// GeminiThinkingMode is "budget" or "level" (upstream GenerateContent
+	// GoogleThinkingMode is "budget" or "level" (upstream GenerateContent
 	// only); empty preserves the client's kind of control.
-	GeminiThinkingMode string
-	// GeminiIncludeThoughts forces thought visibility (upstream
+	GoogleThinkingMode string
+	// GoogleIncludeThoughts forces thought visibility (upstream
 	// GenerateContent only).
-	GeminiIncludeThoughts *bool
-	// GeminiRequireThoughtSignatures rejects unsigned historical function
+	GoogleIncludeThoughts *bool
+	// GoogleRequireThoughtSignatures rejects unsigned historical function
 	// calls (upstream GenerateContent only).
-	GeminiRequireThoughtSignatures bool
+	GoogleRequireThoughtSignatures bool
 	// ChatStreamUsage asks streamed requests for a final usage chunk with
 	// stream_options.include_usage (upstream Chat Completions only).
 	ChatStreamUsage bool
@@ -105,8 +105,8 @@ func (c *Codec) Spec() apix.ProtocolSpec {
 		}
 	}
 	if c.proto.urlModel {
-		spec.Path = geminiPath
-		spec.ParsePath = parseGeminiPath
+		spec.Path = googlePath
+		spec.ParsePath = parseGooglePath
 		return spec
 	}
 	path := c.proto.path
@@ -204,11 +204,11 @@ func (c *Codec) NewExchange(client apix.Protocol, opts apix.ExchangeOptions) (ap
 	state.Options.MaxStreamFrameBytes = opts.MaxStreamFrameBytes
 	state.Options.AllowUnsignedThinking = o.AllowUnsignedThinking
 	state.Options.MessagesThinkingMode = o.MessagesThinkingMode
-	state.Options.GeminiThinkingMode = o.GeminiThinkingMode
-	state.Options.GeminiRequireThoughtSignatures = o.GeminiRequireThoughtSignatures
-	if o.GeminiIncludeThoughts != nil {
-		value := *o.GeminiIncludeThoughts
-		state.Options.GeminiIncludeThoughts = &value
+	state.Options.GoogleThinkingMode = o.GoogleThinkingMode
+	state.Options.GoogleRequireThoughtSignatures = o.GoogleRequireThoughtSignatures
+	if o.GoogleIncludeThoughts != nil {
+		value := *o.GoogleIncludeThoughts
+		state.Options.GoogleIncludeThoughts = &value
 	}
 	ex := &exchange{codec: c, clientID: client, client: from, output: to, state: state, normalize: o.NormalizeResponsesTools,
 		streamUsage: o.ChatStreamUsage, usage: usage.New(c.proto.usage, opts.MaxStreamFrameBytes)}

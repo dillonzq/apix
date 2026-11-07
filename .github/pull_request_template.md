@@ -21,15 +21,15 @@
 - [ ] `openai.responses` → `anthropic.messages`
 - [ ] `anthropic.messages` → `openai.chat-completions`
 - [ ] `anthropic.messages` → `openai.responses`
-- [ ] `gemini.generate-content` → `openai.chat-completions`
-- [ ] `gemini.generate-content` → `openai.responses`
-- [ ] `gemini.generate-content` → `anthropic.messages`
-- [ ] `openai.chat-completions` → `gemini.generate-content`
-- [ ] `openai.responses` → `gemini.generate-content`
-- [ ] `anthropic.messages` → `gemini.generate-content`
-- [ ] `gemini.interactions` (native only)
-- [ ] Image paths: `openai.images.generations`, `openai.images.edits`, `gemini.generate-content.image`, `gemini.imagen` (name the directions below)
-- [ ] Token counting paths: `anthropic.messages.count-tokens`, `openai.responses.input-tokens`, `gemini.count-tokens` (name the directions below)
+- [ ] `google.generate-content` → `openai.chat-completions`
+- [ ] `google.generate-content` → `openai.responses`
+- [ ] `google.generate-content` → `anthropic.messages`
+- [ ] `openai.chat-completions` → `google.generate-content`
+- [ ] `openai.responses` → `google.generate-content`
+- [ ] `anthropic.messages` → `google.generate-content`
+- [ ] `google.interactions` (native only)
+- [ ] Image paths: `openai.images.generations`, `openai.images.edits`, `google.generate-content.image`, `google.imagen` (name the directions below)
+- [ ] Token counting paths: `anthropic.messages.count-tokens`, `openai.responses.input-tokens`, `google.count-tokens` (name the directions below)
 - [ ] Same-protocol model rewrite or passthrough
 - [ ] `openai.ResponsesOptions{NormalizeTools: true}` (native Responses tool normalization)
 - [ ] Streaming only (`StreamConverter`, `sse.Decoder`)

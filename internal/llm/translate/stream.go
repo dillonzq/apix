@@ -7,7 +7,7 @@ import (
 
 	"github.com/dillonzq/apix/internal/jsonedit"
 	"github.com/dillonzq/apix/internal/llm/adapter/chatcompletions"
-	"github.com/dillonzq/apix/internal/llm/adapter/gemini"
+	"github.com/dillonzq/apix/internal/llm/adapter/generatecontent"
 	"github.com/dillonzq/apix/internal/llm/adapter/messages"
 	"github.com/dillonzq/apix/internal/llm/adapter/responses"
 	"github.com/dillonzq/apix/internal/llm/adapter/shared"
@@ -31,11 +31,11 @@ func NewStreamConverter(upstreamFormat, outputFormat string, state *RequestState
 	if state != nil {
 		maximum = state.Options.MaxStreamFrameBytes
 	}
-	if upstreamFormat == FormatGemini || outputFormat == FormatGemini {
-		if upstreamFormat == FormatGemini {
-			return gemini.NewStreamConverter(upstreamFormat, outputFormat, conversionContext(state)), nil
+	if upstreamFormat == FormatGenerateContent || outputFormat == FormatGenerateContent {
+		if upstreamFormat == FormatGenerateContent {
+			return generatecontent.NewStreamConverter(upstreamFormat, outputFormat, conversionContext(state)), nil
 		}
-		converted := gemini.NewStreamConverter(upstreamFormat, outputFormat, conversionContext(state), -1)
+		converted := generatecontent.NewStreamConverter(upstreamFormat, outputFormat, conversionContext(state), -1)
 		// Reuse source validation and complete source frames. Conversion remains
 		// direct; validation must run before a target terminal can be emitted.
 		validationState := NewRequestState()
@@ -44,7 +44,7 @@ func NewStreamConverter(upstreamFormat, outputFormat string, state *RequestState
 		if err != nil {
 			return nil, err
 		}
-		return &validatedGeminiStream{converted: converted, validator: validator}, nil
+		return &validatedGoogleStream{converted: converted, validator: validator}, nil
 	}
 	var converter StreamConverter
 	switch upstreamFormat {
@@ -61,13 +61,13 @@ func NewStreamConverter(upstreamFormat, outputFormat string, state *RequestState
 	return newPublicStreamConverter(converter, upstreamFormat, outputFormat, maximum), nil
 }
 
-type validatedGeminiStream struct {
+type validatedGoogleStream struct {
 	converted StreamConverter
 	validator StreamConverter
 	failure   *Error
 }
 
-func (s *validatedGeminiStream) Feed(chunk []byte) ([][]byte, bool, *Error) {
+func (s *validatedGoogleStream) Feed(chunk []byte) ([][]byte, bool, *Error) {
 	if s.failure != nil {
 		return nil, false, s.failure
 	}
@@ -80,7 +80,7 @@ func (s *validatedGeminiStream) Feed(chunk []byte) ([][]byte, bool, *Error) {
 	return out, done && err == nil, err
 }
 
-func (s *validatedGeminiStream) Finish() ([][]byte, *Error) {
+func (s *validatedGoogleStream) Finish() ([][]byte, *Error) {
 	if s.failure != nil {
 		return nil, s.failure
 	}

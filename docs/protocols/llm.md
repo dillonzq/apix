@@ -2,9 +2,9 @@
 
 English | [简体中文](llm.zh-CN.md) · [Back to README](../../README.md)
 
-This document describes the current mappings and limitations of the `apix.KindLLM` protocols. The four generation protocols `openai.chat-completions`, `openai.responses`, `anthropic.messages`, and `gemini.generate-content` convert directly in all twelve directions, for requests, ordinary responses, and streams. `gemini.interactions` is native-only; see [native Interactions](#native-interactions). Protocol IDs and integration examples are in the README.
+This document describes the current mappings and limitations of the `apix.KindLLM` protocols. The four generation protocols `openai.chat-completions`, `openai.responses`, `anthropic.messages`, and `google.generate-content` convert directly in all twelve directions, for requests, ordinary responses, and streams. `google.interactions` is native-only; see [native Interactions](#native-interactions). Protocol IDs and integration examples are in the README.
 
-The exchange options that affect these paths, such as `openai.ResponsesOptions`, `anthropic.MessagesOptions`, `gemini.GenerateContentOptions`, and `ExchangeOptions.Reasoning`, are listed under [exchange options](../../README.md#exchange-options); the sections below say where each applies. `gemini.Codecs()` returns the GenerateContent and Interactions codecs together with Gemini's [image](image.md) and [token counting](tokens.md) codecs; register the other vendors' codecs explicitly for cross-protocol exchanges.
+The exchange options that affect these paths, such as `openai.ResponsesOptions`, `anthropic.MessagesOptions`, `google.GenerateContentOptions`, and `ExchangeOptions.Reasoning`, are listed under [exchange options](../../README.md#exchange-options); the sections below say where each applies. `google.Codecs()` returns the GenerateContent and Interactions codecs together with Gemini's [image](image.md) and [token counting](tokens.md) codecs; register the other vendors' codecs explicitly for cross-protocol exchanges.
 
 `Inspect` also reports the upstream state a request refers to (`RequestInfo.Affinity`, such as `response:resp_1` or `file:file-1`) and whether it continues upstream-owned context (`RequestInfo.Stateful`). Native Responses and Interactions exchanges report the state they create through `apix.StateReporter`. See [routing](../routing.md#upstream-owned-state).
 
@@ -37,7 +37,7 @@ payload := apix.Payload{
     Body: []byte(`{"contents":[{"role":"user","parts":[{"text":"Hello"}]}]}`),
     Metadata: apix.RequestMetadata{Model: "gemini-model", Stream: &stream},
 }
-info, err := reg.Inspect(gemini.GenerateContent, payload)
+info, err := reg.Inspect(google.GenerateContent, payload)
 ```
 
 A nonempty metadata model and a non-nil stream value override body routing values. Metadata is request-only and is not serialized into the body. A converted Gemini payload carries its effective model and stream mode in `Metadata`; for a Gemini client sent to another protocol, the stream flag is written into the converted JSON request. `gateway.Handler` reads the metadata from the URL and builds the upstream URL from it; see [model-dependent paths](../gateway.md#model-dependent-paths).
@@ -165,13 +165,13 @@ Cross-protocol conversion omits Anthropic `signature`, `signature_delta`, `redac
 
 Reverse mapping uses thresholds, so round trips are not exact. Positive budgets above 24576 map to `xhigh`, never automatically to `max`. The library does not filter against model capabilities or clamp budgets.
 
-GenerateContent reasoning lives in `generationConfig.thinkingConfig` and is configured with `gemini.GenerateContentOptions`:
+GenerateContent reasoning lives in `generationConfig.thinkingConfig` and is configured with `google.GenerateContentOptions`:
 
 ```go
 visible := true
 opts := apix.ExchangeOptions{
-    Ext: gemini.GenerateContentOptions{
-        ThinkingMode: gemini.ThinkingBudget,
+    Ext: google.GenerateContentOptions{
+        ThinkingMode: google.ThinkingBudget,
         IncludeThoughts: &visible,
         RequireThoughtSignatures: true,
     },
@@ -197,9 +197,9 @@ ex, err := reg.NewExchange(client, upstream, apix.ExchangeOptions{
 out, err := ex.ConvertRequest(apix.Payload{Body: payload}, suffix.Model)
 ```
 
-The exchange strips the client's own control where conversion would derive the target control from it, converts, and then renders the override with the same options as the rest of the exchange, so the suffix and the upstream's thinking mode cannot disagree. `gateway.Config{ReasoningSuffix: true}` does all of this for every request, routing by the model without the suffix. Hosts that build upstream bodies themselves can still call `reasoning.StripSupersededReasoning` before conversion and `reasoning.ApplySuffixWith(upstream, body, suffix, reasoning.Options{...})` after it, setting `MessagesManual` and `GeminiMode` to match the exchange.
+The exchange strips the client's own control where conversion would derive the target control from it, converts, and then renders the override with the same options as the rest of the exchange, so the suffix and the upstream's thinking mode cannot disagree. `gateway.Config{ReasoningSuffix: true}` does all of this for every request, routing by the model without the suffix. Hosts that build upstream bodies themselves can still call `reasoning.StripSupersededReasoning` before conversion and `reasoning.ApplySuffixWith(upstream, body, suffix, reasoning.Options{...})` after it, setting `MessagesManual` and `GoogleMode` to match the exchange.
 
-Recognized suffixes replace body reasoning controls. `none` / `0` disables reasoning; `auto` / `-1` uses upstream defaults. Chat and Responses receive an effort; numeric suffixes map through the thresholds above. Messages follows the exchange's thinking mode: adaptive thinking with `output_config.effort` by default, or enabled thinking with a table budget or a numeric suffix's exact budget under `anthropic.ThinkingManual`. GenerateContent follows `gemini.GenerateContentOptions.ThinkingMode`: budget mode sends `thinkingBudget`, level mode sends `thinkingLevel`, and the default sends numeric suffixes as budgets and levels as levels.
+Recognized suffixes replace body reasoning controls. `none` / `0` disables reasoning; `auto` / `-1` uses upstream defaults. Chat and Responses receive an effort; numeric suffixes map through the thresholds above. Messages follows the exchange's thinking mode: adaptive thinking with `output_config.effort` by default, or enabled thinking with a table budget or a numeric suffix's exact budget under `anthropic.ThinkingManual`. GenerateContent follows `google.GenerateContentOptions.ThinkingMode`: budget mode sends `thinkingBudget`, level mode sends `thinkingLevel`, and the default sends numeric suffixes as budgets and levels as levels.
 
 Messages disables `thinking.display` when turning thinking off and always supersedes the client's `output_config.effort` and `budget_tokens`; active overrides retain applicable display metadata. Responses overrides only `reasoning.effort`, preserving sibling fields.
 
@@ -225,7 +225,7 @@ Gemini signatures are opaque and part-specific. Native paths preserve them. Conv
 
 On the next request to Gemini, retain this extension with the assistant message or item; the converter restores the signed parts. It also accepts `extra_content.google.thought_signature` on supported individual messages and tool parts. SDKs that discard unknown fields require the host to preserve and restore the extension separately. An `Exchange` is per execution, not a session cache. Gemini signatures are never fabricated or presented as another vendor's native signature.
 
-`gemini.GenerateContentOptions{RequireThoughtSignatures: true}` rejects historical function calls missing a Gemini signature. It is opt-in because requirements differ by model.
+`google.GenerateContentOptions{RequireThoughtSignatures: true}` rejects historical function calls missing a Gemini signature. It is opt-in because requirements differ by model.
 
 ## Response fields and usage
 
@@ -277,13 +277,13 @@ Logprobs, provider extensions, historical compaction, and signatures are not gua
 
 ## Native Interactions
 
-`gemini.interactions` is `POST /v1beta/interactions`, authenticated with `x-goog-api-key`. It converts to nothing: other protocols, including GenerateContent, are rejected. Requests must specify exactly one of `model` or `agent`. Native model aliases may be rewritten; agent requests cannot be rewritten into a different model. `previous_interaction_id`, `background`, tools, input, and extensions are passed through to the upstream, and responses may remain `in_progress` for background work.
+`google.interactions` is `POST /v1beta/interactions`, authenticated with `x-goog-api-key`. It converts to nothing: other protocols, including GenerateContent, are rejected. Requests must specify exactly one of `model` or `agent`. Native model aliases may be rewritten; agent requests cannot be rewritten into a different model. `previous_interaction_id`, `background`, tools, input, and extensions are passed through to the upstream, and responses may remain `in_progress` for background work.
 
 A native exchange reports each created interaction as the affinity key `interaction:<id>` through `apix.StateReporter`, and requests with `previous_interaction_id` are `Stateful`, so the gateway sends follow-up turns to the endpoint that holds the interaction. Native SSE preserves events and validates completion, tool handoff, and errors. apix does not retrieve stored history, poll background jobs, cancel tasks, or switch conversation state between providers; those remain host and upstream responsibilities.
 
 ## Implementation and validation
 
-The vendor codecs delegate to the engine in `internal/llm/translate`, which owns dispatch, request policy, and stream framing. Protocol adapters under `internal/llm/adapter` own direct conversion, upstream event dispatch, and target stream output; `internal/llm/adapter/gemini` owns every path with GenerateContent at either end. Shared protocol types, event construction, tool identities, and field rules are organized by responsibility in `internal/llm/adapter/shared`; reasoning tables and override rendering live in `internal/llm/reasoning`, and the public `reasoning` package parses model suffixes. See [architecture](../architecture.md) for module and state contracts.
+The vendor codecs delegate to the engine in `internal/llm/translate`, which owns dispatch, request policy, and stream framing. Protocol adapters under `internal/llm/adapter` own direct conversion, upstream event dispatch, and target stream output; `internal/llm/adapter/generatecontent` owns every path with GenerateContent at either end. Shared protocol types, event construction, tool identities, and field rules are organized by responsibility in `internal/llm/adapter/shared`; reasoning tables and override rendering live in `internal/llm/reasoning`, and the public `reasoning` package parses model suffixes. See [architecture](../architecture.md) for module and state contracts.
 
 The 48 conversion snapshots cover requests, responses, and streams: 27 among Chat Completions, Responses, and Messages, and 21 with GenerateContent at one end. Tests also cover interleaved tools, late identity, citation fragments, search failure, termination consistency, local shell restoration and error paths, exact tool arguments, signed replay, late signatures, Unicode citations, and whole versus bytewise stream equivalence. Gateway tests cover GenerateContent URL metadata and authentication, and Interactions state passthrough. Fuzz tests, including a GenerateContent chunk-boundary target, check network chunking invariance and irreversible errors; they do not replace real-upstream compatibility validation. Commands are in [CONTRIBUTING.md](../../CONTRIBUTING.md).
 

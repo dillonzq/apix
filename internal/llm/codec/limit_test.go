@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/dillonzq/apix"
-	"github.com/dillonzq/apix/protocol/gemini"
+	"github.com/dillonzq/apix/protocol/google"
 	"github.com/dillonzq/apix/protocol/openai"
 	"github.com/dillonzq/apix/sse"
 )
@@ -53,11 +53,11 @@ func TestStreamFrameLimitsAllDirections(test *testing.T) {
 }
 
 func TestInteractionsStreamFrameLimit(test *testing.T) {
-	reg, err := apix.NewRegistry(gemini.InteractionsCodec())
+	reg, err := apix.NewRegistry(google.InteractionsCodec())
 	if err != nil {
 		test.Fatal(err)
 	}
-	exchange, err := reg.NewExchange(gemini.Interactions, gemini.Interactions, apix.ExchangeOptions{MaxStreamFrameBytes: 32})
+	exchange, err := reg.NewExchange(google.Interactions, google.Interactions, apix.ExchangeOptions{MaxStreamFrameBytes: 32})
 	if err != nil {
 		test.Fatal(err)
 	}

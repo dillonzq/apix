@@ -15,12 +15,12 @@ import (
 
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/gateway"
-	"github.com/dillonzq/apix/protocol/gemini"
+	"github.com/dillonzq/apix/protocol/google"
 	"github.com/dillonzq/apix/protocol/openai"
 	"github.com/dillonzq/apix/route"
 )
 
-const geminiImageReply = `{"candidates":[{"content":{"role":"model","parts":[{"inlineData":{"mimeType":"image/png","data":"aW1n"}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":3,"candidatesTokenCount":1290,"totalTokenCount":1293}}`
+const googleImageReply = `{"candidates":[{"content":{"role":"model","parts":[{"inlineData":{"mimeType":"image/png","data":"aW1n"}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":3,"candidatesTokenCount":1290,"totalTokenCount":1293}}`
 
 // rawUpstream records raw request bodies, which may be multipart forms.
 type rawUpstream struct {
@@ -63,7 +63,7 @@ func (u *rawUpstream) hits() int {
 
 func imageRegistry(t *testing.T) *apix.Registry {
 	t.Helper()
-	reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), gemini.Codecs())...)
+	reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), google.Codecs())...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,12 +74,12 @@ func imageRegistry(t *testing.T) *apix.Registry {
 // to a convertible one, and reach Gemini at the model's URL.
 func TestImagesGenerationsFailover(t *testing.T) {
 	native := newRawUpstream(t, 503, "application/json", `{"error":{"message":"overloaded","type":"server_error"}}`)
-	gem := newRawUpstream(t, 200, "application/json", geminiImageReply)
+	gem := newRawUpstream(t, 200, "application/json", googleImageReply)
 	chat := newRawUpstream(t, 200, "application/json", chatReply)
 	gw, err := gateway.New(gateway.Config{Registry: imageRegistry(t), Upstreams: []gateway.Upstream{
 		{Endpoint: route.Endpoint{ID: "chat", Protocol: openai.ChatCompletions}, BaseURL: chat.URL},
-		{Endpoint: route.Endpoint{ID: "gem", Protocol: gemini.GenerateContentImage, Models: map[string]string{"image": "gemini-2.5-flash-image"},
-			Options: route.EndpointOptions{Ext: gemini.GenerateContentImageOptions{ResponseModalities: []gemini.Modality{gemini.ModalityText, gemini.ModalityImage}}}}, BaseURL: gem.URL, APIKey: "gem-key"},
+		{Endpoint: route.Endpoint{ID: "gem", Protocol: google.GenerateContentImage, Models: map[string]string{"image": "gemini-2.5-flash-image"},
+			Options: route.EndpointOptions{Ext: google.GenerateContentImageOptions{ResponseModalities: []google.Modality{google.ModalityText, google.ModalityImage}}}}, BaseURL: gem.URL, APIKey: "gem-key"},
 		{Endpoint: route.Endpoint{ID: "openai", Protocol: openai.ImagesGenerations, Priority: 9, Models: map[string]string{"image": "gpt-image-1"}}, BaseURL: native.URL, APIKey: "oa-key"},
 	}})
 	if err != nil {
@@ -106,7 +106,7 @@ func TestImagesGenerationsFailover(t *testing.T) {
 	}
 	r, body := gem.last(t)
 	if r.URL.Path != "/v1beta/models/gemini-2.5-flash-image:generateContent" || r.Header.Get("X-Goog-Api-Key") != "gem-key" || !bytes.Contains(body, []byte(`"aspectRatio":"1:1"`)) || !bytes.Contains(body, []byte(`"responseModalities":["TEXT","IMAGE"]`)) {
-		t.Fatalf("gemini request %s %v %s", r.URL.Path, r.Header, body)
+		t.Fatalf("google request %s %v %s", r.URL.Path, r.Header, body)
 	}
 	if chat.hits() != 0 {
 		t.Fatal("an image request reached an LLM endpoint")
@@ -116,8 +116,8 @@ func TestImagesGenerationsFailover(t *testing.T) {
 // Endpoint options are validated when the gateway is configured.
 func TestImagesInvalidEndpointOptions(t *testing.T) {
 	_, err := gateway.New(gateway.Config{Registry: imageRegistry(t), Upstreams: []gateway.Upstream{
-		{Endpoint: route.Endpoint{ID: "gem", Protocol: gemini.GenerateContentImage,
-			Options: route.EndpointOptions{Ext: gemini.GenerateContentImageOptions{ResponseModalities: []gemini.Modality{gemini.ModalityText}}}}, BaseURL: "https://example.com"},
+		{Endpoint: route.Endpoint{ID: "gem", Protocol: google.GenerateContentImage,
+			Options: route.EndpointOptions{Ext: google.GenerateContentImageOptions{ResponseModalities: []google.Modality{google.ModalityText}}}}, BaseURL: "https://example.com"},
 	}})
 	if err == nil {
 		t.Fatal("text-only modalities accepted")
@@ -127,9 +127,9 @@ func TestImagesInvalidEndpointOptions(t *testing.T) {
 // A streamed multipart edit to Gemini is sent without streaming and returned
 // as a complete event stream.
 func TestImagesEditsEmulatedStream(t *testing.T) {
-	gem := newRawUpstream(t, 200, "application/json", geminiImageReply)
+	gem := newRawUpstream(t, 200, "application/json", googleImageReply)
 	gw, err := gateway.New(gateway.Config{Registry: imageRegistry(t), Upstreams: []gateway.Upstream{
-		{Endpoint: route.Endpoint{ID: "gem", Protocol: gemini.GenerateContentImage, Models: map[string]string{"*": "gemini-2.5-flash-image"}}, BaseURL: gem.URL},
+		{Endpoint: route.Endpoint{ID: "gem", Protocol: google.GenerateContentImage, Models: map[string]string{"*": "gemini-2.5-flash-image"}}, BaseURL: gem.URL},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -151,13 +151,13 @@ func TestImagesEditsEmulatedStream(t *testing.T) {
 	}
 	r, body := gem.last(t)
 	if r.URL.Path != "/v1beta/models/gemini-2.5-flash-image:generateContent" || !bytes.Contains(body, []byte(`"inlineData":{"data":"iVBORw0KGgo=","mimeType":"image/png"}`)) {
-		t.Fatalf("gemini request %s %s", r.URL.Path, body)
+		t.Fatalf("google request %s %s", r.URL.Path, body)
 	}
 }
 
 // A Gemini image edit reaches OpenAI edits as a multipart form, and the
 // response returns in the Gemini format.
-func TestGeminiImageToOpenAIEdits(t *testing.T) {
+func TestGoogleImageToOpenAIEdits(t *testing.T) {
 	edits := newRawUpstream(t, 200, "application/json", `{"created":1,"data":[{"b64_json":"aW1n"}],"output_format":"png"}`)
 	gw, err := gateway.New(gateway.Config{Registry: imageRegistry(t), Upstreams: []gateway.Upstream{
 		{Endpoint: route.Endpoint{ID: "edits", Protocol: openai.ImagesEdits, Models: map[string]string{"nano": "gpt-image-1"}}, BaseURL: edits.URL, APIKey: "oa-key"},
@@ -167,7 +167,7 @@ func TestGeminiImageToOpenAIEdits(t *testing.T) {
 	}
 	body := `{"contents":[{"role":"user","parts":[{"text":"add a hat"},{"inlineData":{"mimeType":"image/png","data":"aW1n"}}]}]}`
 	rr := httptest.NewRecorder()
-	gw.Handler(gemini.GenerateContentImage).ServeHTTP(rr, httptest.NewRequest("POST", "/v1beta/models/nano:generateContent", strings.NewReader(body)))
+	gw.Handler(google.GenerateContentImage).ServeHTTP(rr, httptest.NewRequest("POST", "/v1beta/models/nano:generateContent", strings.NewReader(body)))
 	if rr.Code != 200 || !strings.Contains(rr.Body.String(), `"inlineData":{"mimeType":"image/png","data":"aW1n"}`) {
 		t.Fatalf("%d %s", rr.Code, rr.Body)
 	}
@@ -183,7 +183,7 @@ func TestGeminiImageToOpenAIEdits(t *testing.T) {
 
 	// A streamed request calls OpenAI without streaming and returns one chunk.
 	rr = httptest.NewRecorder()
-	gw.Handler(gemini.GenerateContentImage).ServeHTTP(rr, httptest.NewRequest("POST", "/v1beta/models/nano:streamGenerateContent", strings.NewReader(body)))
+	gw.Handler(google.GenerateContentImage).ServeHTTP(rr, httptest.NewRequest("POST", "/v1beta/models/nano:streamGenerateContent", strings.NewReader(body)))
 	if rr.Code != 200 || rr.Header().Get("Content-Type") != "text/event-stream" || !strings.HasPrefix(rr.Body.String(), "data: {") || !strings.HasSuffix(rr.Body.String(), "}\n\n") {
 		t.Fatalf("%d %s %s", rr.Code, rr.Header(), rr.Body)
 	}
@@ -194,26 +194,26 @@ func TestGeminiImageToOpenAIEdits(t *testing.T) {
 	// A text-only request cannot become an edit; the conversion error is
 	// returned in the Gemini envelope without calling the upstream.
 	rr = httptest.NewRecorder()
-	gw.Handler(gemini.GenerateContentImage).ServeHTTP(rr, httptest.NewRequest("POST", "/v1beta/models/nano:generateContent", strings.NewReader(`{"contents":[{"parts":[{"text":"a cat"}]}]}`)))
+	gw.Handler(google.GenerateContentImage).ServeHTTP(rr, httptest.NewRequest("POST", "/v1beta/models/nano:generateContent", strings.NewReader(`{"contents":[{"parts":[{"text":"a cat"}]}]}`)))
 	if rr.Code != 400 || !strings.Contains(rr.Body.String(), `"status":"INVALID_ARGUMENT"`) || edits.hits() != 2 {
 		t.Fatalf("%d %s", rr.Code, rr.Body)
 	}
 }
 
 // Endpoint modalities also replace those of native Gemini image requests.
-func TestGeminiImageNativeModalities(t *testing.T) {
-	gem := newRawUpstream(t, 200, "application/json", geminiImageReply)
+func TestGoogleImageNativeModalities(t *testing.T) {
+	gem := newRawUpstream(t, 200, "application/json", googleImageReply)
 	gw, err := gateway.New(gateway.Config{Registry: imageRegistry(t), Upstreams: []gateway.Upstream{
-		{Endpoint: route.Endpoint{ID: "gem", Protocol: gemini.GenerateContentImage, Models: map[string]string{"nano": "gemini-3-pro-image"},
-			Options: route.EndpointOptions{Ext: gemini.GenerateContentImageOptions{ResponseModalities: []gemini.Modality{gemini.ModalityText, gemini.ModalityImage}}}}, BaseURL: gem.URL},
+		{Endpoint: route.Endpoint{ID: "gem", Protocol: google.GenerateContentImage, Models: map[string]string{"nano": "gemini-3-pro-image"},
+			Options: route.EndpointOptions{Ext: google.GenerateContentImageOptions{ResponseModalities: []google.Modality{google.ModalityText, google.ModalityImage}}}}, BaseURL: gem.URL},
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	body := `{"contents":[{"parts":[{"text":"a cat"}]}],"generationConfig":{"responseModalities":["IMAGE"],"imageConfig":{"imageSize":"2K"}}}`
 	rr := httptest.NewRecorder()
-	gw.Handler(gemini.GenerateContentImage).ServeHTTP(rr, httptest.NewRequest("POST", "/v1beta/models/nano:generateContent", strings.NewReader(body)))
-	if rr.Code != 200 || rr.Body.String() != geminiImageReply {
+	gw.Handler(google.GenerateContentImage).ServeHTTP(rr, httptest.NewRequest("POST", "/v1beta/models/nano:generateContent", strings.NewReader(body)))
+	if rr.Code != 200 || rr.Body.String() != googleImageReply {
 		t.Fatalf("%d %s", rr.Code, rr.Body)
 	}
 	r, sent := gem.last(t)

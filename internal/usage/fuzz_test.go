@@ -11,7 +11,7 @@ import (
 // Usage must not depend on how a stream is split into chunks.
 func FuzzTrackerChunkBoundaries(f *testing.F) {
 	f.Add(uint8(Messages), "event: message_start\ndata: {\"message\":{\"usage\":{\"input_tokens\":5}}}\n\nevent: message_delta\ndata: {\"usage\":{\"output_tokens\":7}}\n\n", uint8(3))
-	f.Add(uint8(Gemini), "data: {\"usageMetadata\":{\"promptTokenCount\":5}}\r\n\r\ndata: {\"usageMetadata\":{\"candidatesTokenCount\":7}}", uint8(1))
+	f.Add(uint8(Google), "data: {\"usageMetadata\":{\"promptTokenCount\":5}}\r\n\r\ndata: {\"usageMetadata\":{\"candidatesTokenCount\":7}}", uint8(1))
 	f.Add(uint8(ChatCompletions), "data: {\"usage\":\ndata: {\"prompt_tokens\":5}}\n\ndata: [DONE]\n\n", uint8(7))
 	f.Fuzz(func(t *testing.T, dialect uint8, wire string, step uint8) {
 		d := Dialect(dialect%uint8(Interactions)) + 1
@@ -41,7 +41,7 @@ func FuzzTrackerChunkBoundaries(f *testing.F) {
 // filter's reach.
 func FuzzTrackerMatchesFramer(f *testing.F) {
 	f.Add(uint8(Messages), "event: message_start\ndata: {\"type\":\"message\",\"message\":{\"Usage\":{\"input_tokens\":5}}}\n\n", uint8(3))
-	f.Add(uint8(Gemini), "data: {\"usageMetadata\":{\"promptTokenCount\":5}}\r\rdata: {\"usage_metadata\":{\"candidatesTokenCount\":7}}\r\n", uint8(1))
+	f.Add(uint8(Google), "data: {\"usageMetadata\":{\"promptTokenCount\":5}}\r\rdata: {\"usage_metadata\":{\"candidatesTokenCount\":7}}\r\n", uint8(1))
 	f.Add(uint8(ChatCompletions), ": c\ndata: {\"usage\":\ndata:{\"prompt_tokens\":5}}\n\nevent: x\n\ndata: [DONE]\n\n", uint8(7))
 	f.Add(uint8(Messages), "data: {\"Message\":{\"usage\":{\"input_tokens\":1}},\"uſage\":{},\"usage\":{\"output_tokens\":2},\"Usage\":{}}\n\n", uint8(16))
 	f.Add(uint8(Responses), "data: {\"text\":\"\\\"usage\\\": passage\"}\n\ndata: {\"response\":{\"USAGE\":{\"input_tokens\":2}}}", uint8(5))

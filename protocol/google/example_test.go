@@ -1,25 +1,25 @@
-package gemini_test
+package google_test
 
 import (
 	"fmt"
 
 	"github.com/dillonzq/apix"
-	"github.com/dillonzq/apix/protocol/gemini"
+	"github.com/dillonzq/apix/protocol/google"
 	"github.com/dillonzq/apix/protocol/openai"
 )
 
 func ExampleGenerateContentCodec() {
-	reg, err := apix.NewRegistry(openai.ChatCompletionsCodec(), gemini.GenerateContentCodec())
+	reg, err := apix.NewRegistry(openai.ChatCompletionsCodec(), google.GenerateContentCodec())
 	if err != nil {
 		panic(err)
 	}
-	ex, aerr := reg.NewExchange(gemini.GenerateContent, openai.ChatCompletions, apix.ExchangeOptions{})
+	ex, aerr := reg.NewExchange(google.GenerateContent, openai.ChatCompletions, apix.ExchangeOptions{})
 	if aerr != nil {
 		panic(aerr)
 	}
 	stream := true
 	req := apix.Payload{Body: []byte(`{"contents":[{"role":"user","parts":[{"text":"Hello"}]}]}`), Metadata: apix.RequestMetadata{Model: "public-model", Stream: &stream}}
-	info, aerr := reg.Inspect(gemini.GenerateContent, req)
+	info, aerr := reg.Inspect(google.GenerateContent, req)
 	if aerr != nil {
 		panic(aerr)
 	}

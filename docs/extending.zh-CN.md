@@ -6,8 +6,8 @@ apix 的核心与协议无关。新增一种协议或一种 Kind（如图像生�
 
 ## 放在哪里
 
-- 协议按供应商组织，放在 `protocol/<vendor>/`。例如 OpenAI 图像生成放在 `protocol/openai/images.go`，Gemini 的各类接口放在 `protocol/gemini/`。
-- 协议 ID 带命名空间，格式为 `<vendor>.<api>`，例如 `openai.images.generations`、`gemini.generate-content`。
+- 协议按供应商组织，放在 `protocol/<vendor>/`。例如 OpenAI 图像生成放在 `protocol/openai/images.go`，Gemini 的各类接口放在 `protocol/google/`。
+- 协议 ID 带命名空间，格式为 `<vendor>.<api>`，例如 `openai.images.generations`、`google.generate-content`。
 - 多家供应商共用的同类转换代码放在 `internal/<kind>/`，例如 `internal/image/`。LLM 的现有实现就在 `internal/llm/`。
 - 每个供应商包都提供 `Codecs() []apix.Codec`，调用方用 `apix.NewRegistry(slices.Concat(...))` 显式注册。
 
@@ -50,9 +50,9 @@ type Codec interface {
 `apix.KindImage` 就是这样实现的，可以作为 `internal/llm` 之外新增 Kind 的完整示例。具体行为见[图像协议转换](protocols/image.zh-CN.md)。
 
 - `internal/image/codec.go`：四个图像协议共用一个 `Codec` 类型，路径、鉴权、错误信封、流式与可接受协议等差异是 `protocols` 表中的行。错误信封来自 `internal/vendorerr`，与 LLM codec 共用。
-- `openai.go`、`gemini.go`、`imagen.go`：各线格式的请求解码（JSON 与 multipart 表单）、响应类型和原生请求改写。
+- `openai.go`、`google.go`、`imagen.go`：各线格式的请求解码（JSON 与 multipart 表单）、响应类型和原生请求改写。
 - `exchange.go`、`response.go`：直连转换，每个源与目标一个函数，不经过中间表示。`stream.go` 校验原生流；跨协议的流在 `ConvertResponse` 中模拟。
-- `protocol/openai/images.go`、`protocol/gemini/images.go` 导出 ID 和构造函数，各供应商的 `Codecs()` 已包含它们。`gemini.GenerateContentImageOptions` 由传给 `image.New` 的 `ExtFunc` 转换为 `image.Options`，与 LLM codec 的做法一致。
+- `protocol/openai/images.go`、`protocol/google/images.go` 导出 ID 和构造函数，各供应商的 `Codecs()` 已包含它们。`google.GenerateContentImageOptions` 由传给 `image.New` 的 `ExtFunc` 转换为 `image.Options`，与 LLM codec 的做法一致。
 
 ```go
 func (c *Codec) Spec() apix.ProtocolSpec {
@@ -68,7 +68,7 @@ func (c *Codec) Accepts(p apix.Protocol) bool { return p == c.id || slices.Conta
 注册以后，图像请求按与 LLM 相同的规则路由：先选同协议的图像端点，再选可转换的图像端点。LLM 端点属于不同的 Kind，永远不会被选中。
 
 ```go
-reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), gemini.Codecs())...)
+reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), google.Codecs())...)
 ```
 
 ## 测试要求

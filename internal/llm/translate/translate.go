@@ -1,5 +1,5 @@
 // Package translate is the LLM conversion engine behind the public
-// protocol/openai, protocol/anthropic and protocol/gemini codecs. It converts requests,
+// protocol/openai, protocol/anthropic and protocol/google codecs. It converts requests,
 // responses, and SSE streams between Chat Completions, Responses, and
 // Messages and Gemini using internal format names and per-execution state.
 package translate
@@ -15,7 +15,7 @@ const (
 	FormatChatCompletions = shared.FormatChatCompletions
 	FormatResponses       = shared.FormatResponses
 	FormatMessages        = shared.FormatMessages
-	FormatGemini          = shared.FormatGemini
+	FormatGenerateContent = shared.FormatGenerateContent
 )
 
 // RequestState holds tool identities, options, and diagnostics for one execution. Its zero value is ready
@@ -41,7 +41,7 @@ func conversionContext(state *RequestState) *shared.ConversionContext {
 func validateFormats(formats ...string) *Error {
 	for _, format := range formats {
 		switch format {
-		case FormatChatCompletions, FormatResponses, FormatMessages, FormatGemini:
+		case FormatChatCompletions, FormatResponses, FormatMessages, FormatGenerateContent:
 		default:
 			return &Error{Class: ClassUnsupported, Message: errclass.Redact("unsupported protocol format: " + format)}
 		}

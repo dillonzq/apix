@@ -14,7 +14,7 @@ const (
 	FormatChatCompletions = ids.FormatChatCompletions
 	FormatResponses       = ids.FormatResponses
 	FormatMessages        = ids.FormatMessages
-	FormatGemini          = ids.FormatGemini
+	FormatGenerateContent = ids.FormatGenerateContent
 )
 
 // LossPolicy controls request conversions that cannot preserve every field.
@@ -51,11 +51,11 @@ type ConversionOptions struct {
 	// MessagesThinkingMode selects adaptive (empty, the default) or manual
 	// budget thinking when a reasoning level converts to Messages.
 	MessagesThinkingMode string
-	// GeminiThinkingMode selects "budget" or "level" explicitly. Empty
+	// GoogleThinkingMode selects "budget" or "level" explicitly. Empty
 	// preserves the kind of reasoning control requested by the client.
-	GeminiThinkingMode             string
-	GeminiIncludeThoughts          *bool
-	GeminiRequireThoughtSignatures bool
+	GoogleThinkingMode             string
+	GoogleIncludeThoughts          *bool
+	GoogleRequireThoughtSignatures bool
 }
 
 // MessagesThinkingManual selects budget_tokens thinking for Claude models

@@ -1,4 +1,4 @@
-package gemini
+package generatecontent
 
 import (
 	"strings"
@@ -81,9 +81,9 @@ func (c *conversion) toConfig(root, out object) {
 		}
 	}
 	tc = c.thinkingMode(tc)
-	if c.ctx.Options.GeminiIncludeThoughts != nil {
+	if c.ctx.Options.GoogleIncludeThoughts != nil {
 		tc = ensure(tc)
-		tc["includeThoughts"] = *c.ctx.Options.GeminiIncludeThoughts
+		tc["includeThoughts"] = *c.ctx.Options.GoogleIncludeThoughts
 	}
 	if len(tc) > 0 {
 		cfg["thinkingConfig"] = tc
@@ -118,7 +118,7 @@ func (c *conversion) thinkingMode(t object) object {
 	if t == nil {
 		return nil
 	}
-	mode := c.ctx.Options.GeminiThinkingMode
+	mode := c.ctx.Options.GoogleThinkingMode
 	if mode == "budget" && t["thinkingLevel"] != nil {
 		budget, ok := reasoning.BudgetFromEffort(str(t["thinkingLevel"]))
 		if !ok {
@@ -148,7 +148,7 @@ func (c *conversion) thinkingMode(t object) object {
 	}
 	// GenerateContent defines no level above high.
 	if level, ok := t["thinkingLevel"].(string); ok {
-		if mapped, exact := reasoning.GeminiLevel(level); !exact {
+		if mapped, exact := reasoning.GoogleLevel(level); !exact {
 			t["thinkingLevel"] = mapped
 			c.loss("generationConfig.thinkingConfig.thinkingLevel", false)
 		}

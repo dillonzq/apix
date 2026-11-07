@@ -8,7 +8,7 @@ import (
 // MessagesCountTokens is "anthropic.messages.count-tokens":
 // POST /v1/messages/count_tokens. It belongs to apix.KindTokens and
 // converts directly to and from openai.ResponsesInputTokens and
-// gemini.CountTokens. Its body is a Messages request without generation
+// google.CountTokens. Its body is a Messages request without generation
 // controls, and the reply is {"input_tokens": n}.
 const MessagesCountTokens = tokens.MessagesCountTokens
 

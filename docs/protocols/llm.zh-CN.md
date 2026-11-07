@@ -2,9 +2,9 @@
 
 [English](llm.md) | 简体中文 · [返回 README](../../README.zh-CN.md)
 
-本文说明 `apix.KindLLM` 下各协议当前实现的映射和限制。`openai.chat-completions`、`openai.responses`、`anthropic.messages` 和 `gemini.generate-content` 四种生成协议在全部十二个方向上直接互转，覆盖请求、普通响应和流式响应。`gemini.interactions` 仅支持原生，见[原生 Interactions](#原生-interactions)。协议 ID 和接入示例见 README。
+本文说明 `apix.KindLLM` 下各协议当前实现的映射和限制。`openai.chat-completions`、`openai.responses`、`anthropic.messages` 和 `google.generate-content` 四种生成协议在全部十二个方向上直接互转，覆盖请求、普通响应和流式响应。`google.interactions` 仅支持原生，见[原生 Interactions](#原生-interactions)。协议 ID 和接入示例见 README。
 
-影响这些路径的 Exchange 选项（如 `openai.ResponsesOptions`、`anthropic.MessagesOptions`、`gemini.GenerateContentOptions`、`ExchangeOptions.Reasoning`）列在 [Exchange 选项](../../README.zh-CN.md#exchange-选项)中，下文会在适用处说明。`gemini.Codecs()` 返回 GenerateContent 与 Interactions 的 Codec，以及 Gemini 的[图像](image.zh-CN.md)和 [Token 计数](tokens.zh-CN.md) Codec；跨协议时还需显式注册其他供应商的 Codec。
+影响这些路径的 Exchange 选项（如 `openai.ResponsesOptions`、`anthropic.MessagesOptions`、`google.GenerateContentOptions`、`ExchangeOptions.Reasoning`）列在 [Exchange 选项](../../README.zh-CN.md#exchange-选项)中，下文会在适用处说明。`google.Codecs()` 返回 GenerateContent 与 Interactions 的 Codec，以及 Gemini 的[图像](image.zh-CN.md)和 [Token 计数](tokens.zh-CN.md) Codec；跨协议时还需显式注册其他供应商的 Codec。
 
 `Inspect` 还会报告请求引用的上游状态（`RequestInfo.Affinity`，如 `response:resp_1`、`file:file-1`），以及请求是否延续上游持有的上下文（`RequestInfo.Stateful`）。原生 Responses 与 Interactions Exchange 通过 `apix.StateReporter` 报告新建的状态。详见[路由](../routing.zh-CN.md#上游持有的状态)。
 
@@ -37,7 +37,7 @@ payload := apix.Payload{
     Body: []byte(`{"contents":[{"role":"user","parts":[{"text":"你好"}]}]}`),
     Metadata: apix.RequestMetadata{Model: "gemini-model", Stream: &stream},
 }
-info, err := reg.Inspect(gemini.GenerateContent, payload)
+info, err := reg.Inspect(google.GenerateContent, payload)
 ```
 
 非空 Model 和非 nil Stream 优先于请求体中的路由值。元信息只用于请求，不会序列化到请求体中。转换后的 Gemini Payload 在 `Metadata` 中返回有效模型和流式模式；Gemini 客户端转向其他协议时，流式标记会写入目标 JSON 请求。`gateway.Handler` 从 URL 读取元信息并据此生成上游 URL，见[随模型变化的路径](../gateway.zh-CN.md#随模型变化的路径)。
@@ -165,13 +165,13 @@ Responses 的流式转换接收 `response.reasoning_summary_text.delta/done` 与
 
 反向转换按阈值选择档位，不保证精确往返；正数 budget 超过 24576 时映射为 `xhigh`，不会自动得到 `max`。库不按模型能力过滤或限幅。
 
-GenerateContent 的推理控制位于 `generationConfig.thinkingConfig`，通过 `gemini.GenerateContentOptions` 配置：
+GenerateContent 的推理控制位于 `generationConfig.thinkingConfig`，通过 `google.GenerateContentOptions` 配置：
 
 ```go
 visible := true
 opts := apix.ExchangeOptions{
-    Ext: gemini.GenerateContentOptions{
-        ThinkingMode: gemini.ThinkingBudget,
+    Ext: google.GenerateContentOptions{
+        ThinkingMode: google.ThinkingBudget,
         IncludeThoughts: &visible,
         RequireThoughtSignatures: true,
     },
@@ -197,9 +197,9 @@ ex, err := reg.NewExchange(client, upstream, apix.ExchangeOptions{
 out, err := ex.ConvertRequest(apix.Payload{Body: payload}, suffix.Model)
 ```
 
-Exchange 会在转换据此推导目标推理控制的路径上剥离客户端自己的控制，完成转换后，再用与本次 Exchange 相同的选项渲染覆盖值，因此后缀与上游推理模式不会互相矛盾。`gateway.Config{ReasoningSuffix: true}` 会对每个请求完成上述步骤，并按去掉后缀的模型名路由。自行构造上游请求体的宿主仍可在转换前调用 `reasoning.StripSupersededReasoning`、转换后调用 `reasoning.ApplySuffixWith(upstream, body, suffix, reasoning.Options{...})`，其中 `MessagesManual`、`GeminiMode` 应与 Exchange 的设置一致。
+Exchange 会在转换据此推导目标推理控制的路径上剥离客户端自己的控制，完成转换后，再用与本次 Exchange 相同的选项渲染覆盖值，因此后缀与上游推理模式不会互相矛盾。`gateway.Config{ReasoningSuffix: true}` 会对每个请求完成上述步骤，并按去掉后缀的模型名路由。自行构造上游请求体的宿主仍可在转换前调用 `reasoning.StripSupersededReasoning`、转换后调用 `reasoning.ApplySuffixWith(upstream, body, suffix, reasoning.Options{...})`，其中 `MessagesManual`、`GoogleMode` 应与 Exchange 的设置一致。
 
-识别到的后缀取代请求体中的推理控制；`none` / `0` 关闭，`auto` / `-1` 采用上游默认。Chat 与 Responses 得到 effort，数值后缀按上表阈值转换。Messages 遵循 Exchange 的推理模式：默认 adaptive 并写入 `output_config.effort`；使用 `anthropic.ThinkingManual` 时发送 enabled thinking，档位按表取预算，数值后缀保留精确预算。GenerateContent 遵循 `gemini.GenerateContentOptions.ThinkingMode`：budget 模式发送 `thinkingBudget`，level 模式发送 `thinkingLevel`，默认时数值后缀发送预算、档位发送档位。
+识别到的后缀取代请求体中的推理控制；`none` / `0` 关闭，`auto` / `-1` 采用上游默认。Chat 与 Responses 得到 effort，数值后缀按上表阈值转换。Messages 遵循 Exchange 的推理模式：默认 adaptive 并写入 `output_config.effort`；使用 `anthropic.ThinkingManual` 时发送 enabled thinking，档位按表取预算，数值后缀保留精确预算。GenerateContent 遵循 `google.GenerateContentOptions.ThinkingMode`：budget 模式发送 `thinkingBudget`，level 模式发送 `thinkingLevel`，默认时数值后缀发送预算、档位发送档位。
 
 Messages 禁用时移除 `thinking.display`，并始终覆盖客户端的 `output_config.effort` 与 `budget_tokens`；启用时保留可用的 display。Responses 只覆盖 `reasoning.effort`，保留同级字段。
 
@@ -225,7 +225,7 @@ Gemini 签名是不透明的，并且属于具体的 part。原生路径完整�
 
 下一轮请求回到 Gemini 时，需要随 assistant 消息或输出项保留该扩展，转换器会恢复带签名的 parts。对应的单个消息或工具 part 也接受 `extra_content.google.thought_signature`。如果客户端 SDK 会丢弃未知字段，宿主需要另外保存并恢复该扩展。`Exchange` 只服务一次执行，不充当会话缓存。Gemini 签名不会被伪造，也不会当作其他供应商的原生签名。
 
-`gemini.GenerateContentOptions{RequireThoughtSignatures: true}` 拒绝缺少 Gemini 签名的历史函数调用。由于不同模型的要求不同，它默认关闭。
+`google.GenerateContentOptions{RequireThoughtSignatures: true}` 拒绝缺少 Gemini 签名的历史函数调用。由于不同模型的要求不同，它默认关闭。
 
 ## 响应字段与用量
 
@@ -277,13 +277,13 @@ logprobs、供应商扩展、历史 compaction 和签名不保证跨协议保留
 
 ## 原生 Interactions
 
-`gemini.interactions` 的路径为 `POST /v1beta/interactions`，鉴权头为 `x-goog-api-key`。它不与任何协议转换：其他协议（包括 GenerateContent）都会被拒绝。请求必须且只能指定 `model` 或 `agent`。原生模型别名可以改写；agent 请求不能被改写成另一个模型。`previous_interaction_id`、`background`、tools、input 和扩展字段交给上游处理；后台任务的响应允许处于 `in_progress`。
+`google.interactions` 的路径为 `POST /v1beta/interactions`，鉴权头为 `x-goog-api-key`。它不与任何协议转换：其他协议（包括 GenerateContent）都会被拒绝。请求必须且只能指定 `model` 或 `agent`。原生模型别名可以改写；agent 请求不能被改写成另一个模型。`previous_interaction_id`、`background`、tools、input 和扩展字段交给上游处理；后台任务的响应允许处于 `in_progress`。
 
 原生 Exchange 通过 `apix.StateReporter` 把每个新建的 interaction 报告为亲和键 `interaction:<id>`，带 `previous_interaction_id` 的请求标记为 `Stateful`，因此网关会把后续轮次发往持有该 interaction 的端点。原生 SSE 保留事件，并验证完成、工具交接与错误。apix 不获取已存储的历史、不轮询后台任务、不取消任务，也不在供应商之间迁移会话状态，这些由宿主或上游负责。
 
 ## 实现与验证
 
-供应商 Codec 委托给 `internal/llm/translate` 中的引擎，由引擎负责分派、请求策略和流式分帧。`internal/llm/adapter` 下的各协议 adapter 负责直接转换、上游事件分派和目标流式输出；任一端为 GenerateContent 的路径都由 `internal/llm/adapter/gemini` 负责。共享协议类型、事件构造、工具身份和字段规则按职责分文件，位于 `internal/llm/adapter/shared`；推理档位表与覆盖渲染位于 `internal/llm/reasoning`，公开的 `reasoning` 包负责解析模型后缀。模块与状态约定见[架构](../architecture.zh-CN.md)。
+供应商 Codec 委托给 `internal/llm/translate` 中的引擎，由引擎负责分派、请求策略和流式分帧。`internal/llm/adapter` 下的各协议 adapter 负责直接转换、上游事件分派和目标流式输出；任一端为 GenerateContent 的路径都由 `internal/llm/adapter/generatecontent` 负责。共享协议类型、事件构造、工具身份和字段规则按职责分文件，位于 `internal/llm/adapter/shared`；推理档位表与覆盖渲染位于 `internal/llm/reasoning`，公开的 `reasoning` 包负责解析模型后缀。模块与状态约定见[架构](../architecture.zh-CN.md)。
 
 48 份转换快照覆盖请求、响应和流：27 份在 Chat Completions、Responses、Messages 之间，21 份有一端是 GenerateContent。测试还覆盖交错工具、晚到身份、引用分片、搜索失败、终止一致性、本地 shell 恢复/错误路径、精确工具参数、签名回放、晚到签名、Unicode 引用，以及完整与逐字节输入的等价性。网关测试覆盖 GenerateContent 的 URL 元信息与鉴权，以及 Interactions 状态透传。fuzz（包括 GenerateContent 分块边界目标）验证网络分块一致性和失败状态不可恢复；这些测试不替代真实上游的兼容验证。命令见 [CONTRIBUTING.md](../../CONTRIBUTING.md)。
 

@@ -1,4 +1,4 @@
-package gemini_test
+package google_test
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/protocol/anthropic"
-	"github.com/dillonzq/apix/protocol/gemini"
+	"github.com/dillonzq/apix/protocol/google"
 	"github.com/dillonzq/apix/protocol/openai"
 	"github.com/dillonzq/apix/reasoning"
 )
@@ -17,7 +17,7 @@ import (
 func TestMediaRequestsAndSchema(t *testing.T) {
 	r := registry(t)
 	body := `{"model":"m","input":[{"role":"user","content":[{"type":"input_text","text":"inspect"},{"type":"input_image","image_url":"data:image/png;base64,YQ=="},{"type":"input_file","file_data":"data:application/pdf;base64,Yg=="},{"type":"input_audio","input_audio":{"data":"Yw==","format":"wav"}},{"type":"input_video","video_url":{"url":"https://example.com/video.mp4"}}]}],"text":{"format":{"type":"json_schema","schema":{"type":"object","properties":{"answer":{"type":"integer"}},"required":["answer"]}}}}`
-	ex, _ := r.NewExchange(openai.Responses, gemini.GenerateContent, apix.ExchangeOptions{LossPolicy: apix.LossPolicySafe})
+	ex, _ := r.NewExchange(openai.Responses, google.GenerateContent, apix.ExchangeOptions{LossPolicy: apix.LossPolicySafe})
 	out, err := ex.ConvertRequest(apix.Payload{Body: []byte(body)}, "m")
 	if err != nil {
 		t.Fatal(err)
@@ -31,7 +31,7 @@ func TestMediaRequestsAndSchema(t *testing.T) {
 	if cfg["responseMimeType"] != "application/json" || cfg["responseJsonSchema"] == nil {
 		t.Fatalf("schema %s", out.Body)
 	}
-	back, _ := r.NewExchange(gemini.GenerateContent, openai.Responses, apix.ExchangeOptions{})
+	back, _ := r.NewExchange(google.GenerateContent, openai.Responses, apix.ExchangeOptions{})
 	req, err := back.ConvertRequest(apix.Payload{Body: out.Body}, "m")
 	if err != nil {
 		t.Fatal(err)
@@ -42,7 +42,7 @@ func TestMediaRequestsAndSchema(t *testing.T) {
 		}
 	}
 	pdf := []byte(`{"contents":[{"role":"user","parts":[{"inlineData":{"mimeType":"application/pdf","data":"Yg=="}}]}]}`)
-	ex, _ = r.NewExchange(gemini.GenerateContent, anthropic.Messages, apix.ExchangeOptions{})
+	ex, _ = r.NewExchange(google.GenerateContent, anthropic.Messages, apix.ExchangeOptions{})
 	out, err = ex.ConvertRequest(apix.Payload{Body: pdf}, "claude")
 	if err != nil || !bytes.Contains(out.Body, []byte(`"document"`)) {
 		t.Fatalf("PDF %s %v", out.Body, err)
@@ -53,12 +53,12 @@ func TestToolHistoryWithRepeatedNames(t *testing.T) {
 	body := []byte(`{"contents":[{"role":"model","parts":[{"functionCall":{"id":"c1","name":"f","args":{"n":9007199254740993}}},{"functionCall":{"id":"c2","name":"f","args":{}}}]},{"role":"user","parts":[{"functionResponse":{"id":"c2","name":"f","response":{"value":2}}},{"functionResponse":{"id":"c1","name":"f","response":{"value":1}}}]}],"tools":[{"functionDeclarations":[{"name":"f","parametersJsonSchema":{"type":"object"}}]}]}`)
 	for _, p := range []apix.Protocol{openai.ChatCompletions, openai.Responses, anthropic.Messages} {
 		t.Run(string(p), func(t *testing.T) {
-			ex, _ := r.NewExchange(gemini.GenerateContent, p, apix.ExchangeOptions{})
+			ex, _ := r.NewExchange(google.GenerateContent, p, apix.ExchangeOptions{})
 			out, err := ex.ConvertRequest(apix.Payload{Body: body}, "m")
 			if err != nil {
 				t.Fatal(err)
 			}
-			reverse, _ := r.NewExchange(p, gemini.GenerateContent, apix.ExchangeOptions{})
+			reverse, _ := r.NewExchange(p, google.GenerateContent, apix.ExchangeOptions{})
 			back, err := reverse.ConvertRequest(out, "m")
 			if err != nil {
 				t.Fatal(err)
@@ -81,13 +81,13 @@ func TestToolHistoryWithRepeatedNames(t *testing.T) {
 		})
 	}
 }
-func TestGeminiCustomAndShellRestore(t *testing.T) {
+func TestGoogleCustomAndShellRestore(t *testing.T) {
 	r := registry(t)
 	for _, tc := range []struct{ tool, args, want string }{
 		{`{"type":"namespace","name":"edit","tools":[{"type":"custom","name":"patch"}]}`, `{"input":"patch text"}`, "custom_tool_call"},
 		{`{"type":"shell"}`, `{"commands":["pwd"]}`, "shell_call"},
 	} {
-		ex, _ := r.NewExchange(openai.Responses, gemini.GenerateContent, apix.ExchangeOptions{})
+		ex, _ := r.NewExchange(openai.Responses, google.GenerateContent, apix.ExchangeOptions{})
 		req, err := ex.ConvertRequest(apix.Payload{Body: []byte(`{"input":"hello","tools":[` + tc.tool + `]}`)}, "m")
 		if err != nil {
 			t.Fatal(err)
@@ -121,30 +121,30 @@ func TestLossPoliciesAndInvalidInput(t *testing.T) {
 		`{"contents":[{"parts":[{"unknown":{"payload":"content"}}]}]}`,
 		`{"contents":[{"parts":[{"functionResponse":{"name":"missing","response":{}}}]}]}`,
 	} {
-		ex, _ := r.NewExchange(gemini.GenerateContent, openai.ChatCompletions, apix.ExchangeOptions{})
+		ex, _ := r.NewExchange(google.GenerateContent, openai.ChatCompletions, apix.ExchangeOptions{})
 		if _, err := ex.ConvertRequest(apix.Payload{Body: []byte(body)}, "m"); err == nil {
 			t.Fatalf("accepted %s", body)
 		}
 	}
 	body := []byte(`{"contents":[{"parts":[{"text":"hi"}]}],"cachedContent":"cachedContents/provider-specific"}`)
 	for _, policy := range []apix.LossPolicy{apix.LossPolicyAllow, apix.LossPolicySafe, apix.LossPolicyStrict} {
-		ex, _ := r.NewExchange(gemini.GenerateContent, openai.Responses, apix.ExchangeOptions{LossPolicy: policy})
+		ex, _ := r.NewExchange(google.GenerateContent, openai.Responses, apix.ExchangeOptions{LossPolicy: policy})
 		_, err := ex.ConvertRequest(apix.Payload{Body: body}, "m")
 		if (err != nil) != (policy != apix.LossPolicyAllow) || len(ex.Diagnostics()) == 0 {
 			t.Fatalf("policy %s: %v %v", policy, err, ex.Diagnostics())
 		}
 	}
-	ex, _ := r.NewExchange(openai.ChatCompletions, gemini.GenerateContent, apix.ExchangeOptions{Ext: gemini.GenerateContentOptions{RequireThoughtSignatures: true}})
+	ex, _ := r.NewExchange(openai.ChatCompletions, google.GenerateContent, apix.ExchangeOptions{Ext: google.GenerateContentOptions{RequireThoughtSignatures: true}})
 	if _, err := ex.ConvertRequest(apix.Payload{Body: []byte(`{"messages":[{"role":"assistant","tool_calls":[{"id":"c","type":"function","function":{"name":"f","arguments":"{}"}}]}]}`)}, "m"); err == nil {
 		t.Fatal("unsigned history accepted")
 	}
 }
 func TestStreamErrorIsTerminal(t *testing.T) {
 	r := registry(t)
-	for _, p := range []apix.Protocol{openai.ChatCompletions, openai.Responses, anthropic.Messages, gemini.GenerateContent} {
-		ex, _ := r.NewExchange(p, gemini.GenerateContent, apix.ExchangeOptions{})
+	for _, p := range []apix.Protocol{openai.ChatCompletions, openai.Responses, anthropic.Messages, google.GenerateContent} {
+		ex, _ := r.NewExchange(p, google.GenerateContent, apix.ExchangeOptions{})
 		sc, _ := ex.NewStreamConverter()
-		wire := strings.Split(fixtures[gemini.GenerateContent].stream, "\n\n")[0] + "\n\ndata: {broken\n\n"
+		wire := strings.Split(fixtures[google.GenerateContent].stream, "\n\n")[0] + "\n\ndata: {broken\n\n"
 		events, done, err := sc.Feed([]byte(wire))
 		if err == nil || done || len(events) == 0 {
 			t.Fatalf("%s lost prefix or accepted error: %v %v %d", p, err, done, len(events))
@@ -152,7 +152,7 @@ func TestStreamErrorIsTerminal(t *testing.T) {
 		if _, err2 := sc.Finish(); !errors.Is(err2, err) {
 			t.Fatal("error changed at EOF")
 		}
-		if events, done, err2 := sc.Feed([]byte(fixtures[gemini.GenerateContent].stream)); !errors.Is(err2, err) || done || len(events) > 0 {
+		if events, done, err2 := sc.Feed([]byte(fixtures[google.GenerateContent].stream)); !errors.Is(err2, err) || done || len(events) > 0 {
 			t.Fatal("failed stream recovered")
 		}
 		sc, _ = ex.NewStreamConverter()
@@ -165,18 +165,18 @@ func TestStreamErrorIsTerminal(t *testing.T) {
 func TestThinkingAndTransportMetadata(t *testing.T) {
 	r := registry(t)
 	stream := true
-	req := apix.Payload{Body: []byte(fixtures[gemini.GenerateContent].request), Metadata: apix.RequestMetadata{Model: "gemini-test", Stream: &stream}}
-	info, err := r.Inspect(gemini.GenerateContent, req)
+	req := apix.Payload{Body: []byte(fixtures[google.GenerateContent].request), Metadata: apix.RequestMetadata{Model: "gemini-test", Stream: &stream}}
+	info, err := r.Inspect(google.GenerateContent, req)
 	if err != nil || info.Model != "gemini-test" || !info.Stream || !info.Needs(apix.FeatureStream) {
 		t.Fatalf("info %+v %v", info, err)
 	}
-	ex, _ := r.NewExchange(gemini.GenerateContent, openai.ChatCompletions, apix.ExchangeOptions{})
+	ex, _ := r.NewExchange(google.GenerateContent, openai.ChatCompletions, apix.ExchangeOptions{})
 	out, err := ex.ConvertRequest(req, "")
 	if err != nil || !bytes.Contains(out.Body, []byte(`"stream":true`)) || !bytes.Contains(out.Body, []byte(`"model":"gemini-test"`)) {
 		t.Fatalf("metadata %s %v", out.Body, err)
 	}
 	for _, s := range []string{"m(high)", "m(8192)", "m(none)", "m(auto)"} {
-		out, err := reasoning.ApplySuffix(gemini.GenerateContent, []byte(`{"generationConfig":{"thinkingConfig":{"includeThoughts":false}}}`), reasoning.ParseSuffix(s))
+		out, err := reasoning.ApplySuffix(google.GenerateContent, []byte(`{"generationConfig":{"thinkingConfig":{"includeThoughts":false}}}`), reasoning.ParseSuffix(s))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -191,7 +191,7 @@ func TestChunkedToolArguments(t *testing.T) {
 	r := registry(t)
 	wire := "data: {\"id\":\"r\",\"model\":\"m\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"c\",\"function\":{\"arguments\":\"{\\\"n\\\":\"}}]}}]}\n\n" +
 		"data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"name\":\"lookup\",\"arguments\":\"9007199254740993}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n"
-	ex, _ := r.NewExchange(gemini.GenerateContent, openai.ChatCompletions, apix.ExchangeOptions{})
+	ex, _ := r.NewExchange(google.GenerateContent, openai.ChatCompletions, apix.ExchangeOptions{})
 	sc, _ := ex.NewStreamConverter()
 	events := drain(t, sc, wire, 1)
 	calls := 0
@@ -222,9 +222,9 @@ func TestChunkedToolArguments(t *testing.T) {
 	}
 }
 
-func TestGeminiAliasesSchemaAndCitationOffsets(t *testing.T) {
+func TestGoogleAliasesSchemaAndCitationOffsets(t *testing.T) {
 	r := registry(t)
-	ex, _ := r.NewExchange(gemini.GenerateContent, openai.Responses, apix.ExchangeOptions{})
+	ex, _ := r.NewExchange(google.GenerateContent, openai.Responses, apix.ExchangeOptions{})
 	body := []byte(`{"contents":[{"role":"user","parts":[{"text":"hi"}]}],"generation_config":{"response_mime_type":"application/json","response_schema":{"type":"OBJECT","properties":{"n":{"type":"INTEGER","nullable":true}}}},"tools":[{"function_declarations":[{"name":"f","parameters":{"type":"OBJECT"}}]}]}`)
 	out, err := ex.ConvertRequest(apix.Payload{Body: body}, "m")
 	if err != nil || !bytes.Contains(out.Body, []byte(`"type":["integer","null"]`)) {
@@ -233,7 +233,7 @@ func TestGeminiAliasesSchemaAndCitationOffsets(t *testing.T) {
 	response := `{"response_id":"r","model_version":"m","candidates":[{"content":{"parts":[{"text":"你好 world"}]},"finish_reason":"STOP","grounding_metadata":{"groundingChunks":[{"web":{"uri":"https://example.com","title":"source"}}],"groundingSupports":[{"segment":{"partIndex":0,"startIndex":0,"endIndex":6,"text":"你好"},"groundingChunkIndices":[0]}]}}]}`
 	for _, target := range []apix.Protocol{openai.ChatCompletions, openai.Responses, anthropic.Messages} {
 		t.Run(string(target), func(t *testing.T) {
-			ex, _ := r.NewExchange(target, gemini.GenerateContent, apix.ExchangeOptions{})
+			ex, _ := r.NewExchange(target, google.GenerateContent, apix.ExchangeOptions{})
 			out, err := ex.ConvertResponse(200, apix.Payload{Body: []byte(response)})
 			if err != nil {
 				t.Fatal(err)
@@ -261,12 +261,12 @@ func TestGeminiAliasesSchemaAndCitationOffsets(t *testing.T) {
 func TestInvalidReasoningTypesAndSourceTerminals(t *testing.T) {
 	r := registry(t)
 	for _, config := range []string{`{"thinkingConfig":{"thinkingBudget":"bad"}}`, `{"thinkingConfig":{"thinkingLevel":3}}`, `{"candidateCount":"two"}`, `{"thinkingConfig":{"thinkingLevel":"high","thinkingBudget":1024}}`} {
-		ex, _ := r.NewExchange(gemini.GenerateContent, openai.ChatCompletions, apix.ExchangeOptions{})
+		ex, _ := r.NewExchange(google.GenerateContent, openai.ChatCompletions, apix.ExchangeOptions{})
 		if _, err := ex.ConvertRequest(apix.Payload{Body: []byte(`{"contents":[{"parts":[{"text":"hi"}]}],"generationConfig":` + config + `}`)}, "m"); err == nil {
 			t.Fatalf("accepted invalid config: %s", config)
 		}
 	}
-	ex, _ := r.NewExchange(gemini.GenerateContent, openai.Responses, apix.ExchangeOptions{})
+	ex, _ := r.NewExchange(google.GenerateContent, openai.Responses, apix.ExchangeOptions{})
 	sc, _ := ex.NewStreamConverter()
 	wire := "event: response.output_text.delta\ndata: {\"item_id\":\"m\",\"delta\":\"hello\"}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"r\",\"object\":\"response\",\"status\":\"failed\",\"output\":[]}}\n\n"
 	events, done, err := sc.Feed([]byte(wire))
@@ -278,9 +278,9 @@ func TestInvalidReasoningTypesAndSourceTerminals(t *testing.T) {
 	}
 }
 
-func TestIndependentGeminiOutputWithNativeToolNormalization(t *testing.T) {
+func TestIndependentGoogleOutputWithNativeToolNormalization(t *testing.T) {
 	r := registry(t)
-	ex, err := r.NewExchange(openai.Responses, openai.Responses, apix.ExchangeOptions{Output: gemini.GenerateContent, Ext: openai.ResponsesOptions{NormalizeTools: true}})
+	ex, err := r.NewExchange(openai.Responses, openai.Responses, apix.ExchangeOptions{Output: google.GenerateContent, Ext: openai.ResponsesOptions{NormalizeTools: true}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,11 +309,11 @@ func TestIndependentGeminiOutputWithNativeToolNormalization(t *testing.T) {
 	}
 }
 
-func TestMalformedGeminiStreamShapes(t *testing.T) {
+func TestMalformedGoogleStreamShapes(t *testing.T) {
 	r := registry(t)
-	for _, p := range []apix.Protocol{gemini.GenerateContent, openai.ChatCompletions, openai.Responses, anthropic.Messages} {
+	for _, p := range []apix.Protocol{google.GenerateContent, openai.ChatCompletions, openai.Responses, anthropic.Messages} {
 		for _, body := range []string{`{"candidates":[{"content":"invalid","finishReason":"STOP"}]}`, `{"candidates":[{"content":{"parts":"invalid"},"finishReason":"STOP"}]}`, `{"candidates":[{"index":"invalid","finishReason":"STOP"}]}`, `{"candidates":[{"content":{"parts":[{"text":123}]},"finishReason":"STOP"}]}`, `{"candidates":[{"finishReason":"STOP"}],"error":"failed"}`} {
-			ex, _ := r.NewExchange(p, gemini.GenerateContent, apix.ExchangeOptions{})
+			ex, _ := r.NewExchange(p, google.GenerateContent, apix.ExchangeOptions{})
 			sc, _ := ex.NewStreamConverter()
 			_, done, err := sc.Feed([]byte("data: " + body + "\n\n"))
 			if err == nil || done {
@@ -323,16 +323,16 @@ func TestMalformedGeminiStreamShapes(t *testing.T) {
 	}
 }
 
-func TestGeminiThinkingUsageRoundTrip(t *testing.T) {
+func TestGoogleThinkingUsageRoundTrip(t *testing.T) {
 	r := registry(t)
 	wire := `{"responseId":"r","candidates":[{"content":{"parts":[{"text":"answer"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":7,"cachedContentTokenCount":4,"candidatesTokenCount":3,"thoughtsTokenCount":2,"totalTokenCount":12}}`
 	for _, p := range []apix.Protocol{openai.ChatCompletions, openai.Responses, anthropic.Messages} {
-		ex, _ := r.NewExchange(p, gemini.GenerateContent, apix.ExchangeOptions{})
+		ex, _ := r.NewExchange(p, google.GenerateContent, apix.ExchangeOptions{})
 		out, err := ex.ConvertResponse(200, apix.Payload{Body: []byte(wire)})
 		if err != nil {
 			t.Fatal(err)
 		}
-		back, _ := r.NewExchange(gemini.GenerateContent, p, apix.ExchangeOptions{})
+		back, _ := r.NewExchange(google.GenerateContent, p, apix.ExchangeOptions{})
 		restored, err := back.ConvertResponse(200, out)
 		if err != nil {
 			t.Fatal(err)

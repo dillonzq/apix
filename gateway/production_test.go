@@ -14,7 +14,7 @@ import (
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/gateway"
 	"github.com/dillonzq/apix/protocol/anthropic"
-	"github.com/dillonzq/apix/protocol/gemini"
+	"github.com/dillonzq/apix/protocol/google"
 	"github.com/dillonzq/apix/protocol/openai"
 	"github.com/dillonzq/apix/route"
 )
@@ -146,11 +146,11 @@ func TestForwardHeaders(t *testing.T) {
 }
 
 func TestPathOverrideNeedsStaticPath(t *testing.T) {
-	reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), gemini.Codecs())...)
+	reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), google.Codecs())...)
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := gateway.Upstream{Endpoint: route.Endpoint{ID: "g", Protocol: gemini.GenerateContent}, BaseURL: "https://example.com", Path: "/v1/custom"}
+	g := gateway.Upstream{Endpoint: route.Endpoint{ID: "g", Protocol: google.GenerateContent}, BaseURL: "https://example.com", Path: "/v1/custom"}
 	if _, err := gateway.New(gateway.Config{Registry: reg, Upstreams: []gateway.Upstream{g}}); err == nil {
 		t.Fatal("static Path accepted for a model-dependent path")
 	}

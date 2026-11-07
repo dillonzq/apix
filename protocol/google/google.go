@@ -1,9 +1,9 @@
-// Package gemini provides codecs for Google Gemini wire protocols.
+// Package google provides codecs for Google Gemini wire protocols.
 // GenerateContent belongs to apix.KindLLM and converts directly to and from
 // the other generation protocols in this module. Interactions is native only.
 // GenerateContentImage and Imagen belong to apix.KindImage; see images.go.
 // CountTokens belongs to apix.KindTokens; see tokens.go.
-package gemini
+package google
 
 import (
 	"github.com/dillonzq/apix"
@@ -12,12 +12,12 @@ import (
 )
 
 const (
-	// GenerateContent is "gemini.generate-content":
+	// GenerateContent is "google.generate-content":
 	// POST /v1beta/models/{model}:generateContent, or :streamGenerateContent
 	// for streams. The model and mode live in the URL; pass them as
 	// apix.Payload.Metadata.
 	GenerateContent = ids.GenerateContent
-	// Interactions is "gemini.interactions": POST /v1beta/interactions. A
+	// Interactions is "google.interactions": POST /v1beta/interactions. A
 	// native exchange reports created interaction IDs through
 	// apix.StateReporter.
 	Interactions = ids.Interactions
@@ -66,7 +66,7 @@ func GenerateContentCodec() apix.Codec {
 		if o.ThinkingMode != "" && o.ThinkingMode != ThinkingBudget && o.ThinkingMode != ThinkingLevel {
 			return codec.Options{}, false
 		}
-		return codec.Options{GeminiThinkingMode: string(o.ThinkingMode), GeminiIncludeThoughts: o.IncludeThoughts, GeminiRequireThoughtSignatures: o.RequireThoughtSignatures}, true
+		return codec.Options{GoogleThinkingMode: string(o.ThinkingMode), GoogleIncludeThoughts: o.IncludeThoughts, GoogleRequireThoughtSignatures: o.RequireThoughtSignatures}, true
 	})
 }
 

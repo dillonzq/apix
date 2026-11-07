@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/dillonzq/apix"
-	"github.com/dillonzq/apix/protocol/gemini"
+	"github.com/dillonzq/apix/protocol/google"
 	"github.com/dillonzq/apix/protocol/openai"
 )
 
@@ -24,7 +24,7 @@ var b64 = base64.StdEncoding.EncodeToString(png)
 
 func registry(t *testing.T) *apix.Registry {
 	t.Helper()
-	reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), gemini.Codecs())...)
+	reg, err := apix.NewRegistry(slices.Concat(openai.Codecs(), google.Codecs())...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,21 +118,21 @@ func TestSpecs(t *testing.T) {
 	for p, want := range map[apix.Protocol]string{
 		openai.ImagesGenerations:    "/v1/images/generations",
 		openai.ImagesEdits:          "/v1/images/edits",
-		gemini.GenerateContentImage: "/v1beta/models/m:generateContent",
-		gemini.Imagen:               "/v1beta/models/m:predict",
+		google.GenerateContentImage: "/v1beta/models/m:generateContent",
+		google.Imagen:               "/v1beta/models/m:predict",
 	} {
 		spec, ok := reg.Spec(p)
 		if !ok || spec.Kind != apix.KindImage || spec.Method != "POST" || spec.Path(apix.RequestInfo{}, "m") != want {
 			t.Fatalf("%s: %+v", p, spec)
 		}
 	}
-	if spec, _ := reg.Spec(gemini.GenerateContentImage); spec.Path(apix.RequestInfo{Stream: true}, "models/m") != "/v1beta/models/m:streamGenerateContent?alt=sse" || spec.Auth.Header != "x-goog-api-key" {
+	if spec, _ := reg.Spec(google.GenerateContentImage); spec.Path(apix.RequestInfo{Stream: true}, "models/m") != "/v1beta/models/m:streamGenerateContent?alt=sse" || spec.Auth.Header != "x-goog-api-key" {
 		t.Fatalf("stream path: %+v", spec)
 	}
-	if spec, _ := reg.Spec(gemini.Imagen); spec.Stream != apix.FramingNone {
+	if spec, _ := reg.Spec(google.Imagen); spec.Stream != apix.FramingNone {
 		t.Fatal("Imagen must not stream")
 	}
-	spec, _ := reg.Spec(gemini.Imagen)
+	spec, _ := reg.Spec(google.Imagen)
 	md, err := spec.ParsePath("/v1beta/models/imagen-4.0-generate-001:predict")
 	if err != nil || md.Model != "imagen-4.0-generate-001" || md.Stream == nil || *md.Stream {
 		t.Fatalf("metadata %+v, err %v", md, err)
@@ -140,7 +140,7 @@ func TestSpecs(t *testing.T) {
 	if _, err := spec.ParsePath("/v1beta/models/m:generateContent"); class(err) != apix.ClassUnsupported {
 		t.Fatalf("Imagen accepted generateContent: %v", err)
 	}
-	spec, _ = reg.Spec(gemini.GenerateContentImage)
+	spec, _ = reg.Spec(google.GenerateContentImage)
 	if md, err := spec.ParsePath("/v1beta/models/m:streamGenerateContent"); err != nil || !*md.Stream {
 		t.Fatalf("metadata %+v, err %v", md, err)
 	}
@@ -152,30 +152,30 @@ func TestConversionPaths(t *testing.T) {
 		client, upstream apix.Protocol
 		want             bool
 	}{
-		{openai.ImagesGenerations, gemini.GenerateContentImage, true},
-		{openai.ImagesGenerations, gemini.Imagen, true},
-		{openai.ImagesEdits, gemini.GenerateContentImage, true},
-		{openai.ImagesEdits, gemini.Imagen, false},
+		{openai.ImagesGenerations, google.GenerateContentImage, true},
+		{openai.ImagesGenerations, google.Imagen, true},
+		{openai.ImagesEdits, google.GenerateContentImage, true},
+		{openai.ImagesEdits, google.Imagen, false},
 		{openai.ImagesEdits, openai.ImagesGenerations, false},
 		{openai.ImagesGenerations, openai.ImagesEdits, false},
-		{gemini.GenerateContentImage, openai.ImagesEdits, true},
-		{gemini.Imagen, openai.ImagesGenerations, true},
-		{gemini.Imagen, gemini.GenerateContentImage, true},
+		{google.GenerateContentImage, openai.ImagesEdits, true},
+		{google.Imagen, openai.ImagesGenerations, true},
+		{google.Imagen, google.GenerateContentImage, true},
 		// Kinds never mix.
 		{openai.ImagesGenerations, openai.ChatCompletions, false},
-		{gemini.GenerateContent, gemini.GenerateContentImage, false},
+		{google.GenerateContent, google.GenerateContentImage, false},
 	} {
 		if got := reg.CanConvert(tc.client, tc.upstream); got != tc.want {
 			t.Errorf("CanConvert(%s, %s) = %v", tc.client, tc.upstream, got)
 		}
 	}
-	if err := reg.ValidateOptions(gemini.Imagen, apix.ExchangeOptions{Ext: struct{}{}}); class(err) != apix.ClassUnsupported {
+	if err := reg.ValidateOptions(google.Imagen, apix.ExchangeOptions{Ext: struct{}{}}); class(err) != apix.ClassUnsupported {
 		t.Fatalf("Ext accepted: %v", err)
 	}
-	if err := reg.ValidateOptions(gemini.Imagen, apix.ExchangeOptions{Reasoning: &apix.Reasoning{Effort: "high"}}); class(err) != apix.ClassUnsupported {
+	if err := reg.ValidateOptions(google.Imagen, apix.ExchangeOptions{Reasoning: &apix.Reasoning{Effort: "high"}}); class(err) != apix.ClassUnsupported {
 		t.Fatalf("reasoning accepted: %v", err)
 	}
-	if err := reg.ValidateOptions(openai.ImagesEdits, apix.ExchangeOptions{Output: gemini.Imagen}); class(err) != apix.ClassUnsupported {
+	if err := reg.ValidateOptions(openai.ImagesEdits, apix.ExchangeOptions{Output: google.Imagen}); class(err) != apix.ClassUnsupported {
 		t.Fatalf("output accepted: %v", err)
 	}
 }
@@ -194,7 +194,7 @@ func TestInspect(t *testing.T) {
 	if err != nil || !slices.Equal(info.Affinity, []string{"file:file-1"}) {
 		t.Fatalf("%+v %v", info, err)
 	}
-	info, err = reg.Inspect(gemini.GenerateContentImage, apix.Payload{
+	info, err = reg.Inspect(google.GenerateContentImage, apix.Payload{
 		Body:     []byte(`{"cached_content":"cachedContents/c1","contents":[{"parts":[{"text":"hat"},{"inline_data":{"mime_type":"image/png","data":"` + b64 + `"}}]}]}`),
 		Metadata: apix.RequestMetadata{Model: "gemini-2.5-flash-image"},
 	})
@@ -210,8 +210,8 @@ func TestInspect(t *testing.T) {
 		{openai.ImagesGenerations, apix.Payload{Body: []byte(`{"prompt":"p","images":[{"file_id":"f"}]}`)}},
 		{openai.ImagesEdits, form(t, map[string]string{"prompt": "hat"})},
 		{openai.ImagesEdits, apix.Payload{Body: []byte(`{"prompt":"hat","images":[{"file_id":"f","image_url":"u"}]}`)}},
-		{gemini.GenerateContentImage, apix.Payload{Body: []byte(`{"contents":[]}`)}},
-		{gemini.Imagen, apix.Payload{Body: []byte(`{"instances":[{}]}`)}},
+		{google.GenerateContentImage, apix.Payload{Body: []byte(`{"contents":[]}`)}},
+		{google.Imagen, apix.Payload{Body: []byte(`{"instances":[{}]}`)}},
 	} {
 		if _, err := reg.Inspect(tc.p, tc.body); class(err) != apix.ClassTranslation {
 			t.Errorf("%s %s: %v", tc.p, tc.body.Body, err)
@@ -219,8 +219,8 @@ func TestInspect(t *testing.T) {
 	}
 }
 
-func TestGenerationsToGemini(t *testing.T) {
-	ex := exchange(t, openai.ImagesGenerations, gemini.GenerateContentImage, apix.ExchangeOptions{})
+func TestGenerationsToGoogle(t *testing.T) {
+	ex := exchange(t, openai.ImagesGenerations, google.GenerateContentImage, apix.ExchangeOptions{})
 	out, err := ex.ConvertRequest(apix.Payload{Body: []byte(`{"model":"gpt-image-1","prompt":"a cat","n":2,"size":"1536x1024","quality":"high","output_format":"png"}`)}, "gemini-2.5-flash-image")
 	if err != nil {
 		t.Fatal(err)
@@ -247,13 +247,13 @@ func TestGenerationsToGemini(t *testing.T) {
 	delete(got, "created")
 	body, _ := json.Marshal(got)
 	jsonEqual(t, body, `{"data":[{"b64_json":"`+b64+`"},{"b64_json":"second"}],"output_format":"png","usage":{"input_tokens":10,"output_tokens":1295,"total_tokens":1305,"input_tokens_details":{"image_tokens":0,"text_tokens":10},"output_tokens_details":{"image_tokens":1290,"text_tokens":0}}}`)
-	if d := ex.Diagnostics(); len(d) != 2 || d[1].Path != "candidates.content.parts.text" || d[1].From != gemini.GenerateContentImage {
+	if d := ex.Diagnostics(); len(d) != 2 || d[1].Path != "candidates.content.parts.text" || d[1].From != google.GenerateContentImage {
 		t.Fatalf("diagnostics %+v", d)
 	}
 }
 
 func TestEmulatedStream(t *testing.T) {
-	ex := exchange(t, openai.ImagesGenerations, gemini.Imagen, apix.ExchangeOptions{})
+	ex := exchange(t, openai.ImagesGenerations, google.Imagen, apix.ExchangeOptions{})
 	out, err := ex.ConvertRequest(apix.Payload{Body: []byte(`{"prompt":"a cat","stream":true,"partial_images":2,"size":"1024x1792"}`)}, "imagen-4.0-generate-001")
 	if err != nil {
 		t.Fatal(err)
@@ -282,8 +282,8 @@ func TestEmulatedStream(t *testing.T) {
 	}
 }
 
-func TestEditsToGemini(t *testing.T) {
-	ex := exchange(t, openai.ImagesEdits, gemini.GenerateContentImage, apix.ExchangeOptions{})
+func TestEditsToGoogle(t *testing.T) {
+	ex := exchange(t, openai.ImagesEdits, google.GenerateContentImage, apix.ExchangeOptions{})
 	req := form(t, map[string]string{"model": "gpt-image-1", "prompt": "add a hat", "size": "1024x1024", "input_fidelity": "high"}, [2]string{"image[]", "image/png"}, [2]string{"image[]", "application/octet-stream"})
 	out, err := ex.ConvertRequest(req, "gemini-2.5-flash-image")
 	if err != nil {
@@ -293,15 +293,15 @@ func TestEditsToGemini(t *testing.T) {
 
 	// A mask cannot be expressed: Safe rejects it, Allow records it.
 	masked := form(t, map[string]string{"prompt": "add a hat"}, [2]string{"image", "image/png"}, [2]string{"mask", "image/png"})
-	safe := exchange(t, openai.ImagesEdits, gemini.GenerateContentImage, apix.ExchangeOptions{LossPolicy: apix.LossPolicySafe})
+	safe := exchange(t, openai.ImagesEdits, google.GenerateContentImage, apix.ExchangeOptions{LossPolicy: apix.LossPolicySafe})
 	if _, err := safe.ConvertRequest(masked, "m"); class(err) != apix.ClassUnsupported || !strings.Contains(err.Error(), "mask") {
 		t.Fatalf("safe: %v", err)
 	}
-	allow := exchange(t, openai.ImagesEdits, gemini.GenerateContentImage, apix.ExchangeOptions{})
+	allow := exchange(t, openai.ImagesEdits, google.GenerateContentImage, apix.ExchangeOptions{})
 	if _, err := allow.ConvertRequest(masked, "m"); err != nil || allow.Diagnostics()[0].Path != "mask" || !allow.Diagnostics()[0].Semantic {
 		t.Fatalf("allow: %v %+v", err, allow.Diagnostics())
 	}
-	strict := exchange(t, openai.ImagesEdits, gemini.GenerateContentImage, apix.ExchangeOptions{LossPolicy: apix.LossPolicyStrict})
+	strict := exchange(t, openai.ImagesEdits, google.GenerateContentImage, apix.ExchangeOptions{LossPolicy: apix.LossPolicyStrict})
 	if _, err := strict.ConvertRequest(req, "m"); class(err) != apix.ClassUnsupported {
 		t.Fatalf("strict: %v", err)
 	}
@@ -319,10 +319,10 @@ func TestEditsToGemini(t *testing.T) {
 	}
 }
 
-func TestGeminiToOpenAI(t *testing.T) {
+func TestGoogleToOpenAI(t *testing.T) {
 	image := `{"inlineData":{"mimeType":"image/png","data":"` + b64 + `"}}`
 	edit := `{"systemInstruction":{"parts":[{"text":"be nice"}]},"contents":[{"role":"user","parts":[{"text":"add a hat"},` + image + `]}],"generationConfig":{"candidateCount":2,"temperature":1,"responseModalities":["TEXT","IMAGE"],"imageConfig":{"aspectRatio":"16:9"}}}`
-	ex := exchange(t, gemini.GenerateContentImage, openai.ImagesEdits, apix.ExchangeOptions{})
+	ex := exchange(t, google.GenerateContentImage, openai.ImagesEdits, apix.ExchangeOptions{})
 	out, err := ex.ConvertRequest(apix.Payload{Body: []byte(edit), Metadata: apix.RequestMetadata{Model: "nano"}}, "gpt-image-1")
 	if err != nil {
 		t.Fatal(err)
@@ -341,22 +341,22 @@ func TestGeminiToOpenAI(t *testing.T) {
 	}
 
 	// Generations take no input images; edits need one.
-	gen := exchange(t, gemini.GenerateContentImage, openai.ImagesGenerations, apix.ExchangeOptions{})
+	gen := exchange(t, google.GenerateContentImage, openai.ImagesGenerations, apix.ExchangeOptions{})
 	if _, err := gen.ConvertRequest(apix.Payload{Body: []byte(edit)}, "gpt-image-1"); class(err) != apix.ClassUnsupported {
 		t.Fatalf("generations with image: %v", err)
 	}
 	text := `{"contents":[{"parts":[{"text":"a cat"}]}],"generationConfig":{"imageConfig":{"aspectRatio":"2:3"}}}`
-	if _, err := exchange(t, gemini.GenerateContentImage, openai.ImagesEdits, apix.ExchangeOptions{}).ConvertRequest(apix.Payload{Body: []byte(text)}, "gpt-image-1"); class(err) != apix.ClassUnsupported {
+	if _, err := exchange(t, google.GenerateContentImage, openai.ImagesEdits, apix.ExchangeOptions{}).ConvertRequest(apix.Payload{Body: []byte(text)}, "gpt-image-1"); class(err) != apix.ClassUnsupported {
 		t.Fatalf("edits without image: %v", err)
 	}
 	// A streamed request converted back to Gemini calls OpenAI without streaming.
 	stream := true
-	out, err = exchange(t, gemini.GenerateContentImage, openai.ImagesEdits, apix.ExchangeOptions{}).ConvertRequest(apix.Payload{Body: []byte(edit), Metadata: apix.RequestMetadata{Stream: &stream}}, "gpt-image-1")
+	out, err = exchange(t, google.GenerateContentImage, openai.ImagesEdits, apix.ExchangeOptions{}).ConvertRequest(apix.Payload{Body: []byte(edit), Metadata: apix.RequestMetadata{Stream: &stream}}, "gpt-image-1")
 	if fields, _ := readForm(t, out); err != nil || fields["stream"] != "" || out.Metadata.Stream == nil || *out.Metadata.Stream {
 		t.Fatalf("%v %v %+v", err, fields, out.Metadata)
 	}
 	// A streamed request whose output is the upstream's protocol streams natively.
-	native := exchange(t, gemini.GenerateContentImage, openai.ImagesGenerations, apix.ExchangeOptions{Output: openai.ImagesGenerations})
+	native := exchange(t, google.GenerateContentImage, openai.ImagesGenerations, apix.ExchangeOptions{Output: openai.ImagesGenerations})
 	out, err = native.ConvertRequest(apix.Payload{Body: []byte(text), Metadata: apix.RequestMetadata{Stream: &stream}}, "gpt-image-1")
 	if err != nil {
 		t.Fatal(err)
@@ -387,7 +387,7 @@ func TestDuplicateSpellings(t *testing.T) {
 	body := `{"contents":[{"parts":[{"text":"a fox"}]}],"generation_config":{"candidate_count":3},` +
 		`"generationConfig":{"candidate_count":4,"candidateCount":2}}`
 	for range 50 {
-		ex := exchange(t, gemini.GenerateContentImage, openai.ImagesGenerations, apix.ExchangeOptions{})
+		ex := exchange(t, google.GenerateContentImage, openai.ImagesGenerations, apix.ExchangeOptions{})
 		out, err := ex.ConvertRequest(apix.Payload{Body: []byte(body)}, "gpt-image-1")
 		if err != nil {
 			t.Fatal(err)
@@ -398,7 +398,7 @@ func TestDuplicateSpellings(t *testing.T) {
 
 func TestImagen(t *testing.T) {
 	req := apix.Payload{Body: []byte(`{"instances":[{"prompt":"a fox"}],"parameters":{"sampleCount":3,"aspectRatio":"4:3","imageSize":"2K","personGeneration":"allow_adult","outputOptions":{"mimeType":"image/jpeg","compressionQuality":80}}}`)}
-	ex := exchange(t, gemini.Imagen, openai.ImagesGenerations, apix.ExchangeOptions{})
+	ex := exchange(t, google.Imagen, openai.ImagesGenerations, apix.ExchangeOptions{})
 	out, err := ex.ConvertRequest(req, "gpt-image-1")
 	if err != nil {
 		t.Fatal(err)
@@ -418,7 +418,7 @@ func TestImagen(t *testing.T) {
 	}
 	jsonEqual(t, resp.Body, `{"predictions":[{"bytesBase64Encoded":"a","mimeType":"image/jpeg"}]}`)
 
-	ex = exchange(t, gemini.Imagen, gemini.GenerateContentImage, apix.ExchangeOptions{})
+	ex = exchange(t, google.Imagen, google.GenerateContentImage, apix.ExchangeOptions{})
 	out, err = ex.ConvertRequest(apix.Payload{Body: req.Body, Metadata: apix.RequestMetadata{Model: "imagen-4"}}, "gemini-3-pro-image")
 	if err != nil {
 		t.Fatal(err)
@@ -433,7 +433,7 @@ func TestImagen(t *testing.T) {
 	}
 	jsonEqual(t, resp.Body, `{"predictions":[{"bytesBase64Encoded":"a","mimeType":"image/png"}]}`)
 
-	ex = exchange(t, gemini.GenerateContentImage, gemini.Imagen, apix.ExchangeOptions{})
+	ex = exchange(t, google.GenerateContentImage, google.Imagen, apix.ExchangeOptions{})
 	out, err = ex.ConvertRequest(apix.Payload{Body: []byte(`{"contents":[{"parts":[{"text":"a fox"}]}],"generationConfig":{"imageConfig":{"aspectRatio":"21:9","imageSize":"4K"}}}`)}, "imagen-4")
 	if err != nil {
 		t.Fatal(err)
@@ -445,7 +445,7 @@ func TestImagen(t *testing.T) {
 }
 
 func TestNoImage(t *testing.T) {
-	ex := exchange(t, openai.ImagesGenerations, gemini.GenerateContentImage, apix.ExchangeOptions{})
+	ex := exchange(t, openai.ImagesGenerations, google.GenerateContentImage, apix.ExchangeOptions{})
 	if _, err := ex.ConvertRequest(apix.Payload{Body: []byte(`{"prompt":"p"}`)}, "m"); err != nil {
 		t.Fatal(err)
 	}
@@ -460,7 +460,7 @@ func TestNoImage(t *testing.T) {
 			t.Errorf("%s: %+v", body, e)
 		}
 	}
-	ex = exchange(t, openai.ImagesGenerations, gemini.Imagen, apix.ExchangeOptions{})
+	ex = exchange(t, openai.ImagesGenerations, google.Imagen, apix.ExchangeOptions{})
 	if _, err := ex.ConvertResponse(200, apix.Payload{Body: []byte(`{}`)}); class(err) != apix.ClassUnsupported {
 		t.Fatalf("filtered Imagen: %v", err)
 	}
@@ -505,7 +505,7 @@ func TestNative(t *testing.T) {
 		t.Fatalf("native diagnostics %+v", gen.Diagnostics())
 	}
 
-	g := exchange(t, gemini.GenerateContentImage, gemini.GenerateContentImage, apix.ExchangeOptions{})
+	g := exchange(t, google.GenerateContentImage, google.GenerateContentImage, apix.ExchangeOptions{})
 	stream := true
 	greq := apix.Payload{Body: []byte(`{"contents":[{"parts":[{"text":"p"}]}]}`), Metadata: apix.RequestMetadata{Model: "alias", Stream: &stream}}
 	out, err = g.ConvertRequest(greq, "gemini-2.5-flash-image")
@@ -581,7 +581,7 @@ func TestNativeStreams(t *testing.T) {
 		}
 	}
 
-	g := exchange(t, gemini.GenerateContentImage, gemini.GenerateContentImage, apix.ExchangeOptions{})
+	g := exchange(t, google.GenerateContentImage, google.GenerateContentImage, apix.ExchangeOptions{})
 	stream := true
 	if _, err := g.ConvertRequest(apix.Payload{Body: []byte(`{"contents":[{"parts":[{"text":"p"}]}]}`), Metadata: apix.RequestMetadata{Stream: &stream}}, "m"); err != nil {
 		t.Fatal(err)
@@ -593,12 +593,12 @@ func TestNativeStreams(t *testing.T) {
 			t.Fatal(err)
 		}
 		if out, _, err := feedAll(sc, gwire, bytewise); err != nil || !strings.Contains(string(out), `"finishReason":"STOP"`) {
-			t.Fatalf("gemini bytewise=%v: %q %v", bytewise, out, err)
+			t.Fatalf("google bytewise=%v: %q %v", bytewise, out, err)
 		}
 	}
 	sc, _ = g.NewStreamConverter()
 	if _, _, err := feedAll(sc, "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"ok\"}]}}]}\n\n", false); err == nil {
-		t.Fatal("gemini stream without finish reason succeeded")
+		t.Fatal("google stream without finish reason succeeded")
 	}
 	// Found by FuzzImageStreamChunkBoundaries: trailing bytes after a JSON
 	// value are not a valid chunk.
@@ -616,31 +616,31 @@ func TestNativeStreams(t *testing.T) {
 
 func TestResponseModalities(t *testing.T) {
 	reg := registry(t)
-	both := gemini.GenerateContentImageOptions{ResponseModalities: []gemini.Modality{gemini.ModalityText, gemini.ModalityImage}}
-	for _, ext := range []any{both, &both, gemini.GenerateContentImageOptions{}, (*gemini.GenerateContentImageOptions)(nil)} {
-		if err := reg.ValidateOptions(gemini.GenerateContentImage, apix.ExchangeOptions{Ext: ext}); err != nil {
+	both := google.GenerateContentImageOptions{ResponseModalities: []google.Modality{google.ModalityText, google.ModalityImage}}
+	for _, ext := range []any{both, &both, google.GenerateContentImageOptions{}, (*google.GenerateContentImageOptions)(nil)} {
+		if err := reg.ValidateOptions(google.GenerateContentImage, apix.ExchangeOptions{Ext: ext}); err != nil {
 			t.Errorf("%#v: %v", ext, err)
 		}
 	}
 	for _, ext := range []any{
-		gemini.GenerateContentImageOptions{ResponseModalities: []gemini.Modality{gemini.ModalityText}},
-		gemini.GenerateContentImageOptions{ResponseModalities: []gemini.Modality{gemini.ModalityImage, gemini.ModalityImage}},
-		gemini.GenerateContentImageOptions{ResponseModalities: []gemini.Modality{"AUDIO", gemini.ModalityImage}},
-		gemini.GenerateContentOptions{},
+		google.GenerateContentImageOptions{ResponseModalities: []google.Modality{google.ModalityText}},
+		google.GenerateContentImageOptions{ResponseModalities: []google.Modality{google.ModalityImage, google.ModalityImage}},
+		google.GenerateContentImageOptions{ResponseModalities: []google.Modality{"AUDIO", google.ModalityImage}},
+		google.GenerateContentOptions{},
 	} {
-		if err := reg.ValidateOptions(gemini.GenerateContentImage, apix.ExchangeOptions{Ext: ext}); class(err) != apix.ClassUnsupported {
+		if err := reg.ValidateOptions(google.GenerateContentImage, apix.ExchangeOptions{Ext: ext}); class(err) != apix.ClassUnsupported {
 			t.Errorf("%#v accepted: %v", ext, err)
 		}
 	}
-	if err := reg.ValidateOptions(gemini.Imagen, apix.ExchangeOptions{Ext: both}); class(err) != apix.ClassUnsupported {
+	if err := reg.ValidateOptions(google.Imagen, apix.ExchangeOptions{Ext: both}); class(err) != apix.ClassUnsupported {
 		t.Fatalf("Imagen accepted GenerateContentImageOptions: %v", err)
 	}
 
 	for client, body := range map[apix.Protocol]string{
 		openai.ImagesGenerations: `{"prompt":"a cat"}`,
-		gemini.Imagen:            `{"instances":[{"prompt":"a cat"}]}`,
+		google.Imagen:            `{"instances":[{"prompt":"a cat"}]}`,
 	} {
-		ex := exchange(t, client, gemini.GenerateContentImage, apix.ExchangeOptions{Ext: &both})
+		ex := exchange(t, client, google.GenerateContentImage, apix.ExchangeOptions{Ext: &both})
 		out, err := ex.ConvertRequest(apix.Payload{Body: []byte(body)}, "m")
 		if err != nil {
 			t.Fatal(err)
@@ -648,9 +648,9 @@ func TestResponseModalities(t *testing.T) {
 		jsonEqual(t, out.Body, `{"contents":[{"role":"user","parts":[{"text":"a cat"}]}],"generationConfig":{"responseModalities":["TEXT","IMAGE"]}}`)
 	}
 	// The caller's options cannot change an exchange after it is created.
-	opts := gemini.GenerateContentImageOptions{ResponseModalities: []gemini.Modality{gemini.ModalityImage, gemini.ModalityText}}
-	ex := exchange(t, openai.ImagesGenerations, gemini.GenerateContentImage, apix.ExchangeOptions{Ext: opts})
-	opts.ResponseModalities[0] = gemini.ModalityText
+	opts := google.GenerateContentImageOptions{ResponseModalities: []google.Modality{google.ModalityImage, google.ModalityText}}
+	ex := exchange(t, openai.ImagesGenerations, google.GenerateContentImage, apix.ExchangeOptions{Ext: opts})
+	opts.ResponseModalities[0] = google.ModalityText
 	if out, _ := ex.ConvertRequest(apix.Payload{Body: []byte(`{"prompt":"a cat"}`)}, "m"); !strings.Contains(string(out.Body), `"responseModalities":["IMAGE","TEXT"]`) {
 		t.Fatalf("options aliased: %s", out.Body)
 	}
@@ -664,7 +664,7 @@ func TestResponseModalities(t *testing.T) {
 		`{"contents":[{"parts":[{"text":"p"}]}],"generationConfig":null}`:                                                                  `{"contents":[{"parts":[{"text":"p"}]}],"generationConfig":{"responseModalities":["TEXT","IMAGE"]}}`,
 		`{"contents":[{"parts":[{"text":"p"}]}]}`:                                                                                          `{"contents":[{"parts":[{"text":"p"}]}],"generationConfig":{"responseModalities":["TEXT","IMAGE"]}}`,
 	} {
-		native := exchange(t, gemini.GenerateContentImage, gemini.GenerateContentImage, apix.ExchangeOptions{Ext: both, LossPolicy: apix.LossPolicyStrict})
+		native := exchange(t, google.GenerateContentImage, google.GenerateContentImage, apix.ExchangeOptions{Ext: both, LossPolicy: apix.LossPolicyStrict})
 		out, err := native.ConvertRequest(apix.Payload{Body: []byte(req), Metadata: apix.RequestMetadata{Stream: &stream}}, "m")
 		if err != nil {
 			t.Fatal(err)
@@ -675,12 +675,12 @@ func TestResponseModalities(t *testing.T) {
 		}
 	}
 	// Without configured modalities native requests pass unchanged.
-	plain := exchange(t, gemini.GenerateContentImage, gemini.GenerateContentImage, apix.ExchangeOptions{})
+	plain := exchange(t, google.GenerateContentImage, google.GenerateContentImage, apix.ExchangeOptions{})
 	req := `{"contents":[{"parts":[{"text":"p"}]}],"generation_config":{"response_modalities":["IMAGE"]}}`
 	if out, err := plain.ConvertRequest(apix.Payload{Body: []byte(req)}, "m"); err != nil || string(out.Body) != req {
 		t.Fatalf("%s %v", out.Body, err)
 	}
-	bad := exchange(t, gemini.GenerateContentImage, gemini.GenerateContentImage, apix.ExchangeOptions{Ext: both})
+	bad := exchange(t, google.GenerateContentImage, google.GenerateContentImage, apix.ExchangeOptions{Ext: both})
 	if _, err := bad.ConvertRequest(apix.Payload{Body: []byte(`{"contents":[{"parts":[{"text":"p"}]}],"generationConfig":[]}`)}, "m"); class(err) != apix.ClassTranslation {
 		t.Fatalf("array generationConfig: %v", err)
 	}

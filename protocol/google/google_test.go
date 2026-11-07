@@ -1,4 +1,4 @@
-package gemini_test
+package google_test
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/protocol/anthropic"
-	"github.com/dillonzq/apix/protocol/gemini"
+	"github.com/dillonzq/apix/protocol/google"
 	"github.com/dillonzq/apix/protocol/openai"
 	"github.com/dillonzq/apix/sse"
 )
@@ -21,12 +21,12 @@ var fixtures = map[apix.Protocol]fixture{
 	openai.ChatCompletions: {`{"model":"m","messages":[{"role":"user","content":"hello"}]}`, `{"id":"r","model":"m","choices":[{"index":0,"message":{"role":"assistant","content":"answer"},"finish_reason":"stop"}],"usage":{"prompt_tokens":7,"completion_tokens":3}}`, "data: {\"id\":\"r\",\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"answer\"}}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3}}\n\ndata: [DONE]\n\n"},
 	openai.Responses:       {`{"model":"m","input":"hello"}`, `{"id":"r","object":"response","model":"m","status":"completed","output":[{"type":"message","id":"msg","role":"assistant","content":[{"type":"output_text","text":"answer"}]}],"usage":{"input_tokens":7,"output_tokens":3}}`, "event: response.created\ndata: {\"response\":{\"id\":\"r\",\"model\":\"m\"}}\n\nevent: response.output_text.delta\ndata: {\"item_id\":\"msg\",\"content_index\":0,\"delta\":\"answer\"}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"r\",\"object\":\"response\",\"model\":\"m\",\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"id\":\"msg\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"answer\"}]}],\"usage\":{\"input_tokens\":7,\"output_tokens\":3}}}\n\n"},
 	anthropic.Messages:     {`{"model":"m","max_tokens":100,"messages":[{"role":"user","content":"hello"}]}`, `{"id":"r","type":"message","model":"m","role":"assistant","content":[{"type":"text","text":"answer"}],"stop_reason":"end_turn","usage":{"input_tokens":7,"output_tokens":3}}`, "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"r\",\"model\":\"m\",\"usage\":{\"input_tokens\":7}}}\n\nevent: content_block_start\ndata: {\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"answer\"}}\n\nevent: content_block_stop\ndata: {\"index\":0}\n\nevent: message_delta\ndata: {\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":3}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"},
-	gemini.GenerateContent: {`{"contents":[{"role":"user","parts":[{"text":"hello"}]}]}`, `{"responseId":"r","modelVersion":"m","candidates":[{"index":0,"content":{"role":"model","parts":[{"text":"answer"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":7,"candidatesTokenCount":3,"totalTokenCount":10}}`, "data: {\"responseId\":\"r\",\"modelVersion\":\"m\",\"candidates\":[{\"index\":0,\"content\":{\"parts\":[{\"text\":\"answer\"}]}}]}\n\ndata: {\"candidates\":[{\"index\":0,\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":7,\"candidatesTokenCount\":3,\"totalTokenCount\":10}}\n\n"},
+	google.GenerateContent: {`{"contents":[{"role":"user","parts":[{"text":"hello"}]}]}`, `{"responseId":"r","modelVersion":"m","candidates":[{"index":0,"content":{"role":"model","parts":[{"text":"answer"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":7,"candidatesTokenCount":3,"totalTokenCount":10}}`, "data: {\"responseId\":\"r\",\"modelVersion\":\"m\",\"candidates\":[{\"index\":0,\"content\":{\"parts\":[{\"text\":\"answer\"}]}}]}\n\ndata: {\"candidates\":[{\"index\":0,\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":7,\"candidatesTokenCount\":3,\"totalTokenCount\":10}}\n\n"},
 }
 
 func registry(t *testing.T) *apix.Registry {
 	t.Helper()
-	r, e := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), gemini.Codecs())...)
+	r, e := apix.NewRegistry(slices.Concat(openai.Codecs(), anthropic.Codecs(), google.Codecs())...)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -34,7 +34,7 @@ func registry(t *testing.T) *apix.Registry {
 }
 func payload(p apix.Protocol, stream bool) apix.Payload {
 	v := apix.Payload{Body: []byte(fixtures[p].request)}
-	if p == gemini.GenerateContent {
+	if p == google.GenerateContent {
 		v.Metadata = apix.RequestMetadata{Model: "m", Stream: &stream}
 	}
 	return v
@@ -94,7 +94,7 @@ func drain(t *testing.T, c apix.StreamConverter, wire string, step int) []sse.Ev
 }
 func TestMatrixAndIndependentOutput(t *testing.T) {
 	r := registry(t)
-	ps := []apix.Protocol{openai.ChatCompletions, openai.Responses, anthropic.Messages, gemini.GenerateContent}
+	ps := []apix.Protocol{openai.ChatCompletions, openai.Responses, anthropic.Messages, google.GenerateContent}
 	for _, client := range ps {
 		for _, up := range ps {
 			for _, output := range ps {
@@ -107,7 +107,7 @@ func TestMatrixAndIndependentOutput(t *testing.T) {
 					if err != nil || !bytes.Contains(req.Body, []byte("hello")) {
 						t.Fatalf("request %s %v", req.Body, err)
 					}
-					if up == gemini.GenerateContent {
+					if up == google.GenerateContent {
 						if bytes.Contains(req.Body, []byte(`"model"`)) || req.Metadata.Model != "up" {
 							t.Fatalf("Gemini transport metadata %s %+v", req.Body, req.Metadata)
 						}
@@ -137,22 +137,22 @@ func TestMatrixAndIndependentOutput(t *testing.T) {
 		}
 	}
 }
-func TestNativeGeminiAndThinkingOptions(t *testing.T) {
+func TestNativeGoogleAndThinkingOptions(t *testing.T) {
 	r := registry(t)
 	body := []byte(` {"contents":[{"parts":[{"text":"hello"}]}],"generationConfig":{"thinkingConfig":{"thinkingLevel":"high","includeThoughts":false}},"unknown":9007199254740993} `)
-	ex, _ := r.NewExchange(gemini.GenerateContent, gemini.GenerateContent, apix.ExchangeOptions{})
+	ex, _ := r.NewExchange(google.GenerateContent, google.GenerateContent, apix.ExchangeOptions{})
 	out, err := ex.ConvertRequest(apix.Payload{Body: body, Metadata: apix.RequestMetadata{Model: "m"}}, "new")
 	if err != nil || !bytes.Equal(body, out.Body) {
 		t.Fatalf("native changed: %s %v", out.Body, err)
 	}
 	visible := true
-	ex, _ = r.NewExchange(gemini.GenerateContent, gemini.GenerateContent, apix.ExchangeOptions{Ext: gemini.GenerateContentOptions{ThinkingMode: gemini.ThinkingBudget, IncludeThoughts: &visible}})
+	ex, _ = r.NewExchange(google.GenerateContent, google.GenerateContent, apix.ExchangeOptions{Ext: google.GenerateContentOptions{ThinkingMode: google.ThinkingBudget, IncludeThoughts: &visible}})
 	visible = false // Options are copied on exchange construction.
 	out, err = ex.ConvertRequest(apix.Payload{Body: body, Metadata: apix.RequestMetadata{Model: "m"}}, "m")
 	if err != nil || !bytes.Contains(out.Body, []byte(`"thinkingBudget":24576`)) || !bytes.Contains(out.Body, []byte(`"includeThoughts":true`)) {
 		t.Fatalf("options %s %v", out.Body, err)
 	}
-	if _, err = r.NewExchange(openai.ChatCompletions, gemini.GenerateContent, apix.ExchangeOptions{Ext: gemini.GenerateContentOptions{ThinkingMode: "unknown"}}); err == nil {
+	if _, err = r.NewExchange(openai.ChatCompletions, google.GenerateContent, apix.ExchangeOptions{Ext: google.GenerateContentOptions{ThinkingMode: "unknown"}}); err == nil {
 		t.Fatal("invalid option accepted")
 	}
 }
@@ -161,7 +161,7 @@ func TestSignatureAndExactArgumentsRoundTrip(t *testing.T) {
 	response := `{"responseId":"r","modelVersion":"m","candidates":[{"content":{"role":"model","parts":[{"text":"thinking","thought":true,"thoughtSignature":"sig-thought"},{"text":"visible","thoughtSignature":"sig-text"},{"functionCall":{"id":"call1","name":"lookup","args":{"integer":9007199254740993}},"thoughtSignature":"sig-call"}]},"finishReason":"STOP"}]}`
 	for _, p := range []apix.Protocol{openai.ChatCompletions, openai.Responses, anthropic.Messages} {
 		t.Run(string(p), func(t *testing.T) {
-			ex, _ := r.NewExchange(p, gemini.GenerateContent, apix.ExchangeOptions{})
+			ex, _ := r.NewExchange(p, google.GenerateContent, apix.ExchangeOptions{})
 			out, err := ex.ConvertResponse(200, apix.Payload{Body: []byte(response)})
 			if err != nil {
 				t.Fatal(err)
@@ -202,9 +202,9 @@ func TestSignatureAndExactArgumentsRoundTrip(t *testing.T) {
 func TestLateSignatureUsageAndStreamIDs(t *testing.T) {
 	r := registry(t)
 	wire := frame(map[string]any{"responseId": "r", "candidates": []any{map[string]any{"content": map[string]any{"parts": []any{map[string]any{"text": "hi"}}}}}}) + frame(map[string]any{"candidates": []any{map[string]any{"content": map[string]any{"parts": []any{map[string]any{"functionCall": map[string]any{"name": "f", "args": map[string]any{"x": "y"}}}}}, "finishReason": "STOP"}}}) + frame(map[string]any{"candidates": []any{map[string]any{"content": map[string]any{"parts": []any{map[string]any{"thoughtSignature": "late"}}}}}, "usageMetadata": map[string]any{"promptTokenCount": 7, "candidatesTokenCount": 3, "thoughtsTokenCount": 2, "cachedContentTokenCount": 4, "totalTokenCount": 12}})
-	for _, p := range []apix.Protocol{openai.ChatCompletions, openai.Responses, anthropic.Messages, gemini.GenerateContent} {
+	for _, p := range []apix.Protocol{openai.ChatCompletions, openai.Responses, anthropic.Messages, google.GenerateContent} {
 		t.Run(string(p), func(t *testing.T) {
-			ex, _ := r.NewExchange(p, gemini.GenerateContent, apix.ExchangeOptions{})
+			ex, _ := r.NewExchange(p, google.GenerateContent, apix.ExchangeOptions{})
 			sc, _ := ex.NewStreamConverter()
 			first := strings.Index(wire, "\n\n") + 2
 			out, done, err := sc.Feed([]byte(wire[:first]))
@@ -251,13 +251,13 @@ func TestLateSignatureUsageAndStreamIDs(t *testing.T) {
 }
 func TestInteractionsNativeBoundary(t *testing.T) {
 	r := registry(t)
-	for _, p := range []apix.Protocol{gemini.GenerateContent, openai.ChatCompletions, openai.Responses, anthropic.Messages} {
-		if r.CanConvert(p, gemini.Interactions) || r.CanConvert(gemini.Interactions, p) {
+	for _, p := range []apix.Protocol{google.GenerateContent, openai.ChatCompletions, openai.Responses, anthropic.Messages} {
+		if r.CanConvert(p, google.Interactions) || r.CanConvert(google.Interactions, p) {
 			t.Fatal("advertised an unimplemented path")
 		}
 	}
 	body := []byte(`{"model":"m","input":"hello","previous_interaction_id":"stored","background":true,"unknown":9007199254740993}`)
-	ex, err := r.NewExchange(gemini.Interactions, gemini.Interactions, apix.ExchangeOptions{})
+	ex, err := r.NewExchange(google.Interactions, google.Interactions, apix.ExchangeOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +273,7 @@ func TestInteractionsNativeBoundary(t *testing.T) {
 	if _, err = ex.ConvertRequest(apix.Payload{Body: agent}, "another-model"); err == nil {
 		t.Fatal("rewrote agent")
 	}
-	if _, err = r.NewExchange(gemini.Interactions, gemini.Interactions, apix.ExchangeOptions{Output: openai.Responses}); err == nil {
+	if _, err = r.NewExchange(google.Interactions, google.Interactions, apix.ExchangeOptions{Output: openai.Responses}); err == nil {
 		t.Fatal("converted Interactions output")
 	}
 	wire := "event: interaction.created\ndata: {\"event_type\":\"interaction.created\",\"interaction\":{\"id\":\"i\",\"status\":\"in_progress\"}}\n\nevent: interaction.completed\ndata: {\"event_type\":\"interaction.completed\",\"interaction\":{\"id\":\"i\",\"status\":\"completed\"}}\n\n"

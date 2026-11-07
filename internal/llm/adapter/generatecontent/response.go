@@ -1,4 +1,4 @@
-package gemini
+package generatecontent
 
 import (
 	"fmt"
@@ -24,7 +24,7 @@ func ConvertResponse(from, to string, status int, body []byte, ctx *shared.Conve
 	ctx = shared.ContextOrNew([]*shared.ConversionContext{ctx})
 	c := &conversion{from: from, to: to, ctx: ctx, response: true}
 	if from == Format {
-		c.normalizeGemini(root)
+		c.normalizeGoogle(root)
 		c.validateResponse(root)
 		if c.err != nil {
 			return nil, c.err
@@ -41,7 +41,7 @@ func ConvertResponse(from, to string, status int, body []byte, ctx *shared.Conve
 	if err := shared.CheckProtocolFailure(body, from); err != nil {
 		return nil, err
 	}
-	out := c.responseToGemini(root)
+	out := c.responseToGoogle(root)
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -117,7 +117,7 @@ func finish(reason string, hasTools bool) string {
 	return "stop"
 }
 
-func geminiFinish(reason string) string {
+func googleFinish(reason string) string {
 	switch reason {
 	case "length", "max_tokens":
 		return "MAX_TOKENS"
@@ -327,7 +327,7 @@ func renderUsage(u object, to string) object {
 	}
 }
 
-func usageToGemini(u object, from string) object {
+func usageToGoogle(u object, from string) object {
 	in, out := number(u["input_tokens"]), number(u["output_tokens"])
 	cached, thought := int64(0), int64(0)
 	switch from {
@@ -353,11 +353,11 @@ func usageToGemini(u object, from string) object {
 	return r
 }
 
-func (c *conversion) responseToGemini(root object) object {
+func (c *conversion) responseToGoogle(root object) object {
 	id, model := str(root["id"]), str(root["model"])
 	var candidates []any
 	add := func(parts []any, reason string, index int) {
-		candidates = append(candidates, object{"index": index, "content": object{"role": "model", "parts": nonNil(parts)}, "finishReason": geminiFinish(reason)})
+		candidates = append(candidates, object{"index": index, "content": object{"role": "model", "parts": nonNil(parts)}, "finishReason": googleFinish(reason)})
 	}
 	switch c.from {
 	case chat:
@@ -436,5 +436,5 @@ func (c *conversion) responseToGemini(root object) object {
 			candidate["groundingMetadata"] = grounding
 		}
 	}
-	return object{"responseId": id, "modelVersion": model, "candidates": candidates, "usageMetadata": usageToGemini(obj(root["usage"]), c.from)}
+	return object{"responseId": id, "modelVersion": model, "candidates": candidates, "usageMetadata": usageToGoogle(obj(root["usage"]), c.from)}
 }

@@ -15,10 +15,10 @@ import (
 	"github.com/dillonzq/apix"
 )
 
-// geminiRequest is a GenerateContent request to an image model. Google's
+// googleRequest is a GenerateContent request to an image model. Google's
 // JSON accepts camelCase and snake_case field names; both are read.
-type geminiRequest struct {
-	Contents       []geminiContent
+type googleRequest struct {
+	Contents       []googleContent
 	CandidateCount int
 	AspectRatio    string
 	ImageSize      string
@@ -32,22 +32,22 @@ type geminiRequest struct {
 	imageConfigKeys []string
 }
 
-type geminiContent struct {
+type googleContent struct {
 	Role  string
-	Parts []geminiPart
+	Parts []googlePart
 }
 
-// geminiPart is a text or media part; other parts, such as function calls,
+// googlePart is a text or media part; other parts, such as function calls,
 // only record their kind for diagnostics.
-type geminiPart struct {
+type googlePart struct {
 	Text    string
 	Media   *media
 	Thought bool
 	Other   string
 }
 
-func (r *geminiRequest) info() apix.RequestInfo {
-	info := apix.RequestInfo{Kind: apix.KindImage, Protocol: GeminiImage}
+func (r *googleRequest) info() apix.RequestInfo {
+	info := apix.RequestInfo{Kind: apix.KindImage, Protocol: GoogleImage}
 	features := map[string]bool{}
 	for _, c := range r.Contents {
 		for _, p := range c.Parts {
@@ -139,7 +139,7 @@ func field(m map[string]json.RawMessage, key, path string, dst any) *apix.Error 
 	return nil
 }
 
-func decodeGemini(body []byte) (*geminiRequest, *apix.Error) {
+func decodeGoogle(body []byte) (*googleRequest, *apix.Error) {
 	var raw json.RawMessage
 	if json.Unmarshal(body, &raw) != nil {
 		return nil, apix.Translation("malformed Gemini request JSON")
@@ -148,7 +148,7 @@ func decodeGemini(body []byte) (*geminiRequest, *apix.Error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &geminiRequest{keys: keys}
+	r := &googleRequest{keys: keys}
 	var contents []json.RawMessage
 	if err := field(root, "contents", "contents", &contents); err != nil {
 		return nil, err
@@ -157,7 +157,7 @@ func decodeGemini(body []byte) (*geminiRequest, *apix.Error) {
 		return nil, apix.Translation("Gemini request requires contents")
 	}
 	for i, c := range contents {
-		content, err := decodeGeminiContent(c, "contents["+strconv.Itoa(i)+"]")
+		content, err := decodeGoogleContent(c, "contents["+strconv.Itoa(i)+"]")
 		if err != nil {
 			return nil, err
 		}
@@ -191,12 +191,12 @@ func decodeGemini(body []byte) (*geminiRequest, *apix.Error) {
 	return r, nil
 }
 
-func decodeGeminiContent(raw json.RawMessage, path string) (geminiContent, *apix.Error) {
+func decodeGoogleContent(raw json.RawMessage, path string) (googleContent, *apix.Error) {
 	m, _, err := fields(raw, path)
 	if err != nil {
-		return geminiContent{}, err
+		return googleContent{}, err
 	}
-	var c geminiContent
+	var c googleContent
 	if err := field(m, "role", path+".role", &c.Role); err != nil {
 		return c, err
 	}
@@ -205,7 +205,7 @@ func decodeGeminiContent(raw json.RawMessage, path string) (geminiContent, *apix
 		return c, err
 	}
 	for i, p := range parts {
-		part, err := decodeGeminiPart(p, path+".parts["+strconv.Itoa(i)+"]")
+		part, err := decodeGooglePart(p, path+".parts["+strconv.Itoa(i)+"]")
 		if err != nil {
 			return c, err
 		}
@@ -214,12 +214,12 @@ func decodeGeminiContent(raw json.RawMessage, path string) (geminiContent, *apix
 	return c, nil
 }
 
-func decodeGeminiPart(raw json.RawMessage, path string) (geminiPart, *apix.Error) {
+func decodeGooglePart(raw json.RawMessage, path string) (googlePart, *apix.Error) {
 	m, keys, err := fields(raw, path)
 	if err != nil {
-		return geminiPart{}, err
+		return googlePart{}, err
 	}
-	var p geminiPart
+	var p googlePart
 	if err := field(m, "thought", path+".thought", &p.Thought); err != nil {
 		return p, err
 	}
@@ -271,70 +271,70 @@ func decodeGeminiPart(raw json.RawMessage, path string) (geminiPart, *apix.Error
 	return p, nil
 }
 
-// geminiResponse is a GenerateContent response or stream chunk.
-type geminiResponse struct {
-	Candidates     []geminiCandidate     `json:"candidates,omitempty"`
-	PromptFeedback *geminiPromptFeedback `json:"promptFeedback,omitempty"`
-	UsageMetadata  *geminiUsage          `json:"usageMetadata,omitempty"`
+// googleResponse is a GenerateContent response or stream chunk.
+type googleResponse struct {
+	Candidates     []googleCandidate     `json:"candidates,omitempty"`
+	PromptFeedback *googlePromptFeedback `json:"promptFeedback,omitempty"`
+	UsageMetadata  *googleUsage          `json:"usageMetadata,omitempty"`
 	ModelVersion   string                `json:"modelVersion,omitempty"`
 }
 
-type geminiCandidate struct {
-	Content      geminiOutContent `json:"content"`
+type googleCandidate struct {
+	Content      googleOutContent `json:"content"`
 	FinishReason string           `json:"finishReason,omitempty"`
 	Index        int              `json:"index"`
 }
 
-type geminiOutContent struct {
+type googleOutContent struct {
 	Role  string          `json:"role,omitempty"`
-	Parts []geminiOutPart `json:"parts"`
+	Parts []googleOutPart `json:"parts"`
 }
 
-type geminiOutPart struct {
+type googleOutPart struct {
 	Text       string      `json:"text,omitempty"`
-	InlineData *geminiBlob `json:"inlineData,omitempty"`
+	InlineData *googleBlob `json:"inlineData,omitempty"`
 	Thought    bool        `json:"thought,omitempty"`
 }
 
-type geminiBlob struct {
+type googleBlob struct {
 	MIMEType string `json:"mimeType"`
 	Data     string `json:"data"`
 }
 
-type geminiPromptFeedback struct {
+type googlePromptFeedback struct {
 	BlockReason string `json:"blockReason,omitempty"`
 }
 
-type geminiUsage struct {
+type googleUsage struct {
 	PromptTokenCount        int64               `json:"promptTokenCount,omitempty"`
 	CandidatesTokenCount    int64               `json:"candidatesTokenCount,omitempty"`
 	ThoughtsTokenCount      int64               `json:"thoughtsTokenCount,omitempty"`
 	TotalTokenCount         int64               `json:"totalTokenCount,omitempty"`
-	PromptTokensDetails     []geminiModalityUse `json:"promptTokensDetails,omitempty"`
-	CandidatesTokensDetails []geminiModalityUse `json:"candidatesTokensDetails,omitempty"`
+	PromptTokensDetails     []googleModalityUse `json:"promptTokensDetails,omitempty"`
+	CandidatesTokensDetails []googleModalityUse `json:"candidatesTokensDetails,omitempty"`
 }
 
-type geminiModalityUse struct {
+type googleModalityUse struct {
 	Modality   string `json:"modality"`
 	TokenCount int64  `json:"tokenCount"`
 }
 
-// decodeGeminiResponse reads a response, accepting snake_case field names by
+// decodeGoogleResponse reads a response, accepting snake_case field names by
 // normalizing them before typed decoding.
-func decodeGeminiResponse(body []byte) (geminiResponse, *apix.Error) {
+func decodeGoogleResponse(body []byte) (googleResponse, *apix.Error) {
 	var v any
 	d := json.NewDecoder(bytes.NewReader(body))
 	d.UseNumber()
 	if d.Decode(&v) != nil || !errors.Is(d.Decode(new(any)), io.EOF) {
-		return geminiResponse{}, apix.Translation("malformed Gemini response JSON")
+		return googleResponse{}, apix.Translation("malformed Gemini response JSON")
 	}
 	if _, ok := v.(map[string]any); !ok {
-		return geminiResponse{}, apix.Translation("Gemini response must be a JSON object")
+		return googleResponse{}, apix.Translation("Gemini response must be a JSON object")
 	}
 	normalized, _ := json.Marshal(camelKeys(v))
-	var r geminiResponse
+	var r googleResponse
 	if err := json.Unmarshal(normalized, &r); err != nil {
-		return geminiResponse{}, apix.Translation("malformed Gemini response: " + err.Error())
+		return googleResponse{}, apix.Translation("malformed Gemini response: " + err.Error())
 	}
 	return r, nil
 }
@@ -359,7 +359,7 @@ var responseFields = func() map[string]string {
 			}
 		}
 	}
-	walk(reflect.TypeFor[geminiResponse]())
+	walk(reflect.TypeFor[googleResponse]())
 	return out
 }()
 
@@ -387,8 +387,8 @@ func camelKeys(v any) any {
 }
 
 // images returns the non-thought image parts of every candidate.
-func (r geminiResponse) images() []geminiBlob {
-	var out []geminiBlob
+func (r googleResponse) images() []googleBlob {
+	var out []googleBlob
 	for _, c := range r.Candidates {
 		for _, p := range c.Content.Parts {
 			if p.InlineData != nil && !p.Thought && strings.HasPrefix(p.InlineData.MIMEType, "image/") {
@@ -400,7 +400,7 @@ func (r geminiResponse) images() []geminiBlob {
 }
 
 // hasText reports whether a candidate returned visible text.
-func (r geminiResponse) hasText() bool {
+func (r googleResponse) hasText() bool {
 	for _, c := range r.Candidates {
 		for _, p := range c.Content.Parts {
 			if p.Text != "" && !p.Thought {
@@ -414,7 +414,7 @@ func (r geminiResponse) hasText() bool {
 // noImage explains a response without images. Safety and policy stops
 // describe the request and are not retryable; other stops may succeed on
 // another upstream.
-func (r geminiResponse) noImage() *apix.Error {
+func (r googleResponse) noImage() *apix.Error {
 	reason := ""
 	if r.PromptFeedback != nil && r.PromptFeedback.BlockReason != "" {
 		reason = "prompt blocked: " + r.PromptFeedback.BlockReason
@@ -437,8 +437,8 @@ func (r geminiResponse) noImage() *apix.Error {
 	return apix.UpstreamFallback("Gemini generated no image: " + reason)
 }
 
-// renderGeminiStream renders a converted response as a one-chunk stream.
-func renderGeminiStream(r geminiResponse) []byte {
+// renderGoogleStream renders a converted response as a one-chunk stream.
+func renderGoogleStream(r googleResponse) []byte {
 	data, _ := json.Marshal(r)
 	return append(append([]byte("data: "), data...), '\n', '\n')
 }

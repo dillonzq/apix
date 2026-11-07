@@ -213,7 +213,7 @@ func TestErrorsAndSuffixPriority(t *testing.T) {
 	for _, policy := range []translate.LossPolicy{translate.LossPolicyAllow, translate.LossPolicyStrict} {
 		state := translate.NewRequestState()
 		state.Options.LossPolicy = policy
-		body, err := translate.ApplyReasoning("gemini", "chat-completions", []byte(`{"contents":[]}`), apix.Reasoning{Effort: "max"}, state)
+		body, err := translate.ApplyReasoning("generate-content", "chat-completions", []byte(`{"contents":[]}`), apix.Reasoning{Effort: "max"}, state)
 		if policy == translate.LossPolicyStrict {
 			if err == nil {
 				t.Fatalf("strict accepted an approximated level: %s", body)

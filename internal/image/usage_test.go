@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/dillonzq/apix"
-	"github.com/dillonzq/apix/protocol/gemini"
+	"github.com/dillonzq/apix/protocol/google"
 	"github.com/dillonzq/apix/protocol/openai"
 )
 
@@ -18,7 +18,7 @@ func imageUsage(t *testing.T, ex apix.Exchange) (apix.Usage, bool) {
 
 func TestUsage(t *testing.T) {
 	openaiReply := `{"created":1,"data":[{"b64_json":"` + b64 + `"}],"usage":{"input_tokens":10,"output_tokens":1290,"total_tokens":1300}}`
-	geminiReply := `{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"` + b64 + `"}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":1290,"totalTokenCount":1300}}`
+	googleReply := `{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"` + b64 + `"}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":1290,"totalTokenCount":1300}}`
 	want := apix.Usage{InputTokens: 10, OutputTokens: 1290, TotalTokens: 1300}
 	for _, tt := range []struct {
 		client, upstream apix.Protocol
@@ -26,9 +26,9 @@ func TestUsage(t *testing.T) {
 		model            string
 	}{
 		{openai.ImagesGenerations, openai.ImagesGenerations, `{"prompt":"a cat"}`, openaiReply, ""},
-		{gemini.Imagen, openai.ImagesGenerations, `{"instances":[{"prompt":"a cat"}]}`, openaiReply, "gpt-image-1"},
-		{openai.ImagesGenerations, gemini.GenerateContentImage, `{"prompt":"a cat"}`, geminiReply, "gemini-2.5-flash-image"},
-		{gemini.GenerateContentImage, gemini.GenerateContentImage, `{"contents":[{"role":"user","parts":[{"text":"a cat"}]}]}`, geminiReply, "gemini-2.5-flash-image"},
+		{google.Imagen, openai.ImagesGenerations, `{"instances":[{"prompt":"a cat"}]}`, openaiReply, "gpt-image-1"},
+		{openai.ImagesGenerations, google.GenerateContentImage, `{"prompt":"a cat"}`, googleReply, "gemini-2.5-flash-image"},
+		{google.GenerateContentImage, google.GenerateContentImage, `{"contents":[{"role":"user","parts":[{"text":"a cat"}]}]}`, googleReply, "gemini-2.5-flash-image"},
 	} {
 		ex := exchange(t, tt.client, tt.upstream, apix.ExchangeOptions{})
 		if _, err := ex.ConvertRequest(apix.Payload{Body: []byte(tt.request)}, tt.model); err != nil {
@@ -43,7 +43,7 @@ func TestUsage(t *testing.T) {
 	}
 
 	// Imagen reports no usage.
-	ex := exchange(t, openai.ImagesGenerations, gemini.Imagen, apix.ExchangeOptions{})
+	ex := exchange(t, openai.ImagesGenerations, google.Imagen, apix.ExchangeOptions{})
 	if _, err := ex.ConvertRequest(apix.Payload{Body: []byte(`{"prompt":"a cat"}`)}, "imagen-4.0-generate-001"); err != nil {
 		t.Fatal(err)
 	}

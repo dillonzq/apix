@@ -8,7 +8,7 @@ import (
 
 // Aspect ratios each Google protocol accepts.
 var (
-	geminiAspects = []string{"1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"}
+	googleAspects = []string{"1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"}
 	imagenAspects = []string{"1:1", "3:4", "4:3", "9:16", "16:9"}
 )
 
