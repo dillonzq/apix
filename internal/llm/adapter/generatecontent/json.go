@@ -194,7 +194,7 @@ func callID(fc object, index int) string {
 	if id := str(fc["id"]); id != "" {
 		return id
 	}
-	return fmt.Sprintf("call_gemini_%d", index)
+	return fmt.Sprintf("call_google_%d", index)
 }
 
 // A carrier retains the original signed parts, including their order. Hosts
