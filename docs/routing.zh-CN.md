@@ -58,7 +58,7 @@ route.Endpoint{
 
 ## 上游持有的状态
 
-`Inspect` 在 `RequestInfo.Affinity` 中列出请求引用的上游状态，键的形式如 `response:resp_1`、`conversation:conv_1`、`interaction:i1`、`file:file-1`、`cached-content:cachedContents/c1`。引用了转换无法携带的上下文时（Responses 的 `previous_response_id`、`conversation`、`prompt`、`item_reference`，Interactions 的 `previous_interaction_id`，Messages 的 `container`，Gemini 的 `cachedContent`），还会设置 `RequestInfo.Stateful`。
+`Inspect` 在 `RequestInfo.Affinity` 中列出请求引用的上游状态，键的形式如 `response:resp_1`、`conversation:conv_1`、`interaction:i1`、`file:file-1`、`cached-content:cachedContents/c1`。引用了转换无法携带的上下文时（Responses 的 `previous_response_id`、`conversation`、`prompt`、`item_reference`，Interactions 的 `previous_interaction_id`，Messages 的 `container`，Google 的 `cachedContent`），还会设置 `RequestInfo.Stateful`。
 
 - **只走同协议**：`Stateful` 请求只发往客户端协议的端点，转换会悄悄丢掉上下文。
 - **持有者优先**：`route.Affinity` 记录每个键属于哪个端点。第一个已知键的持有端点排到最前；对 `Stateful` 请求，即使该端点不健康也会返回，因为其他端点无法服务。

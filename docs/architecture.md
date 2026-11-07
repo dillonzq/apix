@@ -43,7 +43,7 @@ The registration unit is the codec for one protocol. On the client side, a codec
 
 This matches the engine's dispatch: requests dispatch by **target protocol**; ordinary responses and streams dispatch by **upstream protocol**. Both directions of an exchange from client X to upstream Y are therefore implemented by Y's adapter. Responses go back to X by default. A host that chooses the response format separately can set `ExchangeOptions.Output` to another protocol Z of the same Kind; Y's adapter implements that direction too. Conversion paths are always direct, with no intermediate representation. Same-protocol requests preserve provider fields except for model rewriting and explicitly configured reasoning overrides or tool normalization.
 
-GenerateContent is the one exception to the dispatch rule: `internal/llm/adapter/generatecontent` owns every path with GenerateContent at either end, in both directions, and the engine's entry points route those paths to it first. Gemini wire objects stay the source or destination; nothing converts through another protocol. GenerateContent model/stream information travels separately in `Payload.Metadata`; `ProtocolSpec.ParsePath` lets the optional HTTP handler recover it from the URL.
+GenerateContent is the one exception to the dispatch rule: `internal/llm/adapter/generatecontent` owns every path with GenerateContent at either end, in both directions, and the engine's entry points route those paths to it first. Google wire objects stay the source or destination; nothing converts through another protocol. GenerateContent model/stream information travels separately in `Payload.Metadata`; `ProtocolSpec.ParsePath` lets the optional HTTP handler recover it from the URL.
 
 The four generation protocols share one codec type whose per-protocol differences (path, authentication, headers, error envelope, URL-borne model, extra request checks) are rows of the `protocols` table in `internal/llm/codec/codec.go`. Interactions converts to nothing and has its own codec in `internal/llm/codec/interactions.go`, backed by `internal/llm/adapter/interactions`.
 
@@ -67,9 +67,9 @@ Public protocol IDs are namespaced: `openai.chat-completions`, `anthropic.messag
 | `internal/llm/adapter/generatecontent` | Every GenerateContent path in both directions: requests, configuration, media, citations, responses, streams |
 | `internal/llm/adapter/interactions` | Native Interactions response and stream validation |
 | `internal/llm/adapter/shared` | Protocol types, content and media, events, tool identities, reasoning, shell, cache hints, diagnostic rules |
-| `internal/llm/reasoning` | Level/budget tables, Gemini level limits, override rendering per protocol, superseded-control stripping |
+| `internal/llm/reasoning` | Level/budget tables, Google level limits, override rendering per protocol, superseded-control stripping |
 | `internal/image` | The `KindImage` codecs: OpenAI generations and edits, GenerateContent with image models, Imagen; direct request and response converters, native stream validation, emulated streams |
-| `internal/tokens` | The `KindTokens` codecs: Messages count_tokens, Responses input_tokens, Gemini countTokens; requests convert through `internal/llm/translate` and are reshaped per count endpoint |
+| `internal/tokens` | The `KindTokens` codecs: Messages count_tokens, Responses input_tokens, Google countTokens; requests convert through `internal/llm/translate` and are reshaped per count endpoint |
 | `internal/usage` | Usage objects read from upstream bodies and SSE bytes, per dialect, normalized to `apix.Usage` |
 | `internal/jsonedit` | Order-preserving JSON field reads and edits over moego/ojson; callers fall back to `encoding/json` when the fast path declines |
 | `internal/vendorerr` | Vendor error envelopes and upstream error-body classification, shared by every Kind |
@@ -85,7 +85,7 @@ Use one `Exchange` per execution. Do not reuse it across requests or call it con
 
 Native Responses normalization (`openai.ResponsesOptions{NormalizeTools: true}`) uses `json.RawMessage` to preserve extensions and exact numbers; cross-protocol conversion uses modeled types. Both paths share wire-name generation, declaration deduplication, identity collisions, and history and tool-choice reference checks. Both run under `WithToolTransaction`: success commits the registry, failure keeps the previous identities, and diagnostics survive either way. The loss policy only rejects requests; `ConversionContext.ValidatePolicy` is the one check of its value.
 
-`ExchangeOptions.Reasoning` runs in three steps inside `ConvertRequest`: the client's own control is stripped where conversion derives the target control from it, the request converts, and the override is rendered on the converted body with the exchange's Messages and Gemini thinking modes. A value the target cannot express exactly, such as `max` for a Gemini level, is approximated and reported as a request loss.
+`ExchangeOptions.Reasoning` runs in three steps inside `ConvertRequest`: the client's own control is stripped where conversion derives the target control from it, the request converts, and the override is rendered on the converted body with the exchange's Messages and Google thinking modes. A value the target cannot express exactly, such as `max` for a Google level, is approximated and reported as a request loss.
 
 Exchanges whose upstream stores state implement `apix.StateReporter`. A native Responses exchange captures the response ID from the converted body or from `response.created`; an Interactions exchange captures the interaction ID. Cross-protocol Responses output reports nothing, because its ID refers to nothing an upstream stored.
 

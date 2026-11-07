@@ -1,4 +1,4 @@
-// Package google provides codecs for Google Gemini wire protocols.
+// Package google provides codecs for Google wire protocols.
 // GenerateContent belongs to apix.KindLLM and converts directly to and from
 // the other generation protocols in this module. Interactions is native only.
 // GenerateContentImage and Imagen belong to apix.KindImage; see images.go.
@@ -34,7 +34,7 @@ const (
 	ThinkingLevel ThinkingMode = "level"
 )
 
-// GenerateContentOptions configures an upstream Gemini exchange. Pass it, or
+// GenerateContentOptions configures an upstream Google exchange. Pass it, or
 // a pointer to it, as apix.ExchangeOptions.Ext. Zero options preserve the
 // client's kind of reasoning control.
 type GenerateContentOptions struct {
@@ -44,7 +44,7 @@ type GenerateContentOptions struct {
 	// IncludeThoughts sets thinkingConfig.includeThoughts when non-nil.
 	IncludeThoughts *bool
 	// RequireThoughtSignatures rejects historical function calls without a
-	// Gemini signature, for models that require signed function-call replay.
+	// Google signature, for models that require signed function-call replay.
 	RequireThoughtSignatures bool
 }
 
@@ -75,7 +75,7 @@ func GenerateContentCodec() apix.Codec {
 // advertise conversion to another protocol or resolve stored interactions.
 func InteractionsCodec() apix.Codec { return codec.NewInteractions() }
 
-// Codecs returns every Gemini codec, for apix.NewRegistry.
+// Codecs returns every Google codec, for apix.NewRegistry.
 func Codecs() []apix.Codec {
 	return []apix.Codec{GenerateContentCodec(), InteractionsCodec(), GenerateContentImageCodec(), ImagenCodec(), CountTokensCodec()}
 }

@@ -67,7 +67,7 @@ func ConvertRequest(from, to, model string, body []byte, ctx *shared.ConversionC
 		} else if from == Format {
 			out = c.fromGoogle(root, model)
 		} else {
-			return nil, unsupported("expected a Gemini conversion path")
+			return nil, unsupported("expected a Google conversion path")
 		}
 		if c.err != nil {
 			return nil, c.err
@@ -79,13 +79,13 @@ func ConvertRequest(from, to, model string, body []byte, ctx *shared.ConversionC
 func (c *conversion) nativeRequest(root object) {
 	contents := c.array(root["contents"], "contents")
 	if len(contents) == 0 {
-		c.fail("Gemini request requires contents")
+		c.fail("Google request requires contents")
 	}
 	for _, v := range contents {
 		ct := c.object(v, "contents[]")
 		parts := c.array(ct["parts"], "contents[].parts")
 		if len(parts) == 0 {
-			c.fail("Gemini content requires parts")
+			c.fail("Google content requires parts")
 		}
 		c.validateParts(parts)
 		// Native fields are preserved. Validate structure without loss reporting.
@@ -95,7 +95,7 @@ func (c *conversion) nativeRequest(root object) {
 				c.fail("parts must contain objects")
 			}
 			if c.ctx.Options.GoogleRequireThoughtSignatures && p["functionCall"] != nil && signature(p) == "" {
-				c.reject("Gemini function call history requires thoughtSignature")
+				c.reject("Google function call history requires thoughtSignature")
 			}
 		}
 	}
@@ -179,7 +179,7 @@ func (c *conversion) toGoogle(root object) object {
 				case "web_search_call":
 					c.loss("input.web_search_call", true)
 				default:
-					c.reject("unsupported Responses input item for Gemini")
+					c.reject("unsupported Responses input item for Google")
 				}
 			}
 		}
@@ -204,7 +204,7 @@ func (c *conversion) toGoogle(root object) object {
 				continue
 			}
 			if role != "user" && role != "assistant" {
-				c.reject("unsupported message role for Gemini")
+				c.reject("unsupported message role for Google")
 				continue
 			}
 			if role == "assistant" {
@@ -252,7 +252,7 @@ func (c *conversion) toGoogle(root object) object {
 		}
 	}
 	if len(contents) == 0 {
-		c.fail("conversion produced no Gemini contents")
+		c.fail("conversion produced no Google contents")
 	}
 	out["contents"] = contents
 	if len(system) > 0 {
@@ -266,7 +266,7 @@ func (c *conversion) toGoogle(root object) object {
 			for _, pv := range list(obj(cv)["parts"]) {
 				part := obj(pv)
 				if part["functionCall"] != nil && signature(part) == "" {
-					c.reject("Gemini function call history requires thoughtSignature")
+					c.reject("Google function call history requires thoughtSignature")
 				}
 			}
 		}
@@ -292,7 +292,7 @@ func (c *conversion) toolResult(v any) object {
 			case "text", "input_text", "output_text":
 				texts = append(texts, c.text(p["text"], "text"))
 			default:
-				c.reject("Gemini tool result media is not representable by this path")
+				c.reject("Google tool result media is not representable by this path")
 			}
 		}
 		return object{"result": strings.Join(texts, "\n")}
@@ -305,7 +305,7 @@ func (c *conversion) fromGoogle(root object, model string) object {
 	out := object{"model": model}
 	var msgs, items []any
 	if c.to != chat && c.to != messages && c.to != responses {
-		c.reject("unsupported Gemini output request protocol")
+		c.reject("unsupported Google output request protocol")
 		return out
 	}
 	c.unknown(root, "", "model", "stream", "contents", "systemInstruction", "system_instruction", "tools", "toolConfig", "tool_config", "generationConfig", "generation_config")
@@ -339,7 +339,7 @@ func (c *conversion) fromGoogle(root object, model string) object {
 			role = "user"
 		}
 		if role != "user" && role != "model" {
-			c.reject("unsupported Gemini content role")
+			c.reject("unsupported Google content role")
 		}
 		assistant := role == "model"
 		if assistant {
@@ -457,7 +457,7 @@ func (c *conversion) fromGoogle(root object, model string) object {
 		}
 		flush()
 		// Signed source history cannot be used by a different provider. Do not
-		// present Gemini metadata as a Claude/OpenAI native signature.
+		// present Google metadata as a Claude/OpenAI native signature.
 		for i, pv := range parts {
 			if signature(obj(pv)) != "" {
 				c.loss(fmt.Sprintf("contents.parts[%d].thoughtSignature", i), true)

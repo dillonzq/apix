@@ -4,13 +4,13 @@ English | [简体中文](llm.zh-CN.md) · [Back to README](../../README.md)
 
 This document describes the current mappings and limitations of the `apix.KindLLM` protocols. The four generation protocols `openai.chat-completions`, `openai.responses`, `anthropic.messages`, and `google.generate-content` convert directly in all twelve directions, for requests, ordinary responses, and streams. `google.interactions` is native-only; see [native Interactions](#native-interactions). Protocol IDs and integration examples are in the README.
 
-The exchange options that affect these paths, such as `openai.ResponsesOptions`, `anthropic.MessagesOptions`, `google.GenerateContentOptions`, and `ExchangeOptions.Reasoning`, are listed under [exchange options](../../README.md#exchange-options); the sections below say where each applies. `google.Codecs()` returns the GenerateContent and Interactions codecs together with Gemini's [image](image.md) and [token counting](tokens.md) codecs; register the other vendors' codecs explicitly for cross-protocol exchanges.
+The exchange options that affect these paths, such as `openai.ResponsesOptions`, `anthropic.MessagesOptions`, `google.GenerateContentOptions`, and `ExchangeOptions.Reasoning`, are listed under [exchange options](../../README.md#exchange-options); the sections below say where each applies. `google.Codecs()` returns the GenerateContent and Interactions codecs together with Google's [image](image.md) and [token counting](tokens.md) codecs; register the other vendors' codecs explicitly for cross-protocol exchanges.
 
 `Inspect` also reports the upstream state a request refers to (`RequestInfo.Affinity`, such as `response:resp_1` or `file:file-1`) and whether it continues upstream-owned context (`RequestInfo.Stateful`). Native Responses and Interactions exchanges report the state they create through `apix.StateReporter`. See [routing](../routing.md#upstream-owned-state).
 
 ## Native paths and responsibilities
 
-By default, same-protocol requests rewrite only `model`, preserving historical reasoning, compaction, roles, tools, and unknown fields. With no effective model change or explicit override, the original bytes are returned. Explicit reasoning controls, Gemini thinking options, and native Responses tool normalization also edit their configured fields. Model catalogs, routing, and upstream compatibility cleanup belong to callers.
+By default, same-protocol requests rewrite only `model`, preserving historical reasoning, compaction, roles, tools, and unknown fields. With no effective model change or explicit override, the original bytes are returned. Explicit reasoning controls, Google thinking options, and native Responses tool normalization also edit their configured fields. Model catalogs, routing, and upstream compatibility cleanup belong to callers.
 
 Same-protocol responses generally pass through unchanged, including reasoning signatures and other provider fields. Responses tool identity restoration and stream error handling, termination checks, and SSE framing are exceptions. Native tool restoration preserves namespaces and unmodeled numeric fields, and native GenerateContent SSE frames pass through unchanged.
 
@@ -40,7 +40,7 @@ payload := apix.Payload{
 info, err := reg.Inspect(google.GenerateContent, payload)
 ```
 
-A nonempty metadata model and a non-nil stream value override body routing values. Metadata is request-only and is not serialized into the body. A converted Gemini payload carries its effective model and stream mode in `Metadata`; for a Gemini client sent to another protocol, the stream flag is written into the converted JSON request. `gateway.Handler` reads the metadata from the URL and builds the upstream URL from it; see [model-dependent paths](../gateway.md#model-dependent-paths).
+A nonempty metadata model and a non-nil stream value override body routing values. Metadata is request-only and is not serialized into the body. A converted Google payload carries its effective model and stream mode in `Metadata`; for a Google client sent to another protocol, the stream flag is written into the converted JSON request. `gateway.Handler` reads the metadata from the URL and builds the upstream URL from it; see [model-dependent paths](../gateway.md#model-dependent-paths).
 
 ### Media input
 
@@ -55,7 +55,7 @@ User messages support file, audio, and video input conversion. The mappings foll
 
 Mixed text, images, and media retain their order. Top-level video `processing` overrides the nested value. Messages text-source documents become base64 `text/plain` files; conversion back to Messages decodes and validates UTF-8 before emitting `source.type="text"` with `media_type="text/plain"`. Only `application/pdf` uses a base64 document source. Other or unknown MIME types, including raw base64 without MIME, fail when converting to Messages; filenames are not used to infer types. Document `context` and `citations` settings report semantic loss and fail under Safe/Strict. File IDs are preserved only between OpenAI protocols; conversion to Messages fails. Callers must ensure that IDs are valid for the target upstream.
 
-GenerateContent maps inline images, PDF/text documents, audio, and video to `inlineData` and URL sources to `fileData` where the other side supports them. Provider-scoped file IDs cannot be sent to Gemini, inline files need a data URI with a MIME type, Messages cannot represent Gemini audio or video, and Chat cannot represent a document supplied only by URI.
+GenerateContent maps inline images, PDF/text documents, audio, and video to `inlineData` and URL sources to `fileData` where the other side supports them. Provider-scoped file IDs cannot be sent to Google, inline files need a data URI with a MIME type, Messages cannot represent Google audio or video, and Chat cannot represent a document supplied only by URI.
 
 This support covers user input. Media in system or assistant messages and unrepresentable tool outputs fails. The library does not read local files, fetch URLs, or upload files: callers supply inline content, accessible URLs, or valid IDs. Missing media, invalid field types, and invalid document base64 fail. A convertible input does not imply model support for its media or MIME.
 
@@ -70,7 +70,7 @@ Chat Completions / Responses → Messages preserves content-block and tool `cach
 - Only a hint on the original last tool-output part migrates to the parent `tool_result`, taking precedence over message/item hints. Earlier child hints and hints on reasoning/additional_tools items are unrepresentable: the loss policy omits and reports them, or rejects them in strict mode.
 - Namespace deduplication keeps the first declaration and reports discarded cache hints at their original field paths.
 
-Gemini `cachedContent` refers to upstream-owned state, so such requests are `Stateful` and stay on GenerateContent endpoints.
+Google `cachedContent` refers to upstream-owned state, so such requests are `Stateful` and stay on GenerateContent endpoints.
 
 ## Structured output
 
@@ -93,7 +93,7 @@ Responses `additional_tools` merges into declarations. Namespaces flatten into f
 
 Custom tools, including `apply_patch`, can become functions using string `input`; the default schema requires `input`. Responses output restores custom calls across items, input delta/done, and terminal snapshots. Unrepresentable constraints such as custom grammars produce diagnostics.
 
-GenerateContent `functionDeclarations` with `parametersJsonSchema` (or `parameters`) map to function tools; legacy Gemini Schema types and nullable fields are adapted. Function calls and results keep their IDs, including repeated names and out-of-order results, and arguments keep JSON number precision. GenerateContent function calls must carry complete `args`: incremental `partialArgs`/`willContinue` variants are rejected by cross-protocol conversion. Responses namespaces, custom tools, and local shell reach GenerateContent through the same normalization and restoration as the other targets.
+GenerateContent `functionDeclarations` with `parametersJsonSchema` (or `parameters`) map to function tools; legacy Google Schema types and nullable fields are adapted. Function calls and results keep their IDs, including repeated names and out-of-order results, and arguments keep JSON number precision. GenerateContent function calls must carry complete `args`: incremental `partialArgs`/`willContinue` variants are rejected by cross-protocol conversion. Responses namespaces, custom tools, and local shell reach GenerateContent through the same normalization and restoration as the other targets.
 
 Responses function and custom tool outputs can contain mixed text and images. Responses → Messages preserves their order inside `tool_result.content`, retaining the string representation for text-only results. Responses → Chat keeps consecutive tool replies together, then emits mixed results in an additional user message labeled with each call ID; text appears both in the tool reply and alongside its images. Empty messages and reasoning items do not interrupt this grouping.
 
@@ -146,7 +146,7 @@ Chat Completions selects the first field containing readable text in this order:
 
 Responses streams accept `response.reasoning_summary_text.delta/done` and `response.reasoning_text.delta/done`. Reasoning snapshots from output items and terminal responses fill in text not delivered through deltas; already emitted prefixes of the same part are not repeated. Synthesized Responses streams include item/summary start, delta, and end events. Terminal output ordering and indexes match the announced items.
 
-Cross-protocol conversion omits Anthropic `signature`, `signature_delta`, `redacted_thinking.data`, and Responses `encrypted_content`; Gemini thought signatures travel separately, as described in [Gemini thought signatures](#gemini-thought-signatures). These are provider-specific signatures or opaque data with no reliable cross-protocol mapping. Signatures are not fabricated, and opaque data is not interpreted as readable reasoning. Unsigned thinking is suitable for display but is not guaranteed to be replayable to Anthropic endpoints requiring valid signatures.
+Cross-protocol conversion omits Anthropic `signature`, `signature_delta`, `redacted_thinking.data`, and Responses `encrypted_content`; Google thought signatures travel separately, as described in [Google thought signatures](#google-thought-signatures). These are provider-specific signatures or opaque data with no reliable cross-protocol mapping. Signatures are not fabricated, and opaque data is not interpreted as readable reasoning. Unsigned thinking is suitable for display but is not guaranteed to be replayable to Anthropic endpoints requiring valid signatures.
 
 ### Reasoning controls and suffixes
 
@@ -215,17 +215,17 @@ Request replay never substitutes a Responses summary for original content. Summa
 
 Synthesized Responses non-streaming output, `response.output_item.done`, and terminal `response.output` retain original reasoning content for the next request. Summary events remain available for display. Mirrored summary/content snapshots are not emitted twice when converted back. This does not recover content already missing from a client's history, and callers must not subsequently strip preserved reasoning items. See [DeepSeek thinking replay requirements](https://api-docs.deepseek.com/guides/thinking_mode/) and [Anthropic thinking signatures](https://platform.claude.com/docs/en/docs/build-with-claude/extended-thinking).
 
-### Gemini thought signatures
+### Google thought signatures
 
-Gemini signatures are opaque and part-specific. Native paths preserve them. Converted responses carry the original ordered Gemini parts in an apix extension, `extra_content.google.parts`:
+Google signatures are opaque and part-specific. Native paths preserve them. Converted responses carry the original ordered Google parts in an apix extension, `extra_content.google.parts`:
 
 - Chat: on the assistant message, or the final stream delta.
 - Messages: on response blocks, and on the final stream message delta.
 - Responses: on output items, including completed stream items and the terminal snapshot.
 
-On the next request to Gemini, retain this extension with the assistant message or item; the converter restores the signed parts. It also accepts `extra_content.google.thought_signature` on supported individual messages and tool parts. SDKs that discard unknown fields require the host to preserve and restore the extension separately. An `Exchange` is per execution, not a session cache. Gemini signatures are never fabricated or presented as another vendor's native signature.
+On the next request to Google, retain this extension with the assistant message or item; the converter restores the signed parts. It also accepts `extra_content.google.thought_signature` on supported individual messages and tool parts. SDKs that discard unknown fields require the host to preserve and restore the extension separately. An `Exchange` is per execution, not a session cache. Google signatures are never fabricated or presented as another vendor's native signature.
 
-`google.GenerateContentOptions{RequireThoughtSignatures: true}` rejects historical function calls missing a Gemini signature. It is opt-in because requirements differ by model.
+`google.GenerateContentOptions{RequireThoughtSignatures: true}` rejects historical function calls missing a Google signature. It is opt-in because requirements differ by model.
 
 ## Response fields and usage
 
@@ -235,8 +235,8 @@ On the next request to Gemini, retain this extension with the assistant message 
 | Multiple `choices` / candidates | Chat choices and GenerateContent candidates map to each other. Other targets use the first and report a semantic loss for the rest; same-protocol passthrough preserves all of them |
 | Multiple messages / text blocks | Chat Completions aggregates body text. Synthesized Responses aggregates it into one assistant message at the first text position |
 | Chat Completions `message.refusal` and Responses `refusal` parts | Preserved in non-streaming and streaming responses. Chat Completions ↔ Responses keeps separate refusal fields/parts; Messages renders them as visible text. Normally completed refusals map to content_filter/refusal; tool and truncation signals take priority |
-| Finish reasons | `stop` ↔ `end_turn` ↔ `STOP`, `length` ↔ `max_tokens` ↔ `MAX_TOKENS`, `tool_calls` ↔ `tool_use`, `content_filter` ↔ `refusal` ↔ `SAFETY`. Gemini has no tool reason: `STOP` with function calls maps to tool_calls, and tool reasons map to `STOP`. Gemini `CONTINUATION` maps to length, and `RECITATION`, `BLOCKLIST`, `PROHIBITED_CONTENT`, `SPII`, and `IMAGE_SAFETY` to content_filter. Unknown reasons fall back to ordinary completion; the specific `stop_sequence` value is not copied |
-| Blocked and malformed Gemini output | A Gemini response with no candidates but a `promptFeedback.blockReason` becomes a refusal. `MALFORMED_FUNCTION_CALL` is a retryable upstream error, so the gateway fails over |
+| Finish reasons | `stop` ↔ `end_turn` ↔ `STOP`, `length` ↔ `max_tokens` ↔ `MAX_TOKENS`, `tool_calls` ↔ `tool_use`, `content_filter` ↔ `refusal` ↔ `SAFETY`. Google has no tool reason: `STOP` with function calls maps to tool_calls, and tool reasons map to `STOP`. Google `CONTINUATION` maps to length, and `RECITATION`, `BLOCKLIST`, `PROHIBITED_CONTENT`, `SPII`, and `IMAGE_SAFETY` to content_filter. Unknown reasons fall back to ordinary completion; the specific `stop_sequence` value is not copied |
+| Blocked and malformed Google output | A Google response with no candidates but a `promptFeedback.blockReason` becomes a refusal. `MALFORMED_FUNCTION_CALL` is a retryable upstream error, so the gateway fails over |
 | Tools and truncation together | Actual tool calls take priority over truncation in Chat Completions / Messages. Responses still maps `length/max_tokens` to `incomplete`, with tool signals represented by output items |
 | Basic usage | Maps input/output tokens. Chat Completions/Responses totals are recalculated as input + output. GenerateContent output counts include `thoughtsTokenCount`, and `totalTokenCount` is kept when present. Missing usage becomes zero counts |
 | Cache usage | Messages input excludes cached tokens; conversion to Chat Completions/Responses adds cache read + creation. Conversion to Messages subtracts representable cache counts and clamps input to nonnegative. Cache reads are preserved, including GenerateContent `cachedContentTokenCount`; cache creation maps between cache_creation_input_tokens / cache_write_tokens. Absent details remain absent, explicit zeros remain explicit, and input totals do not double-count caches |
@@ -255,7 +255,7 @@ Tools are announced only after identity is complete; earlier arguments are buffe
 
 Text, refusal, and reasoning done/item/terminal snapshots also reconcile omitted tails without repeating emitted prefixes. Visible text is tracked by item, content index, and part type.
 
-`Finish` validates terminal state. Chat finish_reason / `[DONE]` and Messages stop_reason / message_stop can establish completion; Responses requires a valid terminal event. A Gemini `finishReason` records a terminal state but does not close the converter, because later chunks can still carry usage and signatures; the target terminal is emitted at `Finish`. Toward GenerateContent, the source protocol's own stream is validated before a Gemini terminal is emitted. Missing termination signals or invalid residual payloads fail. Errors remain terminal, and subsequent calls do not generate successful completion.
+`Finish` validates terminal state. Chat finish_reason / `[DONE]` and Messages stop_reason / message_stop can establish completion; Responses requires a valid terminal event. A Google `finishReason` records a terminal state but does not close the converter, because later chunks can still carry usage and signatures; the target terminal is emitted at `Finish`. Toward GenerateContent, the source protocol's own stream is validated before a Google terminal is emitted. Missing termination signals or invalid residual payloads fail. Errors remain terminal, and subsequent calls do not generate successful completion.
 
 Conversion rebuilds target events; SSE comments, retry, id, and ping metadata are not guaranteed across protocols.
 
@@ -263,9 +263,9 @@ Conversion rebuilds target events; SSE comments, retry, id, and ping metadata ar
 
 URL citations map between Chat annotations, Responses annotation events, Messages citations, and GenerateContent grounding metadata, retaining representable sources, titles, and text ranges.
 
-Chat offsets count content only, excluding separate refusal text; Messages renders refusals as visible text. Representable Unicode ranges adjust with content aggregation; offsets lost through interleaving produce diagnostics. Gemini grounding references use byte offsets, which convert to text rune offsets.
+Chat offsets count content only, excluding separate refusal text; Messages renders refusals as visible text. Representable Unicode ranges adjust with content aggregation; offsets lost through interleaving produce diagnostics. Google grounding references use byte offsets, which convert to text rune offsets.
 
-When converting to Messages, annotations received before their text wait until the quoted range has actually been emitted. Incomplete fragments remain pending without being discarded or deduplicated, and citations are delivered before later queued blocks. Truly late citations whose target block is already closed report a `closed_block` loss; old blocks are not reopened, and citations are not attached to later text. Chat and Responses receive late Gemini annotations in the stream. Citation fragments streamed by the other protocols toward GenerateContent currently produce loss diagnostics.
+When converting to Messages, annotations received before their text wait until the quoted range has actually been emitted. Incomplete fragments remain pending without being discarded or deduplicated, and citations are delivered before later queued blocks. Truly late citations whose target block is already closed report a `closed_block` loss; old blocks are not reopened, and citations are not attached to later text. Chat and Responses receive late Google annotations in the stream. Citation fragments streamed by the other protocols toward GenerateContent currently produce loss diagnostics.
 
 Page/document-location citations and encrypted citation metadata have no complete mappings; known losses are reported.
 

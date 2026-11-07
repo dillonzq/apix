@@ -152,7 +152,7 @@ func openaiChecker(prefix string, expected int) eventCheck {
 }
 
 // checkGoogleEvent validates a GenerateContent chunk. A finish reason or a
-// blocked prompt makes the stream complete; Gemini ends it at EOF.
+// blocked prompt makes the stream complete; Google ends it at EOF.
 func checkGoogleEvent(_, data string) (bool, bool, *apix.Error) {
 	var probe struct {
 		Error json.RawMessage `json:"error"`

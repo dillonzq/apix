@@ -8,7 +8,7 @@ import (
 )
 
 // imagenRequest is an Imagen :predict request. Only the first instance is
-// read; the Gemini API serves one instance per request.
+// read; the Google API serves one instance per request.
 type imagenRequest struct {
 	Prompt      string
 	Instances   int

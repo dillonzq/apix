@@ -1,5 +1,5 @@
 // Package tokens implements the apix.KindTokens protocols: Anthropic
-// Messages count_tokens, OpenAI Responses input_tokens and Gemini
+// Messages count_tokens, OpenAI Responses input_tokens and Google
 // countTokens. The vendor packages protocol/anthropic, protocol/openai and
 // protocol/google construct these codecs.
 //
@@ -35,7 +35,7 @@ type protocol struct {
 	// request carries.
 	generation apix.Protocol
 	format     string
-	path       string // empty for Gemini, whose path carries the model
+	path       string // empty for Google, whose path carries the model
 	auth       apix.AuthScheme
 	headers    map[string]string
 	envelope   vendorerr.Envelope
@@ -106,10 +106,10 @@ func parseGooglePath(path string) (apix.RequestMetadata, error) {
 	}
 	model, action, found := strings.Cut(suffix, ":")
 	if !ok || !found || model == "" || strings.ContainsAny(model, "/\\?#") || model == ".." {
-		return apix.RequestMetadata{}, apix.Unsupported("invalid Gemini model path")
+		return apix.RequestMetadata{}, apix.Unsupported("invalid Google model path")
 	}
 	if action != "countTokens" {
-		return apix.RequestMetadata{}, apix.Unsupported("unsupported Gemini operation")
+		return apix.RequestMetadata{}, apix.Unsupported("unsupported Google operation")
 	}
 	stream := false
 	return apix.RequestMetadata{Model: model, Stream: &stream}, nil

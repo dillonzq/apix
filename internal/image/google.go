@@ -142,7 +142,7 @@ func field(m map[string]json.RawMessage, key, path string, dst any) *apix.Error 
 func decodeGoogle(body []byte) (*googleRequest, *apix.Error) {
 	var raw json.RawMessage
 	if json.Unmarshal(body, &raw) != nil {
-		return nil, apix.Translation("malformed Gemini request JSON")
+		return nil, apix.Translation("malformed Google request JSON")
 	}
 	root, keys, err := fields(raw, "request")
 	if err != nil {
@@ -154,7 +154,7 @@ func decodeGoogle(body []byte) (*googleRequest, *apix.Error) {
 		return nil, err
 	}
 	if len(contents) == 0 {
-		return nil, apix.Translation("Gemini request requires contents")
+		return nil, apix.Translation("Google request requires contents")
 	}
 	for i, c := range contents {
 		content, err := decodeGoogleContent(c, "contents["+strconv.Itoa(i)+"]")
@@ -326,15 +326,15 @@ func decodeGoogleResponse(body []byte) (googleResponse, *apix.Error) {
 	d := json.NewDecoder(bytes.NewReader(body))
 	d.UseNumber()
 	if d.Decode(&v) != nil || !errors.Is(d.Decode(new(any)), io.EOF) {
-		return googleResponse{}, apix.Translation("malformed Gemini response JSON")
+		return googleResponse{}, apix.Translation("malformed Google response JSON")
 	}
 	if _, ok := v.(map[string]any); !ok {
-		return googleResponse{}, apix.Translation("Gemini response must be a JSON object")
+		return googleResponse{}, apix.Translation("Google response must be a JSON object")
 	}
 	normalized, _ := json.Marshal(camelKeys(v))
 	var r googleResponse
 	if err := json.Unmarshal(normalized, &r); err != nil {
-		return googleResponse{}, apix.Translation("malformed Gemini response: " + err.Error())
+		return googleResponse{}, apix.Translation("malformed Google response: " + err.Error())
 	}
 	return r, nil
 }
@@ -432,9 +432,9 @@ func (r googleResponse) noImage() *apix.Error {
 	switch {
 	case strings.Contains(reason, "SAFETY"), strings.Contains(reason, "PROHIBITED"), strings.Contains(reason, "BLOCKLIST"),
 		strings.Contains(reason, "RECITATION"), strings.Contains(reason, "SPII"), strings.HasPrefix(reason, "prompt blocked"):
-		return apix.Unsupported("Gemini generated no image: " + reason)
+		return apix.Unsupported("Google generated no image: " + reason)
 	}
-	return apix.UpstreamFallback("Gemini generated no image: " + reason)
+	return apix.UpstreamFallback("Google generated no image: " + reason)
 }
 
 // renderGoogleStream renders a converted response as a one-chunk stream.

@@ -515,7 +515,7 @@ func (c *conversion) fromTools(root, out object) {
 			value = "auto"
 			c.loss("toolConfig.mode", true)
 		default:
-			c.reject("unsupported Gemini function calling mode")
+			c.reject("unsupported Google function calling mode")
 		}
 		if c.to == messages {
 			if value == "required" {

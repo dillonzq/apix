@@ -57,7 +57,7 @@ func EffortFromBudget(budget int64) (string, bool) {
 	}
 }
 
-// GoogleLevel returns the GenerateContent thinkingLevel for a level. Gemini
+// GoogleLevel returns the GenerateContent thinkingLevel for a level. Google
 // has no level above high, so xhigh and max become high and exact is false.
 // Other values are returned unchanged for the upstream to judge.
 func GoogleLevel(level string) (google string, exact bool) {

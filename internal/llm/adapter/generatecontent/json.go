@@ -1,4 +1,4 @@
-// Package generatecontent implements direct GenerateContent conversions. Gemini wire
+// Package generatecontent implements direct GenerateContent conversions. Google wire
 // objects are the source or destination, never an intermediate protocol.
 package generatecontent
 
@@ -194,7 +194,7 @@ func callID(fc object, index int) string {
 	if id := str(fc["id"]); id != "" {
 		return id
 	}
-	return fmt.Sprintf("call_gemini_%d", index)
+	return fmt.Sprintf("call_google_%d", index)
 }
 
 // A carrier retains the original signed parts, including their order. Hosts
@@ -220,7 +220,7 @@ func (c *conversion) validateParts(parts []any) {
 			}
 		}
 		if kinds > 1 {
-			c.fail("a Gemini part must have one content variant")
+			c.fail("a Google part must have one content variant")
 		}
 		if t, ok := p["text"]; ok {
 			c.text(t, "part.text")
@@ -244,7 +244,7 @@ func (c *conversion) validateParts(parts []any) {
 				}
 				if key == "functionCall" {
 					if f["partialArgs"] != nil || f["partial_args"] != nil || boolean(f["willContinue"]) {
-						c.reject("incremental Gemini function arguments require complete args snapshots")
+						c.reject("incremental Google function arguments require complete args snapshots")
 					}
 					c.args(f["args"])
 				} else {

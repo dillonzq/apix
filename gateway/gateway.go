@@ -38,7 +38,7 @@ type Upstream struct {
 	BaseURL string
 	// Path replaces the protocol's default request path when set. It is
 	// rejected for protocols whose path depends on the model or the
-	// streaming mode, such as Gemini GenerateContent; put a prefix in BaseURL
+	// streaming mode, such as Google GenerateContent; put a prefix in BaseURL
 	// instead.
 	Path string
 	// APIKey is sent with Auth, or the protocol's default scheme.

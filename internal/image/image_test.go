@@ -349,7 +349,7 @@ func TestGoogleToOpenAI(t *testing.T) {
 	if _, err := exchange(t, google.GenerateContentImage, openai.ImagesEdits, apix.ExchangeOptions{}).ConvertRequest(apix.Payload{Body: []byte(text)}, "gpt-image-1"); class(err) != apix.ClassUnsupported {
 		t.Fatalf("edits without image: %v", err)
 	}
-	// A streamed request converted back to Gemini calls OpenAI without streaming.
+	// A streamed request converted back to Google calls OpenAI without streaming.
 	stream := true
 	out, err = exchange(t, google.GenerateContentImage, openai.ImagesEdits, apix.ExchangeOptions{}).ConvertRequest(apix.Payload{Body: []byte(edit), Metadata: apix.RequestMetadata{Stream: &stream}}, "gpt-image-1")
 	if fields, _ := readForm(t, out); err != nil || fields["stream"] != "" || out.Metadata.Stream == nil || *out.Metadata.Stream {

@@ -1,7 +1,7 @@
 // Package translate is the LLM conversion engine behind the public
 // protocol/openai, protocol/anthropic and protocol/google codecs. It converts requests,
 // responses, and SSE streams between Chat Completions, Responses, and
-// Messages and Gemini using internal format names and per-execution state.
+// Messages and Google using internal format names and per-execution state.
 package translate
 
 import (

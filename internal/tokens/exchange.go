@@ -24,19 +24,19 @@ var (
 	googleSchemaFields = []string{"responseMimeType", "response_mime_type", "responseSchema", "response_schema", "responseJsonSchema", "response_json_schema"}
 )
 
-// Gemini wraps a full generation request in generateContentRequest; the
+// Google wraps a full generation request in generateContentRequest; the
 // proto JSON mapping also accepts the snake_case spelling.
 var googleWrappers = []string{"generateContentRequest", "generate_content_request"}
 
 // request is a client count request read as its generation request.
 type request struct {
 	// body is the generation request: the count body itself for Messages and
-	// Responses, and the unwrapped GenerateContent request for Gemini.
+	// Responses, and the unwrapped GenerateContent request for Google.
 	body []byte
-	// model is the model a Gemini generateContentRequest names, without its
+	// model is the model a Google generateContentRequest names, without its
 	// "models/" prefix. Other protocols read the model from body.
 	model string
-	// wrapper is the generateContentRequest key a Gemini body used, if any.
+	// wrapper is the generateContentRequest key a Google body used, if any.
 	wrapper string
 }
 
@@ -56,16 +56,16 @@ func decodeRequest(id apix.Protocol, body []byte) (request, *apix.Error) {
 			continue
 		}
 		if r.wrapper != "" {
-			return request{}, apix.Translation("Gemini countTokens request has generateContentRequest twice")
+			return request{}, apix.Translation("Google countTokens request has generateContentRequest twice")
 		}
 		r.wrapper = key
 		var inner map[string]json.RawMessage
 		if err := json.Unmarshal(raw, &inner); err != nil || inner == nil {
-			return request{}, apix.Translation("Gemini countTokens " + key + " must be an object")
+			return request{}, apix.Translation("Google countTokens " + key + " must be an object")
 		}
 		if m, ok := inner["model"]; ok {
 			if err := json.Unmarshal(m, &r.model); err != nil {
-				return request{}, apix.Translation("Gemini countTokens " + key + ".model must be a string")
+				return request{}, apix.Translation("Google countTokens " + key + ".model must be a string")
 			}
 			r.model = strings.TrimPrefix(r.model, "models/")
 			delete(inner, "model")
@@ -74,10 +74,10 @@ func decodeRequest(id apix.Protocol, body []byte) (request, *apix.Error) {
 	}
 	if r.wrapper != "" {
 		if _, ok := root["contents"]; ok {
-			return request{}, apix.Translation("Gemini countTokens request takes contents or generateContentRequest, not both")
+			return request{}, apix.Translation("Google countTokens request takes contents or generateContentRequest, not both")
 		}
 	} else if _, ok := root["contents"]; !ok {
-		return request{}, apix.Translation("Gemini countTokens request requires contents or generateContentRequest")
+		return request{}, apix.Translation("Google countTokens request requires contents or generateContentRequest")
 	}
 	// GenerateContent requires contents; its codec checks this when it reads
 	// the request, which conversion does not repeat.
@@ -85,7 +85,7 @@ func decodeRequest(id apix.Protocol, body []byte) (request, *apix.Error) {
 		Contents []json.RawMessage `json:"contents"`
 	}
 	if json.Unmarshal(r.body, &gen) != nil || len(gen.Contents) == 0 {
-		return request{}, apix.Translation("Gemini request requires contents")
+		return request{}, apix.Translation("Google request requires contents")
 	}
 	return r, nil
 }
@@ -277,7 +277,7 @@ func (e *exchange) ConvertResponse(status int, resp apix.Payload) (apix.Payload,
 }
 
 // readCount reads the input token count of an upstream count response:
-// input_tokens for Messages and Responses, totalTokens for Gemini, whose
+// input_tokens for Messages and Responses, totalTokens for Google, whose
 // proto JSON omits a zero count.
 func readCount(format string, body []byte) (int64, *apix.Error) {
 	var root map[string]json.RawMessage
@@ -300,7 +300,7 @@ func readCount(format string, body []byte) (int64, *apix.Error) {
 		return 0, apix.UpstreamFallback(string(byFormat(format)) + " response has no " + key)
 	}
 	var n int64
-	// Gemini's proto JSON may encode integers as strings.
+	// Google's proto JSON may encode integers as strings.
 	if format == ids.FormatGenerateContent && len(raw) > 0 && raw[0] == '"' {
 		var s string
 		if json.Unmarshal(raw, &s) == nil {

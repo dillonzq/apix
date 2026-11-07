@@ -8,7 +8,7 @@ import (
 	"github.com/dillonzq/apix/internal/llm/adapter/shared"
 )
 
-// Gemini segment offsets count UTF-8 bytes within one part. The other
+// Google segment offsets count UTF-8 bytes within one part. The other
 // protocols' annotation offsets count runes in their visible output text.
 func (c *conversion) groundingCitations(candidate object) []shared.Citation {
 	grounding := obj(candidate["groundingMetadata"])

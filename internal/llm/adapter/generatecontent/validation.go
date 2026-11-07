@@ -45,7 +45,7 @@ func (c *conversion) aliases(o object, pairs ...string) {
 		source, target := pairs[i], pairs[i+1]
 		if v, ok := o[source]; ok {
 			if prior, exists := o[target]; exists && !bytes.Equal(encode(v), encode(prior)) {
-				c.fail("conflicting Gemini field aliases: " + target)
+				c.fail("conflicting Google field aliases: " + target)
 			} else {
 				o[target] = v
 			}

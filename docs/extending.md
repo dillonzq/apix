@@ -6,7 +6,7 @@ The apix core is protocol neutral. Adding a protocol, or a new Kind such as imag
 
 ## Where code goes
 
-- Protocols are organized by vendor under `protocol/<vendor>/`. For example, OpenAI image generation goes in `protocol/openai/images.go`, and Gemini's APIs go under `protocol/google/`.
+- Protocols are organized by vendor under `protocol/<vendor>/`. For example, OpenAI image generation goes in `protocol/openai/images.go`, and Google's APIs go under `protocol/google/`.
 - Protocol IDs are namespaced as `<vendor>.<api>`, for example `openai.images.generations` or `google.generate-content`.
 - Conversion code shared by several vendors of one Kind goes in `internal/<kind>/`, for example `internal/image/`. The LLM implementation lives in `internal/llm/`.
 - Every vendor package provides `Codecs() []apix.Codec`. Callers register codecs explicitly with `apix.NewRegistry(slices.Concat(...))`.

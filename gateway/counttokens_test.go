@@ -53,17 +53,17 @@ func TestCountTokensGateway(t *testing.T) {
 
 	status, body := post("/v1/messages/count_tokens", `{"model":"public","system":"be brief","messages":[{"role":"user","content":"hi"}]}`)
 	if status != 200 || body != `{"input_tokens":17}` {
-		t.Fatalf("Messages via Gemini: %d %s", status, body)
+		t.Fatalf("Messages via Google: %d %s", status, body)
 	}
 	got := gem.last()
 	inner, _ := got.body["generateContentRequest"].(map[string]any)
 	if got.path != "/v1beta/models/gem-up:countTokens" || got.header.Get("X-Goog-Api-Key") != "gem-key" || inner["model"] != "models/gem-up" || inner["systemInstruction"] == nil {
-		t.Fatalf("Gemini request %+v", got)
+		t.Fatalf("Google request %+v", got)
 	}
 
 	status, body = post("/v1beta/models/gpt:countTokens", `{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`)
 	if status != 200 || body != `{"totalTokens":9}` {
-		t.Fatalf("Gemini via Responses: %d %s", status, body)
+		t.Fatalf("Google via Responses: %d %s", status, body)
 	}
 	got = oai.last()
 	if got.path != "/v1/responses/input_tokens" || got.header.Get("Authorization") != "Bearer oai-key" || got.body["model"] != "gpt" || got.body["input"] == nil {

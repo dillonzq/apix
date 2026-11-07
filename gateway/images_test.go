@@ -71,7 +71,7 @@ func imageRegistry(t *testing.T) *apix.Registry {
 }
 
 // Image requests never reach LLM endpoints, fail over from a native endpoint
-// to a convertible one, and reach Gemini at the model's URL.
+// to a convertible one, and reach Google at the model's URL.
 func TestImagesGenerationsFailover(t *testing.T) {
 	native := newRawUpstream(t, 503, "application/json", `{"error":{"message":"overloaded","type":"server_error"}}`)
 	gem := newRawUpstream(t, 200, "application/json", googleImageReply)
@@ -124,7 +124,7 @@ func TestImagesInvalidEndpointOptions(t *testing.T) {
 	}
 }
 
-// A streamed multipart edit to Gemini is sent without streaming and returned
+// A streamed multipart edit to Google is sent without streaming and returned
 // as a complete event stream.
 func TestImagesEditsEmulatedStream(t *testing.T) {
 	gem := newRawUpstream(t, 200, "application/json", googleImageReply)
@@ -155,8 +155,8 @@ func TestImagesEditsEmulatedStream(t *testing.T) {
 	}
 }
 
-// A Gemini image edit reaches OpenAI edits as a multipart form, and the
-// response returns in the Gemini format.
+// A Google image edit reaches OpenAI edits as a multipart form, and the
+// response returns in the Google format.
 func TestGoogleImageToOpenAIEdits(t *testing.T) {
 	edits := newRawUpstream(t, 200, "application/json", `{"created":1,"data":[{"b64_json":"aW1n"}],"output_format":"png"}`)
 	gw, err := gateway.New(gateway.Config{Registry: imageRegistry(t), Upstreams: []gateway.Upstream{
@@ -188,11 +188,11 @@ func TestGoogleImageToOpenAIEdits(t *testing.T) {
 		t.Fatalf("%d %s %s", rr.Code, rr.Header(), rr.Body)
 	}
 	if _, raw := edits.last(t); bytes.Contains(raw, []byte(`name="stream"`)) {
-		t.Fatal("OpenAI asked to stream for a Gemini client")
+		t.Fatal("OpenAI asked to stream for a Google client")
 	}
 
 	// A text-only request cannot become an edit; the conversion error is
-	// returned in the Gemini envelope without calling the upstream.
+	// returned in the Google envelope without calling the upstream.
 	rr = httptest.NewRecorder()
 	gw.Handler(google.GenerateContentImage).ServeHTTP(rr, httptest.NewRequest("POST", "/v1beta/models/nano:generateContent", strings.NewReader(`{"contents":[{"parts":[{"text":"a cat"}]}]}`)))
 	if rr.Code != 400 || !strings.Contains(rr.Body.String(), `"status":"INVALID_ARGUMENT"`) || edits.hits() != 2 {
@@ -200,7 +200,7 @@ func TestGoogleImageToOpenAIEdits(t *testing.T) {
 	}
 }
 
-// Endpoint modalities also replace those of native Gemini image requests.
+// Endpoint modalities also replace those of native Google image requests.
 func TestGoogleImageNativeModalities(t *testing.T) {
 	gem := newRawUpstream(t, 200, "application/json", googleImageReply)
 	gw, err := gateway.New(gateway.Config{Registry: imageRegistry(t), Upstreams: []gateway.Upstream{

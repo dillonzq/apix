@@ -12,7 +12,7 @@ import (
 	"github.com/dillonzq/apix/internal/vendorerr"
 )
 
-// InteractionsCodec implements the native Gemini Interactions protocol. It
+// InteractionsCodec implements the native Google Interactions protocol. It
 // validates requests, responses and streams and rewrites model aliases, but
 // converts to no other protocol; stored interactions stay upstream-owned.
 type InteractionsCodec struct{}

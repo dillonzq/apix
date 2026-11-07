@@ -99,7 +99,7 @@ type UsageReporter interface {
 // Usage is the token usage an upstream reported, in one accounting for every
 // protocol. Input counts include cached input, and output counts include
 // reasoning, so InputTokens + OutputTokens covers every billed token class:
-// Anthropic's separate cache counts are added to InputTokens, and Gemini's
+// Anthropic's separate cache counts are added to InputTokens, and Google's
 // thought and tool-use prompt counts to OutputTokens and InputTokens.
 type Usage struct {
 	// InputTokens counts every input token, including CacheReadTokens and
