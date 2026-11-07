@@ -87,6 +87,36 @@ func TestFrameLimitIsTerminalAndBoundsBuffer(test *testing.T) {
 	}
 }
 
+func TestTrailingCRLimitErrorReleasesPartialFrame(test *testing.T) {
+	for _, prefix := range []string{"", "event: a\ndata:y\n"} {
+		for _, captureRaw := range []bool{false, true} {
+			wire := prefix + "data:x\r"
+			framer := NewFramerWithLimit(captureRaw, len(wire))
+			framer.Push([]byte(wire))
+			if _, _, _, ok := framer.Next(); ok || framer.Err() != nil {
+				test.Fatal("trailing CR should wait for more input before an error")
+			}
+			if string(framer.buf) != "data:x\r" || framer.scanned != len("data:x") {
+				test.Fatal("non-terminal trailing CR state was not preserved")
+			}
+			framer.Push([]byte("\n"))
+			for range 2 {
+				if _, _, _, ok := framer.Next(); ok || !errors.Is(framer.Err(), ErrFrameTooLarge) {
+					test.Fatal("oversized trailing CR frame did not remain terminal")
+				}
+				if framer.buf != nil || framer.raw != nil || framer.data.Len() != 0 || framer.scanned != 0 {
+					test.Fatal("terminal trailing CR retained partial frame buffers")
+				}
+				if framer.eventType != "" || framer.dataLines != 0 || framer.sawFrame {
+					test.Fatal("terminal trailing CR retained partial frame metadata")
+				}
+				framer.Push([]byte("data: later\n\n"))
+				framer.End()
+			}
+		}
+	}
+}
+
 func TestDecoderFrameLimit(test *testing.T) {
 	decoder := Decoder{MaxFrameBytes: 16}
 	events := decoder.Feed([]byte("data: ok\n\n" + strings.Repeat("x", 17)))

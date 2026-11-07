@@ -64,16 +64,17 @@ func (f *Framer) Next() (eventType, data string, raw []byte, ok bool) {
 		if i < 0 {
 			f.scanned = len(f.buf)
 			if f.Err() != nil {
-				f.buf = nil
-				f.raw = nil
-				f.data.Reset()
-				f.scanned = 0
+				f.discardPartial()
 			}
 			return "", "", nil, false
 		}
 		i += f.scanned
 		if f.buf[i] == '\r' && i+1 == len(f.buf) {
-			f.scanned = i // a following '\n' joins this '\r'
+			if f.Err() != nil {
+				f.discardPartial()
+			} else {
+				f.scanned = i
+			}
 			return "", "", nil, false
 		}
 		f.scanned = 0
@@ -116,6 +117,16 @@ func (f *Framer) Next() (eventType, data string, raw []byte, ok bool) {
 			// Unknown lines are ignored outside raw capture.
 		}
 	}
+}
+
+func (framer *Framer) discardPartial() {
+	framer.buf = nil
+	framer.raw = nil
+	framer.data.Reset()
+	framer.scanned = 0
+	framer.eventType = ""
+	framer.dataLines = 0
+	framer.sawFrame = false
 }
 
 // lineEnd returns the index of the first '\r' or '\n' in b, or -1. Two
