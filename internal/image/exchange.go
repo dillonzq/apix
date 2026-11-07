@@ -29,6 +29,7 @@ func decodeRequest(id apix.Protocol, req apix.Payload) (clientRequest, *apix.Err
 }
 
 type exchange struct {
+	maxStreamFrameBytes      int
 	client, upstream, output apix.Protocol
 	policy                   apix.LossPolicy
 	options                  Options

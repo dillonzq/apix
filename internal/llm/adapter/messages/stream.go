@@ -63,14 +63,15 @@ type blockState struct {
 // ("chat-completions" Chat Completions chunks, "responses" Responses events,
 // "messages" verbatim passthrough).
 func NewStreamConverter(outputFormat string, tools ...*shared.ConversionContext) *StreamConverter {
+	context := shared.ContextOrNew(tools)
 	sc := &StreamConverter{
-		framer:       shared.NewSSEFramer(outputFormat == "messages"),
+		framer:       shared.NewSSEFramer(outputFormat == "messages", context.Options.MaxStreamFrameBytes),
 		outputFormat: outputFormat,
 		created:      time.Now().Unix(),
 		blocks:       map[int]*blockState{},
 	}
 	sc.responses.msgIdx = -1
-	sc.context = shared.ContextOrNew(tools)
+	sc.context = context
 	sc.search = map[string]*blockState{}
 	sc.citationKeys = map[string]bool{}
 	return sc
@@ -87,7 +88,7 @@ func (sc *StreamConverter) Feed(chunk []byte) (events [][]byte, done bool, eErr 
 	for {
 		etype, data, rawBlock, ok := sc.framer.Next()
 		if !ok {
-			return events, false, nil
+			return events, false, shared.SSEFrameError(sc.framer)
 		}
 		d, eErr := sc.dispatch(etype, data, rawBlock, &events)
 		if len(events) > 0 {

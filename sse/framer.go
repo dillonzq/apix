@@ -12,6 +12,7 @@ import (
 // are captured verbatim (including line terminators) only when wantRaw is
 // set — pass false when no consumer reads them.
 type Framer struct {
+	limit     FrameLimiter
 	buf       []byte          // partial line carried across Push calls
 	scanned   int             // bytes of buf already searched for a line end
 	eventType string          // current event: value
@@ -22,20 +23,36 @@ type Framer struct {
 	raw       []byte // verbatim current block when wantRaw
 }
 
-// NewFramer prepares a framer; wantRaw enables verbatim block capture.
+// NewFramer prepares a framer with DefaultMaxFrameBytes; wantRaw enables
+// verbatim block capture. Drain Next before checking Err.
 func NewFramer(wantRaw bool) *Framer {
 	return &Framer{wantRaw: wantRaw}
 }
 
+// NewFramerWithLimit prepares a framer with a maximum frame size. Zero uses
+// DefaultMaxFrameBytes; a negative value explicitly disables the limit.
+func NewFramerWithLimit(wantRaw bool, maxFrameBytes int) *Framer {
+	return &Framer{wantRaw: wantRaw, limit: FrameLimiter{MaxBytes: maxFrameBytes}}
+}
+
 // Push appends one network chunk to the framer buffer.
 func (f *Framer) Push(chunk []byte) {
-	f.buf = append(f.buf, chunk...)
+	accepted, _ := f.limit.Feed(chunk)
+	f.buf = append(f.buf, accepted...)
 }
+
+// Err returns a terminal framing error. Drain complete frames with Next
+// before checking it, so valid frames preceding an oversized one survive.
+func (framer *Framer) Err() error { return framer.limit.Err() }
 
 // End frames the final data line at EOF, including a valid SSE event whose
 // final newline/blank separator was omitted. Incomplete JSON still fails in
 // the converter; residual bytes must not disappear behind a success terminal.
-func (f *Framer) End() { f.Push([]byte("\n\n")) }
+func (f *Framer) End() {
+	if f.Err() == nil {
+		f.buf = append(f.buf, '\n', '\n')
+	}
+}
 
 // Next returns the next complete frame (eventType, joined data, raw block).
 // ok=false means the buffer needs more input.
@@ -46,6 +63,12 @@ func (f *Framer) Next() (eventType, data string, raw []byte, ok bool) {
 		i := lineEnd(f.buf[f.scanned:])
 		if i < 0 {
 			f.scanned = len(f.buf)
+			if f.Err() != nil {
+				f.buf = nil
+				f.raw = nil
+				f.data.Reset()
+				f.scanned = 0
+			}
 			return "", "", nil, false
 		}
 		i += f.scanned

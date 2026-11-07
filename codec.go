@@ -48,6 +48,10 @@ type ExchangeOptions struct {
 	// conversion. The upstream codec renders it with its own options, such as
 	// anthropic.MessagesOptions.ThinkingMode.
 	Reasoning *Reasoning
+	// MaxStreamFrameBytes limits one upstream SSE frame, including comments
+	// and line separators. Built-in codecs default to 64 MiB when zero;
+	// a negative value explicitly disables the limit for trusted upstreams.
+	MaxStreamFrameBytes int
 	// Ext holds options defined by the upstream protocol's package, such as
 	// anthropic.MessagesOptions. Codecs reject option types they do not know.
 	Ext any

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/dillonzq/apix/internal/errclass"
 	"github.com/dillonzq/apix/sse"
 )
 
@@ -11,7 +12,19 @@ import (
 type SSEFramer = sse.Framer
 
 // NewSSEFramer prepares a framer; wantRaw enables verbatim block capture.
-func NewSSEFramer(wantRaw bool) *SSEFramer { return sse.NewFramer(wantRaw) }
+func NewSSEFramer(wantRaw bool, maxFrameBytes ...int) *SSEFramer {
+	if len(maxFrameBytes) > 0 {
+		return sse.NewFramerWithLimit(wantRaw, maxFrameBytes[0])
+	}
+	return sse.NewFramer(wantRaw)
+}
+
+func SSEFrameError(framer *SSEFramer) *errclass.Error {
+	if err := framer.Err(); err != nil {
+		return &errclass.Error{Class: errclass.ClassTranslation, Message: err.Error(), Err: err}
+	}
+	return nil
+}
 
 // IsSSEDone reports whether a framer-stripped SSE data payload is the
 // terminal [DONE] sentinel; surrounding whitespace and CR are ignored.

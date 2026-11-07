@@ -17,7 +17,7 @@ func (e *exchange) NewStreamConverter() (apix.StreamConverter, error) {
 	if !e.upstreamStream {
 		return nil, apix.Unsupported(string(e.upstream) + " was not asked to stream for " + string(e.output))
 	}
-	s := &passthrough{framer: sse.NewFramer(true), usage: e.usage}
+	s := &passthrough{framer: sse.NewFramerWithLimit(true, e.maxStreamFrameBytes), usage: e.usage}
 	if protocols[e.upstream].family == familyGemini {
 		s.check = checkGeminiEvent
 	} else {
@@ -87,6 +87,9 @@ func (s *passthrough) drain() [][]byte {
 	for !s.done {
 		name, data, raw, ok := s.framer.Next()
 		if !ok {
+			if err := s.framer.Err(); err != nil {
+				s.err = &apix.Error{Class: apix.ClassTranslation, Message: err.Error(), Err: err}
+			}
 			break
 		}
 		done, terminal, err := s.check(name, data)

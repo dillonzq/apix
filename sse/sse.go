@@ -15,8 +15,11 @@ type Event struct {
 // ready to use. Use one decoder per stream, sequentially; call Finish at EOF.
 // This lets hosts that add their own data: framing consume converter output.
 type Decoder struct {
-	framer *Framer
-	closed bool
+	// MaxFrameBytes is fixed before the first Feed. Zero uses
+	// DefaultMaxFrameBytes; a negative value disables the limit.
+	MaxFrameBytes int
+	framer        *Framer
+	closed        bool
 }
 
 func (d *Decoder) drain() []Event {
@@ -37,7 +40,7 @@ func (d *Decoder) Feed(chunk []byte) []Event {
 		return nil
 	}
 	if d.framer == nil {
-		d.framer = NewFramer(false)
+		d.framer = NewFramerWithLimit(false, d.MaxFrameBytes)
 	}
 	d.framer.Push(chunk)
 	return d.drain()
@@ -55,4 +58,12 @@ func (d *Decoder) Finish() []Event {
 	}
 	d.framer.End()
 	return d.drain()
+}
+
+// Err returns a terminal frame-size error. Events preceding it remain valid.
+func (d *Decoder) Err() error {
+	if d.framer == nil {
+		return nil
+	}
+	return d.framer.Err()
 }

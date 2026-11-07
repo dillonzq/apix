@@ -41,7 +41,8 @@ type Diagnostic struct {
 // loss; Strict rejects all reported request loss. Responses report losses but
 // are never retried or rejected solely because of this option.
 type ConversionOptions struct {
-	LossPolicy LossPolicy
+	LossPolicy          LossPolicy
+	MaxStreamFrameBytes int
 	// AllowUnsignedThinking opts into replaying cross-protocol reasoning as
 	// unsigned Messages thinking blocks, for upstreams that accept them.
 	// The default omits these blocks. Diagnostics and Safe/Strict rejection

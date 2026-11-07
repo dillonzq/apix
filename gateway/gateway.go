@@ -27,6 +27,7 @@ import (
 	"github.com/dillonzq/apix"
 	"github.com/dillonzq/apix/reasoning"
 	"github.com/dillonzq/apix/route"
+	"github.com/dillonzq/apix/sse"
 )
 
 // Upstream is a routable endpoint plus how to reach it.
@@ -52,7 +53,9 @@ type Config struct {
 	Registry  *apix.Registry
 	Upstreams []Upstream
 	// Client sends upstream requests. The default has no timeout so streams
-	// are not cut off; use CommitTimeout and the request context instead.
+	// are not cut off, and follows redirects only within the original origin.
+	// Use CommitTimeout and the request context for timeouts. A supplied Client
+	// owns its redirect policy, including protection of custom auth headers.
 	Client *http.Client
 	// MaxAttempts limits how many candidates one request tries; 0 tries all.
 	MaxAttempts int
@@ -61,6 +64,10 @@ type Config struct {
 	// MaxResponseBytes limits ordinary upstream response bodies; 0 means
 	// 64 MiB. A larger response fails over like an upstream error.
 	MaxResponseBytes int64
+	// MaxStreamFrameBytes limits a single upstream SSE frame. Zero means
+	// 64 MiB; a negative value explicitly disables the limit. It does not
+	// limit total stream length. Endpoint options may override it.
+	MaxStreamFrameBytes int
 	// CommitTimeout limits how long one attempt may take to reach the commit
 	// point: a converted ordinary response, or a stream's first event. On
 	// expiry the attempt is canceled and the request fails over. Zero means
@@ -168,19 +175,20 @@ func (r *Response) Diagnostics() []apix.Diagnostic {
 // Gateway routes, converts, and executes requests. It is safe for concurrent
 // use.
 type Gateway struct {
-	reg              *apix.Registry
-	router           *route.Router
-	client           *http.Client
-	maxAttempts      int
-	maxRequestBytes  int64
-	maxResponseBytes int64
-	commitTimeout    time.Duration
-	forwardHeaders   []string
-	reasoningSuffix  bool
-	onAttempt        func(Attempt)
-	onUsage          func(Attempt, apix.Usage)
-	mu               sync.RWMutex // guards routing and upstream configuration together
-	upstreams        map[string]Upstream
+	reg                 *apix.Registry
+	router              *route.Router
+	client              *http.Client
+	maxAttempts         int
+	maxRequestBytes     int64
+	maxResponseBytes    int64
+	maxStreamFrameBytes int
+	commitTimeout       time.Duration
+	forwardHeaders      []string
+	reasoningSuffix     bool
+	onAttempt           func(Attempt)
+	onUsage             func(Attempt, apix.Usage)
+	mu                  sync.RWMutex // guards routing and upstream configuration together
+	upstreams           map[string]Upstream
 }
 
 // New validates cfg and creates a Gateway.
@@ -190,9 +198,10 @@ func New(cfg Config) (*Gateway, error) {
 	}
 	g := &Gateway{reg: cfg.Registry, client: cfg.Client, maxAttempts: cfg.MaxAttempts, maxRequestBytes: cfg.MaxRequestBytes,
 		maxResponseBytes: cfg.MaxResponseBytes, commitTimeout: cfg.CommitTimeout, forwardHeaders: append([]string(nil), cfg.ForwardHeaders...),
-		reasoningSuffix: cfg.ReasoningSuffix, onAttempt: cfg.OnAttempt, onUsage: cfg.OnUsage}
+		maxStreamFrameBytes: cfg.MaxStreamFrameBytes,
+		reasoningSuffix:     cfg.ReasoningSuffix, onAttempt: cfg.OnAttempt, onUsage: cfg.OnUsage}
 	if g.client == nil {
-		g.client = &http.Client{}
+		g.client = &http.Client{CheckRedirect: checkRedirect}
 	}
 	if g.maxRequestBytes <= 0 {
 		g.maxRequestBytes = 32 << 20
@@ -209,6 +218,27 @@ func New(cfg Config) (*Gateway, error) {
 	}
 	g.upstreams = ups
 	return g, nil
+}
+
+func checkRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("gateway: stopped after 10 redirects")
+	}
+	origin := via[0].URL
+	if req.URL.Scheme != origin.Scheme || !strings.EqualFold(req.URL.Hostname(), origin.Hostname()) || originPort(req.URL) != originPort(origin) {
+		return errors.New("gateway: cross-origin redirect is not allowed")
+	}
+	return nil
+}
+
+func originPort(target *url.URL) string {
+	if port := target.Port(); port != "" {
+		return port
+	}
+	if target.Scheme == "https" {
+		return "443"
+	}
+	return "80"
 }
 
 // Update validates and replaces the upstream set atomically. A rejected update
@@ -313,7 +343,11 @@ func (g *Gateway) Do(ctx context.Context, req Request) (*Response, error) {
 		if aerr != nil && ctx.Err() != nil {
 			return nil, canceled(ctx)
 		}
-		if sent {
+		if aerr == nil && resp.Stream {
+			resp.Body.(*streamBody).onOutcome = func(err error) {
+				g.router.Report(c.Endpoint.ID, route.Outcome{Err: err, Latency: a.Latency})
+			}
+		} else if sent {
 			g.router.Report(c.Endpoint.ID, route.Outcome{Err: a.Err, Latency: a.Latency})
 		}
 		if aerr == nil {
@@ -334,7 +368,7 @@ func (g *Gateway) Do(ctx context.Context, req Request) (*Response, error) {
 
 func canceled(ctx context.Context) *apix.Error {
 	cause := context.Cause(ctx)
-	return &apix.Error{Class: apix.ClassNetwork, Message: "request canceled: " + apix.Redact(cause.Error()), Err: cause}
+	return &apix.Error{Class: apix.ClassNetwork, Message: "request canceled: " + apix.Redact(cause.Error()), Err: errors.Join(ctx.Err(), cause)}
 }
 
 var errCommitTimeout = errors.New("gateway: commit timeout")
@@ -393,6 +427,9 @@ func (g *Gateway) send(ctx context.Context, cancel context.CancelCauseFunc, req 
 	opts := c.Endpoint.Options.Exchange()
 	opts.Output = req.Output
 	opts.Reasoning = req.Reasoning
+	if opts.MaxStreamFrameBytes == 0 {
+		opts.MaxStreamFrameBytes = g.maxStreamFrameBytes
+	}
 	ex, err := g.reg.NewExchange(req.Protocol, c.Endpoint.Protocol, opts)
 	if err != nil {
 		return nil, false, apix.AsError(err)
@@ -464,8 +501,10 @@ func (g *Gateway) send(ctx context.Context, cancel context.CancelCauseFunc, req 
 		_ = hresp.Body.Close()
 		return nil, true, apix.AsError(err)
 	}
-	body := &streamBody{upstream: hresp.Body, conv: sc, chunk: make([]byte, 32<<10), cancel: cancel}
-	body.onFailure = func(err error) { g.router.Report(c.Endpoint.ID, route.Outcome{Err: err}) }
+	body := &streamBody{upstream: hresp.Body, conv: sc, chunk: make([]byte, 32<<10), ctx: ctx, cancel: cancel}
+	if spec, _ := g.reg.Spec(c.Endpoint.Protocol); spec.Stream == apix.FramingSSE {
+		body.limit = &sse.FrameLimiter{MaxBytes: opts.MaxStreamFrameBytes}
+	}
 	body.onDone = func() { g.remember(ex, c.Endpoint.ID) }
 	if err := body.prime(); err != nil {
 		_ = body.upstream.Close()
@@ -519,7 +558,9 @@ func (g *Gateway) remember(ex apix.Exchange, endpointID string) {
 func upstreamFault(err error) *apix.Error {
 	e := apix.AsError(err)
 	if e.Class == apix.ClassTranslation {
-		return apix.UpstreamFallback("unusable upstream response: " + e.Message)
+		failure := apix.UpstreamFallback("unusable upstream response: " + e.Message)
+		failure.Err = e
+		return failure
 	}
 	return e
 }
@@ -629,14 +670,18 @@ type streamBody struct {
 	mu        sync.Mutex
 	upstream  io.ReadCloser
 	conv      apix.StreamConverter
+	limit     *sse.FrameLimiter
 	chunk     []byte
 	pending   [][]byte
 	current   []byte
 	done      bool
 	committed bool
 	err       *apix.Error
+	ctx       context.Context
 	cancel    context.CancelCauseFunc
-	onFailure func(error)
+	closed    atomic.Bool
+	aborted   bool
+	onOutcome func(error)
 	onDone    func()
 	// onUsage receives usage() once when the stream ends, fails, or is
 	// closed, whichever comes first.
@@ -644,20 +689,36 @@ type streamBody struct {
 	onUsage func(apix.Usage)
 }
 
-// end takes the usage report, once. The caller holds mu, so the converter
-// state is final, and runs the returned report after releasing it, so the
-// callback may use the body.
+// end takes the health and usage reports, once. The caller holds mu and runs
+// the returned report after releasing it, so callbacks may use the body.
 func (b *streamBody) end() func() {
+	outcome := b.onOutcome
+	b.onOutcome = nil
+	var outcomeErr error
+	if b.err != nil {
+		outcomeErr = b.err
+	}
+	if b.aborted || b.err == nil && !b.done {
+		outcomeErr = apix.Unsupported("stream closed before completion")
+	}
 	report := b.onUsage
 	b.onUsage = nil
-	if report == nil {
+	if outcome == nil && report == nil {
 		return nil
 	}
-	u, ok := b.usage()
-	if !ok {
-		return nil
+	var observed apix.Usage
+	var reported bool
+	if report != nil {
+		observed, reported = b.usage()
 	}
-	return func() { report(u) }
+	return func() {
+		if outcome != nil {
+			outcome(outcomeErr)
+		}
+		if reported {
+			report(observed)
+		}
+	}
 }
 
 // prime reads until the first converted event: the commit point. Any failure
@@ -679,7 +740,12 @@ func (b *streamBody) prime() *apix.Error {
 func (b *streamBody) fill() {
 	n, rerr := b.upstream.Read(b.chunk)
 	if n > 0 {
-		events, done, err := b.conv.Feed(b.chunk[:n])
+		chunk := b.chunk[:n]
+		var limitErr error
+		if b.limit != nil {
+			chunk, limitErr = b.limit.Feed(chunk)
+		}
+		events, done, err := b.conv.Feed(chunk)
 		b.pending = append(b.pending, events...)
 		if err != nil {
 			b.fail(err)
@@ -689,6 +755,14 @@ func (b *streamBody) fill() {
 			b.done = true
 			return
 		}
+		if limitErr != nil {
+			b.fail(&apix.Error{Class: apix.ClassTranslation, Message: limitErr.Error(), Err: limitErr})
+			return
+		}
+	}
+	if rerr != nil && (b.closed.Load() || b.ctx != nil && b.ctx.Err() != nil) {
+		b.abort()
+		return
 	}
 	switch {
 	case rerr == io.EOF:
@@ -699,11 +773,17 @@ func (b *streamBody) fill() {
 			b.fail(err)
 		}
 	case rerr != nil:
-		if b.committed || len(b.pending) > 0 {
-			b.fail(apix.PostFirstByteNetwork(rerr.Error()))
-		} else {
-			b.fail(apix.FromNetwork(rerr))
-		}
+		failure := apix.FromNetwork(rerr)
+		failure.Retryable = !b.committed && len(b.pending) == 0
+		b.fail(failure)
+	}
+}
+
+func (body *streamBody) abort() {
+	body.aborted = true
+	body.err = &apix.Error{Class: apix.ClassNetwork, Message: "stream closed", Err: context.Canceled}
+	if body.ctx != nil && body.ctx.Err() != nil {
+		body.err = canceled(body.ctx)
 	}
 }
 
@@ -732,12 +812,6 @@ func (b *streamBody) read(p []byte) (int, func(), error) {
 			continue
 		}
 		if b.err != nil {
-			// Report after Do has recorded the committed attempt, including
-			// errors buffered alongside the first events during prime.
-			if b.onFailure != nil {
-				b.onFailure(b.err)
-				b.onFailure = nil
-			}
 			return 0, b.end(), b.err
 		}
 		if b.done {
@@ -758,12 +832,17 @@ func (b *streamBody) read(p []byte) (int, func(), error) {
 // collected so far if it has not already been reported. It may interrupt a
 // concurrent Read and returns the upstream body's Close error.
 func (b *streamBody) Close() error {
-	// Closing the upstream first unblocks a concurrent Read holding mu.
-	err := b.upstream.Close()
+	if !b.closed.CompareAndSwap(false, true) {
+		return nil
+	}
 	if b.cancel != nil {
 		b.cancel(nil)
 	}
+	err := b.upstream.Close()
 	b.mu.Lock()
+	if b.err == nil && !b.done {
+		b.abort()
+	}
 	report := b.end()
 	b.mu.Unlock()
 	if report != nil {

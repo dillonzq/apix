@@ -108,7 +108,11 @@ route.Endpoint{
 
 404 可重试，因为各上游的模型目录和已存储状态并不相同；它不计入端点健康。
 
-提交点之后的失败不再重试，因为客户端可能已经收到部分输出。这类失败通过 `Response.Body.Read` 返回 `*apix.Error`，并计入健康统计。
+提交点之后的失败不再重试，因为客户端可能已经收到部分输出。这类失败通过 `Response.Body.Read` 返回 `*apix.Error`。流结束、失败或被关闭时只上报一次健康结果，只有完整完成才算成功。调用方取消和提前关闭属于未确定结果，会释放半开试探名额，但不清除既有失败计数，也不惩罚端点。取消错误通过 `errors.Is` 保留 `context.Canceled` 或 `context.DeadlineExceeded`，以及自定义取消原因。
+
+`Config.MaxStreamFrameBytes` 默认限制单个上游 SSE 帧为 64 MiB，包含注释及线路上的换行分隔符，不限制整条流的长度。`route.EndpointOptions.MaxStreamFrameBytes` 可按端点覆盖；负值显式为可信上游关闭限制。直接使用 Codec 时设置 `apix.ExchangeOptions.MaxStreamFrameBytes`。帧超限在提交前触发切换，提交后变为终态读取错误，并保留之前的有效事件；可用 `errors.Is` 识别 `sse.ErrFrameTooLarge`。
+
+默认 HTTP 客户端的重定向链最多包含十次请求，且只允许原始协议、主机名和有效端口。跨源重定向（包括 HTTPS 降级）会在其他主机收到凭据前失败。自带 `Config.Client` 时，调用方负责其重定向策略，尤其要保护自定义鉴权头。
 
 鉴权头按协议默认方案注入：OpenAI 用 `Authorization: Bearer <key>`，Anthropic 用 `x-api-key: <key>` 加 `anthropic-version`，Gemini 用 `x-goog-api-key`。端点可以用 `Upstream.Auth` 覆盖默认方案。`Upstream.Path` 只能覆盖固定的默认路径；路径随模型或流式模式变化的协议（如 GenerateContent）会拒绝它，前缀应放进 `BaseURL`。上游路径由转换后 Payload 的元信息生成，URL 中的模型和模式总与 Exchange 的输出一致。请求头的叠加顺序是：
 

@@ -104,12 +104,13 @@ func (c *InteractionsCodec) NewExchange(client apix.Protocol, opts apix.Exchange
 	if err := c.check(opts); err != nil {
 		return nil, err
 	}
-	return &interactionsExchange{recorder: &recorder{kind: "interaction"}, usage: usage.New(usage.Interactions)}, nil
+	return &interactionsExchange{recorder: &recorder{kind: "interaction"}, usage: usage.New(usage.Interactions, opts.MaxStreamFrameBytes), maxStreamFrameBytes: opts.MaxStreamFrameBytes}, nil
 }
 
 type interactionsExchange struct {
-	recorder *recorder
-	usage    *usage.Tracker
+	maxStreamFrameBytes int
+	recorder            *recorder
+	usage               *usage.Tracker
 }
 
 func (e *interactionsExchange) ConvertRequest(req apix.Payload, upstreamModel string) (apix.Payload, error) {
@@ -159,7 +160,7 @@ func (e *interactionsExchange) ConvertResponse(status int, resp apix.Payload) (a
 // NewStreamConverter creates a native Interactions stream validator that
 // records created interaction state and upstream usage on this exchange.
 func (e *interactionsExchange) NewStreamConverter() (apix.StreamConverter, error) {
-	return &stream{engine: interactions.NewStreamConverter(), recorder: e.recorder, usage: e.usage}, nil
+	return &stream{engine: interactions.NewStreamConverter(e.maxStreamFrameBytes), recorder: e.recorder, usage: e.usage}, nil
 }
 
 func (*interactionsExchange) Diagnostics() []apix.Diagnostic { return nil }

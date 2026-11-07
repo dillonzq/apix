@@ -53,8 +53,8 @@ type StreamConverter struct {
 }
 
 // NewStreamConverter returns a converter for one stream.
-func NewStreamConverter() *StreamConverter {
-	return &StreamConverter{framer: shared.NewSSEFramer(true)}
+func NewStreamConverter(maxFrameBytes ...int) *StreamConverter {
+	return &StreamConverter{framer: shared.NewSSEFramer(true, maxFrameBytes...)}
 }
 
 func (s *StreamConverter) Feed(chunk []byte) ([][]byte, bool, *errclass.Error) {
@@ -75,7 +75,7 @@ func (s *StreamConverter) drain() ([][]byte, *errclass.Error) {
 	for {
 		name, data, raw, ok := s.framer.Next()
 		if !ok {
-			return out, nil
+			return out, shared.SSEFrameError(s.framer)
 		}
 		if data == "" {
 			out = append(out, raw)

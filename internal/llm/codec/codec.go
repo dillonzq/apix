@@ -201,6 +201,7 @@ func (c *Codec) NewExchange(client apix.Protocol, opts apix.ExchangeOptions) (ap
 	}
 	state := translate.NewRequestState()
 	state.Options.LossPolicy = translate.LossPolicy(opts.LossPolicy)
+	state.Options.MaxStreamFrameBytes = opts.MaxStreamFrameBytes
 	state.Options.AllowUnsignedThinking = o.AllowUnsignedThinking
 	state.Options.MessagesThinkingMode = o.MessagesThinkingMode
 	state.Options.GeminiThinkingMode = o.GeminiThinkingMode
@@ -210,7 +211,7 @@ func (c *Codec) NewExchange(client apix.Protocol, opts apix.ExchangeOptions) (ap
 		state.Options.GeminiIncludeThoughts = &value
 	}
 	ex := &exchange{codec: c, clientID: client, client: from, output: to, state: state, normalize: o.NormalizeResponsesTools,
-		streamUsage: o.ChatStreamUsage, usage: usage.New(c.proto.usage)}
+		streamUsage: o.ChatStreamUsage, usage: usage.New(c.proto.usage, opts.MaxStreamFrameBytes)}
 	if opts.Reasoning != nil {
 		r := *opts.Reasoning
 		if r.Budget != nil {
