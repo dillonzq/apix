@@ -49,11 +49,13 @@ apix 在不同供应商的 API 协议之间转换请求、普通响应和流式�
 | `tokens` | `openai.responses.input-tokens` | `openai.ResponsesInputTokens` | `POST /v1/responses/input_tokens` |
 | `tokens` | `gemini.count-tokens` | `gemini.CountTokens` | `POST /v1beta/models/{model}:countTokens` |
 
-Chat Completions、Responses、Messages 与 Gemini GenerateContent 在全部十二个方向上直接互转；Interactions 仅支持原生。原生请求保留供应商字段，GenerateContent 的模型和流式模式通过请求元信息传入。URL 处理、推理选项和签名回放见 [Gemini 协议](docs/protocols/gemini.zh-CN.md)。转换覆盖文本、图片/文件/音频/视频输入、函数与 custom 工具、本地 shell 适配、推理及其历史回传、usage、结构化输出、缓存提示和可表示的引用。映射与限制见 [LLM 协议转换](docs/protocols/llm.zh-CN.md)。
+Chat Completions、Responses、Messages 与 Gemini GenerateContent 在全部十二个方向上直接互转；Interactions 仅支持原生。转换覆盖文本、图片/文件/音频/视频输入、函数与 custom 工具、本地 shell 适配、推理及其历史回传、用量、结构化输出、缓存提示和可表示的引用。同协议请求保留供应商字段，只有模型和显式配置的选项会改动它们。映射与限制见 [LLM 协议转换](docs/protocols/llm.zh-CN.md)，URL 处理、推理选项和签名回放见 [Gemini 协议](docs/protocols/gemini.zh-CN.md)。
 
 图像生成与编辑在 OpenAI Images、图像模型（如 `gemini-2.5-flash-image`）的 GenerateContent 与 Imagen 之间转换：提示词、输入图像、数量、尺寸与宽高比、输出格式和用量。generations 与 Imagen 不接受输入图像，因此编辑请求只会路由到 edits 和 GenerateContent 端点。跨协议的流以一次完整的事件流模拟。详见[图像协议转换](docs/protocols/image.zh-CN.md)。
 
-Token 计数在 Anthropic `count_tokens`、OpenAI Responses `input_tokens` 与 Gemini `countTokens` 之间六个方向直接互转：请求内容按生成请求的方式转换，计数来自上游自己的 tokenizer。Chat Completions 没有计数端点。详见 [Token 计数](docs/protocols/tokens.zh-CN.md)。语音等其他接口类型通过同一套接口接入，见[新增协议与接口类型](docs/extending.zh-CN.md)。
+Token 计数在 Anthropic `count_tokens`、OpenAI Responses `input_tokens` 与 Gemini `countTokens` 之间六个方向直接互转：请求内容按生成请求的方式转换，计数来自上游自己的 tokenizer。Chat Completions 没有计数端点。详见 [Token 计数](docs/protocols/tokens.zh-CN.md)。
+
+语音等其他 Kind 通过同一套接口接入，见[新增协议与 Kind](docs/extending.zh-CN.md)。
 
 ## 安装
 
@@ -98,6 +100,7 @@ tail, err := stream.Finish()                   // 上游 EOF 时调用
 | 选项 | 上游 | 作用 |
 | --- | --- | --- |
 | `Output: openai.Responses` | 任意 | 把响应和流转换为同 Kind 的另一种协议，而不是客户端协议；适用于响应格式与请求格式分开指定的宿主 |
+| `LossPolicy: apix.LossPolicyAllow` | 任意 | 默认值：允许已知的请求损耗，并记录为诊断 |
 | `LossPolicy: apix.LossPolicySafe` | 任意 | 拒绝影响语义的请求转换损耗 |
 | `LossPolicy: apix.LossPolicyStrict` | 任意 | 拒绝所有已报告的请求损耗 |
 | `Reasoning: &apix.Reasoning{Effort: "high"}` | 任意 LLM | 转换后替换请求的推理控制，按上游自身的推理选项渲染；`reasoning.ParseSuffix(model).Reasoning()` 可从 `model(high)` 后缀生成 |
@@ -112,7 +115,7 @@ tail, err := stream.Finish()                   // 上游 EOF 时调用
 
 ### Token 用量
 
-Exchange 实现了 `apix.UsageReporter`。响应转换完成后，或流结束后，`Usage()` 返回上游自己报告的用量。它直接读取上游字节，并按统一口径归一化所有协议：
+LLM 和图像 Exchange 实现了 `apix.UsageReporter`。响应转换完成后，或流结束后，`Usage()` 返回上游自己报告的用量。它直接读取上游字节，并按统一口径归一化所有协议：
 
 ```go
 if u, ok := ex.(apix.UsageReporter).Usage(); ok {
@@ -120,11 +123,11 @@ if u, ok := ex.(apix.UsageReporter).Usage(); ok {
 }
 ```
 
-`InputTokens` 包含缓存读取和写入，`OutputTokens` 包含推理，因此 Anthropic 单独列出的缓存计数、Gemini 的 thought 和工具调用提示计数都会被计入。`TotalTokens` 取上游给出的总数，没有时取两者之和；`Raw` 保留上游原始 usage 对象，供需要厂商细节的场景使用。流式响应会合并多个事件中的用量，例如 Messages 的 `message_start` 和 `message_delta`。Chat Completions 流只有在请求时才报告用量，见上文 `StreamUsage`。Imagen 不报告用量。
+`InputTokens` 包含缓存读取和写入，`OutputTokens` 包含推理，因此 Anthropic 单独列出的缓存计数、Gemini 的 thought 和工具调用提示计数都会被计入。`TotalTokens` 取上游给出的总数，没有时取两者之和；`Raw` 保留上游原始 usage 对象，供需要供应商细节的场景使用。流式响应会合并多个事件中的用量，例如 Messages 的 `message_start` 和 `message_delta`。Chat Completions 流只有在请求时才报告用量，见上文 `StreamUsage`。Imagen 不报告用量；Token 计数 Exchange 不实现 `UsageReporter`，因为计数不属于计费用量。
 
 ## 路由
 
-`route.Router` 对能服务某个请求的端点排序：与客户端同协议的端点排在前面（零转换），可转换的同类端点排在后面。每一层内 `Priority` 小者优先，同优先级按 `Weight` 加权打散。持续失败的端点会在冷却期内被跳过，之后每次只放行一个试探请求。引用上游状态（如 `previous_response_id`、已上传文件）的请求优先发往持有该状态的端点；延续这类上下文的请求不会转换到其他协议。
+`route.Router` 对能服务某个请求的端点排序：与客户端同协议的端点排在前面（零转换），可转换的同 Kind 端点排在后面。每一层内 `Priority` 小者优先，同优先级按 `Weight` 加权打散。持续失败的端点会在冷却期内被跳过，之后每次只放行一个试探请求。引用上游状态（如 `previous_response_id`、已上传文件）的请求优先发往持有该状态的端点；延续这类上下文的请求不会转换到其他协议。
 
 ```go
 r, err := route.New(reg, []route.Endpoint{
@@ -157,7 +160,7 @@ http.Handle("/v1/messages", g.Handler(anthropic.Messages))
 http.Handle("/v1/chat/completions", g.Handler(openai.ChatCompletions))
 ```
 
-`Do` 在提交点返回：普通响应转换成功之后，或流式响应产出第一个事件之后。提交点之前，可重试的失败（限流、服务端错误、网络错误、上游输出无法使用）以及被拒绝的转换会切换到下一个候选；提交点之后不再重试，因为客户端可能已经收到输出，失败通过 `Response.Body.Read` 返回。鉴权头按各协议的方案注入（OpenAI 用 `Authorization: Bearer`，Anthropic 用 `x-api-key` 加 `anthropic-version`，Gemini 用 `x-goog-api-key`），客户端凭据不会被转发。
+`Do` 在提交点返回：普通响应转换成功之后，或流式响应产出第一个事件之后。提交点之前，可重试的失败（限流、服务端错误、网络错误、上游输出无法使用）以及被拒绝的转换会切换到下一个候选；提交点之后不再重试，因为客户端可能已经收到输出，失败通过 `Response.Body.Read` 返回。每个上游按其协议注入鉴权头，客户端凭据不会被转发。已存储的 response 和 interaction 会记住所属端点，后续轮次回到同一端点。
 
 | `gateway.Config` 字段 | 作用 |
 | --- | --- |
@@ -166,21 +169,17 @@ http.Handle("/v1/chat/completions", g.Handler(openai.ChatCompletions))
 | `MaxStreamFrameBytes` | 限制单个上游 SSE 帧（默认 64 MiB），不限制流的总长度；负值显式关闭限制 |
 | `ForwardHeaders` | 透传给客户端的上游响应头，如 `"X-Request-Id"`、`"X-Ratelimit-*"`；`Response.UpstreamHeader` 保留全部响应头 |
 | `ReasoningSuffix` | 按去掉后缀的模型名路由 `model(high)`，并把后缀作为 `Request.Reasoning` |
-| `OnUsage` | 接收已提交尝试的 [Token 用量](#token-用量)：普通响应在 `Do` 返回时触发，流式响应在结束、失败或被关闭时触发一次（提前结束时为已观察到的用量）；`Handler` 同样适用。`Response.Usage()` 返回同一结果 |
+| `OnUsage` | 接收已提交尝试的 [Token 用量](#token-用量)，每个响应一次；`Handler` 同样适用。`Response.Usage()` 返回同一结果 |
 
-上游的 `Retry-After` 会写入错误的 `RetryAfter`，让该端点暂停接收流量，并由 `Handler` 转告客户端。已存储的 response 和 interaction 会记住所属端点，后续轮次回到同一端点。
-
-默认 HTTP 客户端只跟随原始协议、主机和端口内的重定向。自带 `Config.Client` 时，调用方负责其重定向策略和自定义鉴权头的保护。流式健康结果在终态上报，而不是在提交点上报；调用方取消或提前 `Body.Close` 不会惩罚端点。
-
-`route.EndpointOptions.MaxStreamFrameBytes` 可覆盖单个端点的网关限制；直接使用 Codec 时设置 `apix.ExchangeOptions.MaxStreamFrameBytes`。较大的图像帧可显式提高限制；计数包含注释和线路上的换行分隔符，不含 EOF 时补入的分隔符。
+全部 `Config` 字段、切换规则表、请求头叠加、重定向和流式帧上限见[网关](docs/gateway.zh-CN.md)。
 
 ## 错误
 
 函数返回 `error`，其值为 `*apix.Error`，包含 `Class`、`Message`、`StatusCode`、`Retryable` 和 `RetryAfter`。用 `apix.AsError(err)`（或 `errors.As`）读取；请求被取消时也满足 `errors.Is(err, context.Canceled)`。消息已脱敏，包装自己的消息时可使用 `apix.Redact`。`apix.HTTPStatus` 给出响应状态码，`Registry.EncodeError` 按客户端协议的格式输出错误体。`FromNetwork` 和 `PostFirstByteNetwork` 分别对上游首字节之前和之后的传输失败分类。
 
-## 宿主自行包装 SSE
+## 宿主自行分帧 SSE
 
-转换器输出完整的 SSE 帧。宿主若要自己添加 `data:` 帧，可用零值可用的 `sse.Decoder` 拆帧：
+转换器输出完整的 SSE 帧。宿主若要自己添加 `data:` 帧，可以用零值即可使用的 `sse.Decoder` 拆帧：
 
 ```go
 var decoder sse.Decoder
@@ -199,22 +198,27 @@ decoder.Finish() // 处理完所有转换输出后调用
 
 ## 文档
 
-- [v0.3.0 发布说明](docs/releases/v0.3.0.zh-CN.md)：Token 用量报告与更快的 SSE 流
+使用：
 
-- [架构](docs/architecture.zh-CN.md)：分层、分派与状态约定
-- [路由](docs/routing.zh-CN.md)：端点选择、健康统计与网关的切换规则
-- [新增协议与接口类型](docs/extending.zh-CN.md)
-- [Gemini 与原生 Interactions](docs/protocols/gemini.zh-CN.md)
+- [路由](docs/routing.zh-CN.md)：端点选择、健康统计、亲和性与热更新
+- [网关](docs/gateway.zh-CN.md)：配置、提交点与故障切换、请求头与上限
 - [LLM 协议转换](docs/protocols/llm.zh-CN.md)：字段映射、工具、推理、流式与限制
+- [Gemini 协议](docs/protocols/gemini.zh-CN.md)：GenerateContent URL、推理选项、签名回放与原生 Interactions
 - [图像协议转换](docs/protocols/image.zh-CN.md)：生成与编辑路径、尺寸、损耗与模拟流
 - [Token 计数](docs/protocols/tokens.zh-CN.md)：计数端点、请求整形与网关配置
-- [CONTRIBUTING.md](CONTRIBUTING.md)：检查、设计规则与发布流程
+
+开发：
+
+- [架构](docs/architecture.zh-CN.md)：分层、分派与状态约定
+- [新增协议与 Kind](docs/extending.zh-CN.md)：`Codec` 约定与完整示例
+- [CONTRIBUTING.md](CONTRIBUTING.md)：检查、设计规则与发布流程（英文）
+- [发布说明](docs/releases)：最新为 [v0.3.0](docs/releases/v0.3.0.zh-CN.md)，Token 用量报告与更快的 SSE 流
 
 ## 开发
 
 ```sh
 make check # gofmt、vet、模块与依赖检查、构建、竞态测试
-make fuzz  # 流、SSE 分帧、图像、Base64、JSON 快路径与用量 fuzz
+make fuzz  # 流、SSE 分帧、图像、Token 计数、Base64、JSON 快路径与用量 fuzz
 ```
 
 转换行为由 `internal/llm/translate/testdata/conversion` 下 48 份经过审阅的快照固定。确认输出变化符合预期后才更新：

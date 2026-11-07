@@ -49,11 +49,13 @@ The library is layered. The core converts and decides routes without any network
 | `tokens` | `openai.responses.input-tokens` | `openai.ResponsesInputTokens` | `POST /v1/responses/input_tokens` |
 | `tokens` | `gemini.count-tokens` | `gemini.CountTokens` | `POST /v1beta/models/{model}:countTokens` |
 
-Chat Completions, Responses, Messages, and Gemini GenerateContent convert directly in all twelve directions. Interactions is native-only. Same-protocol requests preserve provider fields; GenerateContent carries model/stream in request metadata. See [Gemini protocols](docs/protocols/gemini.md) for URL handling, thinking options and signed replay. Conversion covers text, image/file/audio/video input, function and custom tools, local shell adaptation, reasoning and its replay history, usage, structured output, cache hints, and representable citations. See [LLM protocol conversion](docs/protocols/llm.md) for mappings and limits.
+Chat Completions, Responses, Messages, and Gemini GenerateContent convert directly in all twelve directions; Interactions is native-only. Conversion covers text, image/file/audio/video input, function and custom tools, local shell adaptation, reasoning and its replay history, usage, structured output, cache hints, and representable citations. Same-protocol requests keep provider fields; only the model and explicitly configured options change them. See [LLM protocol conversion](docs/protocols/llm.md) for mappings and limits, and [Gemini protocols](docs/protocols/gemini.md) for URL handling, thinking options, and signed replay.
 
 Image generation and editing convert between OpenAI Images, GenerateContent with image models (such as `gemini-2.5-flash-image`), and Imagen: prompts, input images, counts, sizes and aspect ratios, output formats, and usage. Generations and Imagen take no input image, so edits route only to edits and GenerateContent endpoints. Cross-protocol streams are emulated as one complete event stream. See [image protocol conversion](docs/protocols/image.md).
 
-Token counting converts directly between Anthropic `count_tokens`, OpenAI Responses `input_tokens` and Gemini `countTokens` in all six directions. The request content converts as it would for generation, and the count comes from the upstream's own tokenizer. Chat Completions has no count endpoint. See [token counting](docs/protocols/tokens.md). Speech and other kinds plug in through the same interfaces; see [adding protocols and kinds](docs/extending.md).
+Token counting converts directly between Anthropic `count_tokens`, OpenAI Responses `input_tokens` and Gemini `countTokens` in all six directions. The request content converts as it would for generation, and the count comes from the upstream's own tokenizer. Chat Completions has no count endpoint. See [token counting](docs/protocols/tokens.md).
+
+Speech and other kinds plug in through the same interfaces; see [adding protocols and kinds](docs/extending.md).
 
 ## Installation
 
@@ -98,6 +100,7 @@ An `Exchange` holds one execution's state, such as tool identities restored in r
 | Option | Upstream | Effect |
 | --- | --- | --- |
 | `Output: openai.Responses` | any | Convert responses and streams to another protocol of the same Kind instead of the client's; for hosts that choose the response format separately |
+| `LossPolicy: apix.LossPolicyAllow` | any | The default: permit known request losses and record them as diagnostics |
 | `LossPolicy: apix.LossPolicySafe` | any | Reject request conversions that lose semantics |
 | `LossPolicy: apix.LossPolicyStrict` | any | Reject every reported request loss |
 | `Reasoning: &apix.Reasoning{Effort: "high"}` | any LLM | Replace the request's reasoning control after conversion, rendered with the upstream's own thinking options; `reasoning.ParseSuffix(model).Reasoning()` builds it from a `model(high)` suffix |
@@ -112,7 +115,7 @@ An `Exchange` holds one execution's state, such as tool identities restored in r
 
 ### Token usage
 
-Exchanges implement `apix.UsageReporter`. After a response converts, or after a stream ends, `Usage()` returns the counts the upstream itself reported, read from the upstream bytes, in one accounting for every protocol:
+LLM and image exchanges implement `apix.UsageReporter`. After a response converts, or after a stream ends, `Usage()` returns the counts the upstream itself reported, read from the upstream bytes, in one accounting for every protocol:
 
 ```go
 if u, ok := ex.(apix.UsageReporter).Usage(); ok {
@@ -120,11 +123,11 @@ if u, ok := ex.(apix.UsageReporter).Usage(); ok {
 }
 ```
 
-`InputTokens` includes cache reads and writes, and `OutputTokens` includes reasoning, so Anthropic's separate cache counts and Gemini's thought and tool-use prompt counts are added in. `TotalTokens` is the upstream's total, or the sum when it reports none, and `Raw` keeps the upstream's usage object for vendor-specific detail. Streams merge usage across events, such as Messages `message_start` and `message_delta`. Chat Completions streams report usage only when requested; see `StreamUsage` above. Imagen reports no usage.
+`InputTokens` includes cache reads and writes, and `OutputTokens` includes reasoning, so Anthropic's separate cache counts and Gemini's thought and tool-use prompt counts are added in. `TotalTokens` is the upstream's total, or the sum when it reports none, and `Raw` keeps the upstream's usage object for vendor-specific detail. Streams merge usage across events, such as Messages `message_start` and `message_delta`. Chat Completions streams report usage only when requested; see `StreamUsage` above. Imagen reports no usage, and token count exchanges do not implement `UsageReporter`, because counting is not billed usage.
 
 ## Routing
 
-`route.Router` orders the endpoints that can serve a request. Endpoints that speak the client's protocol come first (zero conversion); endpoints of the same kind whose protocol the request converts to follow. Within each tier, lower `Priority` wins and equal priorities are shuffled by `Weight`. Endpoints that keep failing are skipped for a cooldown, then receive one trial request at a time. Requests that refer to upstream-owned state, such as `previous_response_id` or an uploaded file, go to the endpoint that owns it first; requests that continue such context never convert to another protocol.
+`route.Router` orders the endpoints that can serve a request. Endpoints that speak the client's protocol come first (zero conversion); endpoints of the same Kind whose protocol the request converts to follow. Within each tier, lower `Priority` wins and equal priorities are shuffled by `Weight`. Endpoints that keep failing are skipped for a cooldown, then receive one trial request at a time. Requests that refer to upstream-owned state, such as `previous_response_id` or an uploaded file, go to the endpoint that owns it first; requests that continue such context never convert to another protocol.
 
 ```go
 r, err := route.New(reg, []route.Endpoint{
@@ -158,7 +161,7 @@ http.Handle("/v1/messages", g.Handler(anthropic.Messages))
 http.Handle("/v1/chat/completions", g.Handler(openai.ChatCompletions))
 ```
 
-`Do` returns at the commit point: once an ordinary response converted, or once a stream produced its first event. Before that point, retryable failures (rate limits, server errors, network errors, unusable upstream output) and rejected conversions move to the next candidate. After it, nothing is retried, because the client may already have output; a failure surfaces from `Response.Body.Read`. Authentication headers follow each protocol's scheme (`Authorization: Bearer` for OpenAI, `x-api-key` plus `anthropic-version` for Anthropic, `x-goog-api-key` for Gemini). Client credentials are never forwarded.
+`Do` returns at the commit point: once an ordinary response converted, or once a stream produced its first event. Before that point, retryable failures (rate limits, server errors, network errors, unusable upstream output) and rejected conversions move to the next candidate. After it, nothing is retried, because the client may already have output; a failure surfaces from `Response.Body.Read`. Each upstream receives its protocol's authentication header, and client credentials are never forwarded. Stored responses and interactions are remembered per endpoint, so follow-up turns return to it.
 
 | `gateway.Config` field | Effect |
 | --- | --- |
@@ -167,13 +170,9 @@ http.Handle("/v1/chat/completions", g.Handler(openai.ChatCompletions))
 | `MaxStreamFrameBytes` | Limit each upstream SSE frame (default 64 MiB), not the whole stream; a negative value explicitly disables the limit |
 | `ForwardHeaders` | Upstream response headers to pass to clients, such as `"X-Request-Id"` or `"X-Ratelimit-*"`; `Response.UpstreamHeader` holds them all |
 | `ReasoningSuffix` | Route `model(high)` by `model` and apply the suffix as `Request.Reasoning` |
-| `OnUsage` | Receive the committed attempt's [token usage](#token-usage): when `Do` returns an ordinary response, and once a stream ends, fails, or is closed (counts seen so far); also works with `Handler`. `Response.Usage()` returns the same value |
+| `OnUsage` | Receive the committed attempt's [token usage](#token-usage), once per response; also works with `Handler`. `Response.Usage()` returns the same value |
 
-An upstream's `Retry-After` reaches the error as `RetryAfter`, pauses that endpoint, and is relayed by `Handler`. Stored responses and interactions are remembered per endpoint, so follow-up turns return to it.
-
-The default HTTP client follows redirects only within the original scheme, host, and port. A supplied `Config.Client` owns its redirect policy and must protect custom authentication headers. Stream health is reported at completion, not at the commit point; caller cancellation and early `Body.Close` do not penalize the endpoint.
-
-`route.EndpointOptions.MaxStreamFrameBytes` overrides the gateway limit for one endpoint. Direct codec users set `apix.ExchangeOptions.MaxStreamFrameBytes`. Raise the limit explicitly for larger image frames; it includes comments and wire line separators, but not separators supplied at EOF.
+See [gateway](docs/gateway.md) for every `Config` field, the failover table, header layering, redirects, and stream frame limits.
 
 ## Errors
 
@@ -200,22 +199,27 @@ Check `decoder.Err()` after consuming events and after `Finish`; `sse.ErrFrameTo
 
 ## Documentation
 
-- [v0.3.0 release notes](docs/releases/v0.3.0.md): token usage reporting and faster SSE streams
+Usage:
 
-- [Architecture](docs/architecture.md): layers, dispatch, and state contracts
-- [Routing](docs/routing.md): endpoint selection, health, and the gateway's failover rules
-- [Adding protocols and kinds](docs/extending.md)
-- [Gemini and native Interactions](docs/protocols/gemini.md)
+- [Routing](docs/routing.md): endpoint selection, health, affinity, and updates
+- [Gateway](docs/gateway.md): configuration, commit point and failover, headers, and limits
 - [LLM protocol conversion](docs/protocols/llm.md): field mappings, tools, reasoning, streams, and limits
+- [Gemini protocols](docs/protocols/gemini.md): GenerateContent URLs, thinking options, signed replay, and native Interactions
 - [Image protocol conversion](docs/protocols/image.md): generation and editing paths, sizes, losses, and emulated streams
 - [Token counting](docs/protocols/tokens.md): count endpoints, request shaping, and gateway setup
+
+Development:
+
+- [Architecture](docs/architecture.md): layers, dispatch, and state contracts
+- [Adding protocols and kinds](docs/extending.md): the `Codec` contract and a worked example
 - [CONTRIBUTING.md](CONTRIBUTING.md): checks, design rules, and releases
+- [Release notes](docs/releases): the latest is [v0.3.0](docs/releases/v0.3.0.md), token usage reporting and faster SSE streams
 
 ## Development
 
 ```sh
 make check # gofmt, vet, module and dependency checks, build, race tests
-make fuzz  # stream, SSE framing, image, Base64, JSON fast-path, and usage fuzz targets
+make fuzz  # stream, SSE framing, image, token counting, Base64, JSON fast-path, and usage fuzz targets
 ```
 
 Conversion behavior is pinned by 48 reviewed snapshots under `internal/llm/translate/testdata/conversion`; update them only after reviewing the output change:

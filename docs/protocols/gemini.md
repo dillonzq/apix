@@ -1,6 +1,6 @@
 # Gemini protocols
 
-[简体中文](gemini.zh-CN.md) · [README](../../README.md)
+English | [简体中文](gemini.zh-CN.md) · [Back to README](../../README.md)
 
 `protocol/gemini` exports two independent `KindLLM` codecs:
 
@@ -87,6 +87,6 @@ A native exchange reports each created interaction as the affinity key `interact
 
 ## Validation
 
-The conversion suite contains 48 request/response/stream snapshots: the original 27 plus 21 GenerateContent cases. Public tests cover independent response protocols, exact tool arguments, media, signed replay, late signatures, Unicode citations, invalid source terminals and whole/bytewise stream equivalence. Gateway tests cover URL metadata, auth, native preference, cross-protocol failover and Interactions state passthrough. `make fuzz` includes the Gemini boundary/terminal target.
+Of the 48 conversion snapshots, 21 cover GenerateContent requests, responses, and streams in both directions; the other 27 cover the OpenAI and Anthropic protocols. Public tests cover independent response protocols, exact tool arguments, media, signed replay, late signatures, Unicode citations, invalid source terminals and whole/bytewise stream equivalence. Gateway tests cover URL metadata, auth, native preference, cross-protocol failover and Interactions state passthrough. `make fuzz` includes the Gemini boundary/terminal target.
 
 Field mappings were checked against [CLIProxyAPI `ceb045a`](https://github.com/router-for-me/CLIProxyAPI/tree/ceb045a129d43f805e93a5e4aef3a59b108f34f7/internal/translator/gemini), the [GenerateContent API](https://ai.google.dev/api/generate-content), and [Interactions](https://ai.google.dev/gemini-api/docs/interactions-overview). Local fixtures do not replace live-provider compatibility tests.

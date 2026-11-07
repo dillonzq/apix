@@ -11,7 +11,7 @@ Image generation and editing protocols belong to `apix.KindImage`. They convert 
 | `gemini.generate-content.image` | `gemini.GenerateContentImage` | `POST /v1beta/models/{model}:generateContent` / `:streamGenerateContent` to an image model | SSE |
 | `gemini.imagen` | `gemini.Imagen` | `POST /v1beta/models/{model}:predict` | no |
 
-`gemini.generate-content.image` uses the GenerateContent wire format with image models such as `gemini-2.5-flash-image`. It has its own ID because it belongs to another Kind than `gemini.generate-content`; mount the handler of whichever Kind a URL serves. Like GenerateContent, the model and streaming mode live in the URL and travel in `Payload.Metadata`; `ProtocolSpec.ParsePath` recovers them for `gateway.Handler`.
+`gemini.generate-content.image` uses the GenerateContent wire format with image models such as `gemini-2.5-flash-image`. It has its own ID because it belongs to a different Kind from `gemini.generate-content`; mount the handler of whichever Kind a URL serves. Like GenerateContent, the model and streaming mode live in the URL and travel in `Payload.Metadata`; `ProtocolSpec.ParsePath` recovers them for `gateway.Handler`.
 
 ## Direct paths
 
@@ -87,4 +87,4 @@ route.Endpoint{
 
 `FuzzImageStreamChunkBoundaries`, `FuzzImageRequest` and `FuzzImageResponse` in `internal/image` check these rules on hostile input: stream results do not depend on chunk boundaries and only end on a terminal event, failures are terminal, and every converted request or response is accepted by its target protocol's own codec. `make fuzz` runs them.
 
-The streaming mode always travels in the converted payload's `Metadata.Stream`, so executors know whether the upstream will stream even when the client asked to.
+The upstream's streaming mode always travels in the converted payload's `Metadata.Stream`. It can differ from what the client asked for, so executors read it there rather than from the client request.

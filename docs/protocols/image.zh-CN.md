@@ -77,7 +77,7 @@ route.Endpoint{
 - 图像转为 `b64_json` 条目、`inlineData` 部分或 `bytesBase64Encoded` 预测。GenerateContent 的思考图像被跳过；其可见文本与 OpenAI 的 `revised_prompt` 记为响应损耗。
 - GenerateContent 客户端请求多个候选时，每张图像各成一个候选；否则所有图像在同一候选中。
 - 用量在 OpenAI `usage` 与 `usageMetadata` 之间转换，包括文本与图像 token 明细；思考 token 计入输出。Imagen 没有用量字段。
-- 只有 `url` 的 OpenAI 结果无法在不拉取的情况下转换，按不可用的上游响应失败，gateway 会故障转移。
+- 只有 `url` 的 OpenAI 结果无法在不拉取的情况下转换，按不可用的上游响应失败，gateway 会切换到下一个候选。
 - 没有图像的响应是错误。安全、违禁内容、复述、提示被拦截等停止原因，以及 Imagen 被过滤的预测，返回 `ClassUnsupported`，不重试；`NO_IMAGE` 等其他停止原因可重试。
 
 ## 流
@@ -85,6 +85,6 @@ route.Endpoint{
 - **原生**：上游使用输出协议时，流经校验后透传。OpenAI 流在 `*.completed` 事件数达到请求的图像数时结束；至少有一个时遇到 EOF 也接受。GenerateContent 流必须带有结束原因或提示拦截。错误事件使流失败。
 - **模拟**：否则以非流式调用上游，把转换后的响应作为输出协议的完整事件流返回，`Content-Type: text/event-stream`：每张图像一个 `image_generation.completed` 或 `image_edit.completed` 事件（用量在最后一个），或一个 GenerateContent 分块。不产生局部图像，`partial_images` 记为损耗。由于正文一次到达，这类响应的 `gateway.Response.Stream` 为 false。Imagen 输出从不流式。
 
-`internal/image` 中的 `FuzzImageStreamChunkBoundaries`、`FuzzImageRequest`、`FuzzImageResponse` 用恶意输入检验这些规则：流的结果与分块边界无关且只在终止事件后成功结束，失败不可恢复，每个转换后的请求或响应都能被目标协议自己的 codec 接受。`make fuzz` 会运行它们。
+`internal/image` 中的 `FuzzImageStreamChunkBoundaries`、`FuzzImageRequest`、`FuzzImageResponse` 用恶意构造的输入检验这些规则：流的结果与分块边界无关且只在终止事件后成功结束，失败不可恢复，每个转换后的请求或响应都能被目标协议自己的 codec 接受。`make fuzz` 会运行它们。
 
-流式模式总是由转换后载荷的 `Metadata.Stream` 携带，因此即使客户端要求流式，执行器也知道上游是否会流式返回。
+上游的流式模式总是由转换后 Payload 的 `Metadata.Stream` 携带。它可能与客户端的要求不同，因此执行器应从这里读取，而不是看客户端请求。

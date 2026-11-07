@@ -88,20 +88,12 @@ The weekly run catches new vulnerability database findings even when there are n
 | `gateway` | Optional HTTP executor and handler with failover. |
 | `sse` | SSE framing and decoding. |
 | `reasoning` | Optional reasoning controls and model-name suffixes. Not part of the default conversion path. |
-| `internal/llm/ids` | Public protocol IDs, internal format names, and the mapping between them. |
-| `internal/llm/codec` | The `apix.Codec` implementations for LLM protocols: the protocol table, routing inspection, state capture, error envelopes. |
-| `internal/llm/translate` | The LLM conversion engine entry points and execution state. |
-| `internal/llm/adapter/chatcompletions`, `messages`, `responses` | Per-protocol request, response, and stream conversion. |
-| `internal/llm/adapter/gemini` | Every GenerateContent path, in both directions. |
-| `internal/llm/adapter/interactions` | Native Interactions response and stream validation. |
-| `internal/llm/reasoning` | Reasoning level/budget tables and override rendering per protocol. |
-| `internal/llm/adapter/shared` | Shared LLM pieces: decode types, content and media mapping, tool identity, diagnostics, usage. |
-| `internal/jsonedit` | Order-preserving JSON field reads and edits over moego/ojson, with explicit fallback to `encoding/json`. |
-| `internal/usage` | Usage objects read from upstream bodies and SSE bytes, per dialect, normalized to `apix.Usage`. |
-| `internal/errclass` | Short aliases of `apix.Error` and its constructors; classification, status mapping, and redaction live in the root `errors.go`. |
+| `internal/llm` | The LLM codecs, conversion engine, per-protocol adapters, and reasoning tables. |
+| `internal/image`, `internal/tokens` | The image and token-counting codecs. |
+| `internal/usage`, `internal/jsonedit`, `internal/vendorerr`, `internal/errclass` | Shared pieces: usage tracking, order-preserving JSON edits, vendor error envelopes, and error aliases. |
 | `internal/llm/translate/testdata/conversion/{request,response,stream}` | The reviewed conversion snapshots, named `<from>_to_<to>.json` with internal format names. |
 
-[Code structure and maintenance](docs/architecture.md) describes dispatch rules and state contracts in more detail.
+The [architecture](docs/architecture.md#responsibilities) document keeps the per-package responsibility table, dispatch rules, and state contracts; update it, not this table, when internal packages change.
 
 ## Design rules
 
@@ -125,11 +117,16 @@ Work through this list; reviewers will check it against the diff.
 5. **Keep tool identities intact.** Register declarations and history references through the existing transaction helpers so a failed conversion leaves the registry unchanged.
 6. **Streams have their own contract.** Preserve event order, emit `[DONE]` only for Chat output, keep `sequence_number` monotonic for synthesized Responses events, validate termination in `Finish`, and never discard events that were produced before an error.
 7. **Update snapshots deliberately.** `go test ./internal/llm/translate -run 'Test(Protocol|GeminiProtocol)Golden' -update` rewrites the 48 snapshots under `internal/llm/translate/testdata/conversion/`. Read every changed line and explain it in the pull request. Never regenerate snapshots to make a red test green; if you cannot explain a diff, that is the bug.
-8. **Update the documentation.** Behavior, limits, and direction matrices live in [LLM protocol conversion](docs/protocols/llm.md); module responsibilities live in [code structure](docs/architecture.md); routing and failover rules live in [routing](docs/routing.md). Each document has a `.zh-CN.md` counterpart that must be updated in the same pull request, as does the README pair when the public API or installation changes.
+8. **Update the documentation.** Each topic has one home:
+   - mappings and limits per protocol: [LLM](docs/protocols/llm.md), [Gemini](docs/protocols/gemini.md), [image](docs/protocols/image.md), and [token counting](docs/protocols/tokens.md);
+   - endpoint selection and health: [routing](docs/routing.md); execution, failover, and limits: [gateway](docs/gateway.md);
+   - module responsibilities and invariants: [architecture](docs/architecture.md); the `Codec` contract: [extending](docs/extending.md).
+
+   Each document has a `.zh-CN.md` counterpart that must be updated in the same pull request, as does the README pair when the public API or installation changes. Elsewhere, link to the home section instead of restating its rules.
 
 ## Tests
 
-- Test protocol behavior through the engine entry points in `internal/llm/translate` (`ConvertRequest`, `ConvertResponse`, `NewStreamConverter`, `NormalizeResponsesRequest`), which the public `Exchange` is pinned to byte for byte. Reach into adapters only for parsers, collectors, and other state components.
+- Test LLM conversion through the engine entry points in `internal/llm/translate` (`ConvertRequest`, `ConvertResponse`, `NewStreamConverter`, `NormalizeResponsesRequest`), which the public `Exchange` is pinned to byte for byte, and other Kinds through their codec's `Exchange`. Reach into adapters only for parsers, collectors, and other state components.
 - Test routing and gateway behavior through `route` and `gateway` with `httptest` upstreams; never call real providers from tests.
 - Prefer table-driven tests with a name per case, and add one regression case per fixed bug.
 - Cover the shapes a hostile or buggy upstream can send, not only the happy path: a field carrying the wrong JSON type (a non-string `arguments`, a `citations` object where an array is expected, a query that is a number), an integer beyond 2^53, and a literal outside the `float64` range such as `1e400`. These are the cases where a discarded decode error becomes wrong output, and `DecodeProbe` must never be the reason a value reaches the caller as an empty string.

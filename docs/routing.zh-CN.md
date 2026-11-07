@@ -1,8 +1,8 @@
-# 路由与故障切换
+# 路由
 
 [English](routing.md) | 简体中文 · [返回 README](../README.zh-CN.md)
 
-`route` 只负责决定请求依次尝试哪些端点，不做任何 I/O。`gateway` 按这个顺序执行请求，并把每次尝试的结果回报给路由器。
+`route` 只负责决定请求依次尝试哪些端点，不做任何 I/O。`gateway` 按这个顺序执行请求，并把每次尝试的结果回报给路由器；它的故障切换规则见[网关](gateway.zh-CN.md)。
 
 ## 端点
 
@@ -79,48 +79,22 @@ route.Endpoint{
 
 ## 热更新
 
-`Router.Update(endpoints)`（经网关则用 `Gateway.Update(upstreams)`）原子地替换端点集合：
+`Router.Update(endpoints)` 原子地替换端点集合：
 
 - 正在路由的请求继续使用旧集合；
-- 网关请求在故障切换时继续使用同一批 URL、凭据和协议配置；
 - 更新校验失败时（包括 Codec 拒绝的选项），当前配置保持不变；
 - 健康状态按端点 ID 保留；
 - 路由器会复制传入的 map 和切片，调用方之后修改它们不影响路由器。
 
-网关还会复制上游 Header 和鉴权方案。修改网关配置应使用 `Gateway.Update`；`Gateway.Router()` 用于查询路由、报告健康状态和调用 `Remember`。
+`Gateway.Update` 对网关上游适用同样的规则，见[网关](gateway.zh-CN.md#热更新)。
 
-## 网关的执行规则
+## 执行候选
 
-`gateway.Do` 依次尝试候选，`MaxAttempts` 为 0 时尝试全部候选。
+执行器按顺序尝试候选：
 
-**提交点**：普通响应转换成功之后，或流式响应产出第一批事件之后，`Do` 才返回。`Config.CommitTimeout` 限制单次尝试到达提交点的时间，超时会取消该尝试，按可重试的网络错误处理；已经提交的流不会被它截断。
+1. 发送前调用 `Router.Begin(candidate)`；返回 false 时（已有半开试探请求在途）跳过该候选；
+2. 按 `Candidate.UpstreamModel` 和 `Endpoint.Options` 把请求转换为 `Endpoint.Protocol`，然后发送；
+3. 对每次已发出的尝试调用 `Router.Report(endpointID, Outcome)`，供健康统计使用；
+4. 对上游新建的状态调用 `Router.Remember(key, endpointID)`。
 
-提交点之前：
-
-| 情况 | 处理 |
-| --- | --- |
-| 请求转换失败（如被损耗策略拒绝） | 换下一个候选；请求未发出，不计入健康统计 |
-| 端点处于半开状态且已有试探请求 | 换下一个候选；请求未发出 |
-| 网络错误、提交超时、401、402、403、404、429、5xx 等 `Retryable` 错误 | 回报健康统计，换下一个候选 |
-| 400 等不可重试错误 | 停止，按客户端协议返回该错误 |
-| 2xx 但响应或流无法解码、转换，或超过 `MaxResponseBytes` | 视为可重试的上游错误，换下一个候选 |
-| 请求被取消 | 立即停止，不计入健康统计；错误满足 `errors.Is(err, context.Canceled)` |
-
-404 可重试，因为各上游的模型目录和已存储状态并不相同；它不计入端点健康。
-
-提交点之后的失败不再重试，因为客户端可能已经收到部分输出。这类失败通过 `Response.Body.Read` 返回 `*apix.Error`。流结束、失败或被关闭时只上报一次健康结果，只有完整完成才算成功。调用方取消和提前关闭属于未确定结果，会释放半开试探名额，但不清除既有失败计数，也不惩罚端点。取消错误通过 `errors.Is` 保留 `context.Canceled` 或 `context.DeadlineExceeded`，以及自定义取消原因。
-
-`Config.MaxStreamFrameBytes` 默认限制单个上游 SSE 帧为 64 MiB，包含注释及线路上的换行分隔符，不限制整条流的长度。`route.EndpointOptions.MaxStreamFrameBytes` 可按端点覆盖；负值显式为可信上游关闭限制。直接使用 Codec 时设置 `apix.ExchangeOptions.MaxStreamFrameBytes`。帧超限在提交前触发切换，提交后变为终态读取错误，并保留之前的有效事件；可用 `errors.Is` 识别 `sse.ErrFrameTooLarge`。
-
-默认 HTTP 客户端的重定向链最多包含十次请求，且只允许原始协议、主机名和有效端口。跨源重定向（包括 HTTPS 降级）会在其他主机收到凭据前失败。自带 `Config.Client` 时，调用方负责其重定向策略，尤其要保护自定义鉴权头。
-
-鉴权头按协议默认方案注入：OpenAI 用 `Authorization: Bearer <key>`，Anthropic 用 `x-api-key: <key>` 加 `anthropic-version`，Gemini 用 `x-goog-api-key`。端点可以用 `Upstream.Auth` 覆盖默认方案。`Upstream.Path` 只能覆盖固定的默认路径；路径随模型或流式模式变化的协议（如 GenerateContent）会拒绝它，前缀应放进 `BaseURL`。上游路径由转换后 Payload 的元信息生成，URL 中的模型和模式总与 Exchange 的输出一致。请求头的叠加顺序是：
-
-1. 协议固定头；
-2. `Request.Header`；
-3. `Upstream.Header`；
-4. 鉴权头。
-
-客户端的凭据不会被转发。上游响应头只有列在 `Config.ForwardHeaders` 中时才会传给客户端（末尾的 `*` 表示前缀匹配），`Content-Length` 等描述报文的头永远不会复制；`Do` 的调用方可以从 `Response.UpstreamHeader` 读取全部响应头。请求失败时，`Handler` 会转告上游的 `Retry-After`。
-
-`Request.Output` 把响应转换为同 Kind 的另一种协议，为空时即请求协议。路由仍然优先选择与请求协议相同的端点，因为请求是否需要转换取决于请求协议。`Request.Reasoning` 会为每个上游覆盖推理控制；开启 `Config.ReasoningSuffix` 后，`Do` 从 `model(high)` 后缀生成它，并按去掉后缀的模型名路由。
+`gateway` 包完成上述全部步骤，并决定哪些失败切换到下一个候选，见[网关](gateway.zh-CN.md#提交点与故障切换)。自行实现的执行器遵循同样的步骤。

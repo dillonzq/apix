@@ -28,6 +28,8 @@
 - [ ] `openai.responses` → `gemini.generate-content`
 - [ ] `anthropic.messages` → `gemini.generate-content`
 - [ ] `gemini.interactions` (native only)
+- [ ] Image paths: `openai.images.generations`, `openai.images.edits`, `gemini.generate-content.image`, `gemini.imagen` (name the directions below)
+- [ ] Token counting paths: `anthropic.messages.count-tokens`, `openai.responses.input-tokens`, `gemini.count-tokens` (name the directions below)
 - [ ] Same-protocol model rewrite or passthrough
 - [ ] `openai.ResponsesOptions{NormalizeTools: true}` (native Responses tool normalization)
 - [ ] Streaming only (`StreamConverter`, `sse.Decoder`)
@@ -45,7 +47,7 @@
 - [ ] Snapshot changes (`internal/llm/translate/testdata/conversion/`) are reviewed line by line and explained below
 - [ ] Streaming changes cover full input, bytewise input, missing final separator, and EOF without termination (or N/A)
 - [ ] Tool identity registration and rollback behavior are covered by a test (or N/A)
-- [ ] `README.md`/`README.zh-CN.md` and `docs/*.md`/`docs/*.zh-CN.md` are updated where behavior or limits changed
+- [ ] `README.md`/`README.zh-CN.md` and the matching documents under `docs/` (English and `.zh-CN.md`) are updated where behavior or limits changed
 - [ ] Any `//nolint` directive states a reason, and `.golangci.yml` is unchanged unless the pull request explains the change
 
 ## Snapshot and protocol notes

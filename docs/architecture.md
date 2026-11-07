@@ -1,31 +1,39 @@
-# Code structure and maintenance
+# Architecture
 
-English | [简体中文](architecture.zh-CN.md) · [Routing](routing.md) · [Extending](extending.md) · [LLM protocol conversion](protocols/llm.md)
+English | [简体中文](architecture.zh-CN.md) · [Back to README](../README.md)
 
 ## Layers
 
 ```mermaid
 flowchart TD
     GW[gateway: HTTP execution, commit point, failover] --> RT[route: candidate ordering, health, affinity]
-    GW --> REG[apix.Registry: codecs]
-    GW --> TH[reasoning: model suffixes]
+    GW --> RP[reasoning: model suffixes]
+    GW --> SSE[sse: framing and decoding]
+    GW --> REG[apix: Codec, Exchange, Registry, Error]
     RT --> REG
-    REG --> VENDOR[protocol/openai, protocol/anthropic, protocol/gemini: IDs, constructors, options]
-    VENDOR --> CODEC[internal/llm/codec: apix.Codec, protocol table, Interactions codec]
-    TH --> RS
+    REG -. registered codecs .-> VENDOR[protocol/openai, protocol/anthropic, protocol/gemini: IDs, constructors, options]
+    VENDOR --> CODEC[internal/llm/codec: LLM codecs, protocol table, Interactions codec]
+    VENDOR --> IMAGE[internal/image: image codecs and direct conversion]
+    VENDOR --> TOKENS[internal/tokens: count codecs, request reshaping]
+    TOKENS --> CODEC
+    TOKENS --> ENGINE
     CODEC --> ENGINE[internal/llm/translate: LLM conversion engine]
     ENGINE --> ADAPTERS[internal/llm/adapter: direct conversion per protocol]
     ADAPTERS --> RS[internal/llm/reasoning: levels, budgets, overrides]
-    CODEC --> IDS[internal/llm/ids: protocol IDs and format names]
-    RS --> IDS
-    VENDOR --> IMAGE[internal/image: image codecs and direct conversion]
+    RP --> RS
+    RS --> IDS[internal/llm/ids: protocol IDs and format names]
+    CODEC --> USAGE[internal/usage: usage read from upstream bytes]
+    IMAGE --> USAGE
     CODEC --> VE[internal/vendorerr: error envelopes, upstream error bodies]
     IMAGE --> VE
+    TOKENS --> VE
 ```
+
+Solid arrows are imports; the dotted arrow is the registration a caller performs. Most packages also import the root `apix` and `internal/jsonedit`, which are left out for readability.
 
 - The root package `apix` is protocol neutral. It defines `Kind`, `Protocol`, `Payload`, `ProtocolSpec`, `Codec`, `Exchange`, `StreamConverter`, `Registry`, the optional `OptionsValidator`, `StateReporter` and `UsageReporter` extensions, `Usage`, the `Error` type, and diagnostics. It imports no other package of this module; internal packages refer to its error type through `internal/errclass` aliases.
 - Public functions return `error`. Values are `*apix.Error`; read them with `apix.AsError` or `errors.As`. Internal packages keep returning `*apix.Error`, and every public boundary converts a nil pointer to a nil interface explicitly.
-- Vendor packages are organized by vendor. They re-export protocol IDs and hold constructors and vendor options, and delegate conversion to `internal/llm` (LLM) or `internal/image` (image generation and editing).
+- Vendor packages are organized by vendor. They re-export protocol IDs and hold constructors and vendor options, and delegate conversion to `internal/llm` (LLM), `internal/image` (image generation and editing), or `internal/tokens` (token counting).
 - `route` decides and never performs I/O. `gateway` is the only package that makes network calls, and it is optional.
 - Dependencies are the standard library and `github.com/MoeForge/moego` (SIMD Base64 and order-preserving JSON) only; `scripts/check-dependencies.sh` enforces this in CI.
 
@@ -102,27 +110,21 @@ Source tool identities, argument reconciliation, and termination remain upstream
 
 `Feed` and `Finish` may return events together with an error, and an error must not discard events that call already produced. A converter keeps its first error and never emits normal events or a successful completion afterwards.
 
-## Gateway commit point
+## Gateway
 
-`gateway.Do` returns at the commit point:
+The commit point and failover rules are documented for users in [gateway](gateway.md#commit-point-and-failover). The implementation keeps these invariants:
 
-- for an ordinary response, after it converts successfully;
-- for a stream, after the first converted events arrive.
-
-Before that point, these failures fail over to the next candidate:
-
-- the request did not convert, for example because the loss policy rejected it (nothing was sent);
-- the endpoint is half-open and `Router.Begin` refused a second trial (nothing was sent);
-- the upstream returned an error marked `Retryable`, including 404, or the attempt exceeded `CommitTimeout`;
-- the upstream returned a 2xx response that cannot be decoded or converted, or exceeds `MaxResponseBytes`; this is reclassified as a retryable `ClassUpstream` error.
-
-After the commit point nothing is retried. Failures surface from `Body.Read` and are reported to health tracking. Cancellation stops immediately and does not count against the endpoint. The upstream path comes from the converted payload's metadata, and created state is passed to `Router.Remember` at the commit point and again at the end of a stream. `Config.OnUsage` runs at the commit point for ordinary responses and once at the end of a stream, at EOF, at a failure, or at `Body.Close`, whichever comes first; `Close` may abort a concurrent `Read`, and a mutex orders the converter state the report reads.
+- The commit point is the first converted output: an ordinary response that converted, or a stream's first converted events. Failover happens only before it; nothing is retried after it.
+- A 2xx response that cannot be decoded or converted is reclassified as a retryable `ClassUpstream` error, so a broken upstream fails over like a 5xx.
+- The upstream path is built from the converted payload's metadata, never from the client's URL.
+- Created state is passed to `Router.Remember` at the commit point and again at the end of a stream.
+- A stream reports health and `Config.OnUsage` exactly once, at EOF, at a failure, or at `Body.Close`, whichever comes first. `Close` may abort a concurrent `Read`, so a mutex orders the converter state the report reads.
 
 ## Validation
 
-- Test new protocol behavior through public entry points; use internal tests for parsers and state components.
+- Test conversion behavior through entry points rather than adapter internals: the engine entry points in `internal/llm/translate` for LLM conversion, and the codec's `Exchange` for other Kinds. Reach into adapters only for parsers, collectors, and other state components.
 - `internal/llm/codec` tests require every exchange direction to match the engine byte for byte, so the public API inherits the 48 snapshots. Structural refactors must leave the snapshots unchanged.
 - Stream tests cover whole input, bytewise input, a missing final separator, and EOF without a terminal event.
 - Gateway tests use `httptest` upstreams to cover native preference, each failover condition, stream failures before and after the commit point, the breaker, commit timeouts, affinity, and cancellation.
 
-Validation commands are in [CONTRIBUTING.md](../CONTRIBUTING.md). See [Gemini](protocols/gemini.md) for GenerateContent and Interactions specifics, [image protocol conversion](protocols/image.md) for `KindImage`, and [token counting](protocols/tokens.md) for `KindTokens`.
+Validation commands are in [CONTRIBUTING.md](../CONTRIBUTING.md). See [routing](routing.md) and [gateway](gateway.md) for the execution layers, [Gemini](protocols/gemini.md) for GenerateContent and Interactions specifics, [image protocol conversion](protocols/image.md) for `KindImage`, and [token counting](protocols/tokens.md) for `KindTokens`.

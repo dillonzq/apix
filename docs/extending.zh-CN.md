@@ -1,8 +1,8 @@
-# 新增协议与接口类型
+# 新增协议与 Kind
 
 [English](extending.md) | 简体中文 · [返回 README](../README.zh-CN.md)
 
-apix 的核心与协议无关。新增一种协议或一种接口类型（Kind）时，只需要实现 `apix.Codec`，`route` 和 `gateway` 都不需要修改。
+apix 的核心与协议无关。新增一种协议或一种 Kind（如图像生成、语音）时，只需要实现 `apix.Codec`，`route` 和 `gateway` 都不需要修改。
 
 ## 放在哪里
 

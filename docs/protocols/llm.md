@@ -2,13 +2,9 @@
 
 English | [简体中文](llm.zh-CN.md) · [Back to README](../../README.md)
 
-This document describes the current mappings and limitations. It covers the `apix.KindLLM` protocols `openai.chat-completions`, `openai.responses`, and `anthropic.messages`; all six cross-protocol directions support requests, ordinary responses, and streams. See the README for protocol IDs and integration examples.
+This document describes the current mappings and limitations of the `apix.KindLLM` protocols `openai.chat-completions`, `openai.responses`, and `anthropic.messages`. All six cross-protocol directions among them support requests, ordinary responses, and streams. GenerateContent and native Interactions are documented separately in [Gemini protocols](gemini.md). Protocol IDs and integration examples are in the README.
 
-GenerateContent and native Interactions are documented separately in [Gemini protocols](gemini.md).
-
-## Configuration
-
-The LLM codecs support media input, local shell adaptation, cache hint retention, and reasoning history replay. Configure native Responses tool normalization with `openai.ResponsesOptions{NormalizeTools: true}`, unsigned thinking replay with `anthropic.MessagesOptions{AllowUnsignedThinking: true}`, and reasoning overrides with `apix.ExchangeOptions.Reasoning`. Use `sse.Decoder` to decode SSE frames.
+The exchange options that affect these paths, such as `openai.ResponsesOptions`, `anthropic.MessagesOptions`, and `ExchangeOptions.Reasoning`, are listed under [exchange options](../../README.md#exchange-options); the sections below say where each applies.
 
 `Inspect` also reports the upstream state a request refers to (`RequestInfo.Affinity`, such as `response:resp_1` or `file:file-1`) and whether it continues upstream-owned context (`RequestInfo.Stateful`). Native Responses exchanges report stored response IDs through `apix.StateReporter`. See [routing](../routing.md#upstream-owned-state).
 
@@ -16,7 +12,7 @@ The LLM codecs support media input, local shell adaptation, cache hint retention
 
 By default, same-protocol requests rewrite only `model`, preserving historical reasoning, compaction, roles, tools, and unknown fields. With no effective model change or explicit override, the original bytes are returned. Explicit reasoning controls and native Responses tool normalization also edit their configured fields. Model catalogs, routing, and upstream compatibility cleanup belong to callers.
 
-Same-protocol responses generally pass through. Responses tool identity restoration and stream error handling, termination checks, and SSE framing are exceptions. Native tool restoration preserves namespaces and unmodeled numeric fields.
+Same-protocol responses generally pass through unchanged, including reasoning signatures and other provider fields. Responses tool identity restoration and stream error handling, termination checks, and SSE framing are exceptions. Native tool restoration preserves namespaces and unmodeled numeric fields.
 
 ## Request mappings
 
@@ -28,6 +24,32 @@ Same-protocol responses generally pass through. Responses tool identity restorat
 | Empty content and content types | Empty text blocks/messages without effective content are generally removed. Unknown cross-protocol input types, system images, and unrepresentable tool results fail explicitly rather than being uniformly discarded |
 | Tool choice / parallel execution | Maps auto/none/required/named tools. Messages parallel control maps to disable_parallel_tool_use; unrepresentable combinations fail |
 | Sampling | Maps `temperature` and `top_p`; unmapped top-level fields such as `n`, `seed`, penalties, `metadata`, `store`, `service_tier`, and `previous_response_id` produce known-loss diagnostics |
+
+### Media input
+
+User messages support file, audio, and video input conversion. The mappings follow the [CLIProxyAPI implementation](https://github.com/router-for-me/CLIProxyAPI/tree/091ff27/internal/translator).
+
+| Input | Chat Completions ↔ Responses | Messages conversion |
+| --- | --- | --- |
+| File | `file.file_id/file_data/filename` ↔ `input_file.file_id/file_data/filename` | PDF ↔ base64 document sources, plain text ↔ text document sources; filenames map to document `title` |
+| File URL | Responses preserves `file_url`; conversion to Chat fails | Responses `file_url` ↔ Messages URL documents |
+| Audio | `input_audio` preserves `data` and `format`; flat Responses `data/format` is also accepted | Unsupported: Messages has no audio input block |
+| Video | `video_url` ↔ `input_video`, accepting string or object URLs and preserving `processing` | Unsupported: Messages has no video input block |
+
+Mixed text, images, and media retain their order. Top-level video `processing` overrides the nested value. Messages text-source documents become base64 `text/plain` files; conversion back to Messages decodes and validates UTF-8 before emitting `source.type="text"` with `media_type="text/plain"`. Only `application/pdf` uses a base64 document source. Other or unknown MIME types, including raw base64 without MIME, fail when converting to Messages; filenames are not used to infer types. Document `context` and `citations` settings report semantic loss and fail under Safe/Strict. File IDs are preserved only between OpenAI protocols; conversion to Messages fails. Callers must ensure that IDs are valid for the target upstream.
+
+This support covers user input. Media in system or assistant messages and unrepresentable tool outputs fails. The library does not read local files, fetch URLs, or upload files: callers supply inline content, accessible URLs, or valid IDs. Missing media, invalid field types, and invalid document base64 fail. A convertible input does not imply model support for its media or MIME.
+
+Requests can map supported image URLs and base64 sources; system images and unrepresentable tool results fail. In responses, Chat → Messages maps supported image blocks, while Chat → Responses non-text output and unsupported Messages blocks fail. Image-generation results, audio, video, and further multimodal output remain unsupported.
+
+### Cache hints
+
+Chat Completions / Responses → Messages preserves content-block and tool `cache_control`, including `ttl` and extension fields. System and assistant text retains block boundaries when hints are present. No cache breakpoints are added automatically; native requests retain hints, and other cross-protocol targets report hint loss.
+
+- Message and input-item hints map to the last block generated for that item; existing block hints take precedence.
+- Chat tool envelope hints take precedence over function hints.
+- Only a hint on the original last tool-output part migrates to the parent `tool_result`, taking precedence over message/item hints. Earlier child hints and hints on reasoning/additional_tools items are unrepresentable: the loss policy omits and reports them, or rejects them in strict mode.
+- Namespace deduplication keeps the first declaration and reports discarded cache hints at their original field paths.
 
 ## Structured output
 
@@ -43,11 +65,13 @@ Chat and Responses can map `json_object`. Messages requires `json_schema`; schem
 
 Messages output format does not carry OpenAI schema names, descriptions, or optional strictness. Name/description loss is reported as presentation loss; explicit `strict: false` reports a semantic change. Function tool `strict` is preserved, including explicit `false`.
 
-## Tool identities and search
+## Tools
 
 Responses `additional_tools` merges into declarations. Namespaces flatten into function names; long names use truncation plus a digest. All ordinary and flattened names are checked for collisions. Request state restores the original name, namespace, and custom identity in responses.
 
 Custom tools, including `apply_patch`, can become functions using string `input`; the default schema requires `input`. Responses output restores custom calls across items, input delta/done, and terminal snapshots. Unrepresentable constraints such as custom grammars produce diagnostics.
+
+Responses function and custom tool outputs can contain mixed text and images. Responses → Messages preserves their order inside `tool_result.content`, retaining the string representation for text-only results. Responses → Chat keeps consecutive tool replies together, then emits mixed results in an additional user message labeled with each call ID; text appears both in the tool reply and alongside its images. Empty messages and reasoning items do not interrupt this grouping.
 
 ### Local shell adaptation
 
@@ -75,7 +99,9 @@ Unrepresentable request tools such as `tool_search` and `image_generation` produ
 
 A Messages query without its search result becomes a failed item in both ordinary and streaming conversion, with a missing-result diagnostic. Failed searches do not emit a successful `response.web_search_call.completed`; an empty result array can complete normally. A failed search item does not itself mean the whole response failed: the outer completion status follows the source termination reason.
 
-## Reasoning responses
+## Reasoning
+
+### Reasoning in responses
 
 Non-streaming and streaming responses support all six cross-protocol directions:
 
@@ -94,9 +120,7 @@ Responses streams accept `response.reasoning_summary_text.delta/done` and `respo
 
 Cross-protocol conversion omits Anthropic `signature`, `signature_delta`, `redacted_thinking.data`, and Responses `encrypted_content`. These are provider-specific signatures or opaque data with no reliable cross-protocol mapping. Signatures are not fabricated, and opaque data is not interpreted as readable reasoning. Unsigned thinking is suitable for display but is not guaranteed to be replayable to Anthropic endpoints requiring valid signatures.
 
-Same-protocol responses generally pass through unchanged and preserve these fields. Responses tool identity restoration and streaming error/termination handling are exceptions.
-
-## Reasoning controls and suffixes
+### Reasoning controls and suffixes
 
 `reasoning_effort` and `reasoning.effort` map to each other. A level sent to Messages becomes adaptive thinking by default: `thinking: {"type": "adaptive"}` with the level in `output_config.effort`, merged with any structured output format. `none` disables thinking and `auto` leaves it unset. For Claude models that predate adaptive thinking, pass `anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}` to send `{"type": "enabled", "budget_tokens": N}` instead. Native Messages thinking controls pass through unchanged. Manual mode and reverse mapping use a fixed effort/budget table:
 
@@ -128,13 +152,17 @@ out, err := ex.ConvertRequest(apix.Payload{Body: payload}, suffix.Model)
 
 The exchange strips the client's own control where conversion would derive the target control from it, converts, and then renders the override with the same options as the rest of the exchange, so the suffix and the upstream's thinking mode cannot disagree. `gateway.Config{ReasoningSuffix: true}` does all of this for every request, routing by the model without the suffix. Hosts that build upstream bodies themselves can still call `reasoning.StripSupersededReasoning` before conversion and `reasoning.ApplySuffixWith(upstream, body, suffix, reasoning.Options{...})` after it, setting `MessagesManual` and `GeminiMode` to match the exchange.
 
-Recognized suffixes replace body reasoning controls. `none` / `0` disables reasoning; `auto` / `-1` uses upstream defaults. Chat and Responses receive an effort; numeric suffixes map through the thresholds above. Messages follows the exchange's thinking mode: adaptive thinking with `output_config.effort` by default, or enabled thinking with a table budget or a numeric suffix's exact budget under `anthropic.ThinkingManual`. GenerateContent follows `gemini.GenerateContentOptions.ThinkingMode`: budget mode sends `thinkingBudget`, level mode sends `thinkingLevel`, and the default sends numeric suffixes as budgets and levels as levels. Gemini has no level above `high`, so `xhigh` and `max` become `high` and are reported as a non-semantic request loss.
+Recognized suffixes replace body reasoning controls. `none` / `0` disables reasoning; `auto` / `-1` uses upstream defaults. Chat and Responses receive an effort; numeric suffixes map through the thresholds above. Messages follows the exchange's thinking mode: adaptive thinking with `output_config.effort` by default, or enabled thinking with a table budget or a numeric suffix's exact budget under `anthropic.ThinkingManual`. GenerateContent follows `gemini.GenerateContentOptions.ThinkingMode`; see [Gemini thinking options](gemini.md#thinking-options).
 
 Messages disables `thinking.display` when turning thinking off and always supersedes the client's `output_config.effort` and `budget_tokens`; active overrides retain applicable display metadata. Responses overrides only `reasoning.effort`, preserving sibling fields.
 
 Unknown suffixes can still be parsed and stripped, but leave body reasoning controls unchanged; `Suffix.Reasoning` returns nil for them. Only call `StripSupersededReasoning` for a recognized suffix. Callers decide whether literal parenthesized model IDs should be routed as-is.
 
-Historical reasoning is mapped separately from reasoning controls. Chat assistant `reasoning_content` (or readable `reasoning` / `reasoning_details` aliases) and Messages assistant `thinking` are preserved as Responses `content` parts with `type: reasoning_text`. Responses original content maps back to Chat `reasoning_content`; the reasoning, assistant text, and following parallel calls share an assistant message, with tool results and user/system messages delimiting turns. Messages thinking maps to Chat reasoning on its original assistant message. Chat → Messages and Responses → Messages omit unsigned thinking by default, including with nil or zero-value state. For an upstream known to accept unsigned thinking, explicitly pass `anthropic.MessagesOptions{AllowUnsignedThinking: true}` as the exchange option with the default or `LossPolicyAllow` policy. This option affects request conversion only; native Messages history and response display are unchanged.
+### Reasoning history replay
+
+Historical reasoning is mapped separately from reasoning controls. Chat assistant `reasoning_content` (or readable `reasoning` / `reasoning_details` aliases) and Messages assistant `thinking` are preserved as Responses `content` parts with `type: reasoning_text`. Responses original content maps back to Chat `reasoning_content`; the reasoning, assistant text, and following parallel calls share an assistant message, with tool results and user/system messages delimiting turns. Messages thinking maps to Chat reasoning on its original assistant message.
+
+Chat → Messages and Responses → Messages omit unsigned thinking by default, including with nil or zero-value state. For an upstream known to accept unsigned thinking, explicitly pass `anthropic.MessagesOptions{AllowUnsignedThinking: true}` as the exchange option with the default or `LossPolicyAllow` policy. This option affects request conversion only; native Messages history and response display are unchanged.
 
 Request replay never substitutes a Responses summary for original content. Summary-only history, differing summaries, opaque/encrypted records, unknown reasoning variants, and signature loss are reported as semantic losses; safe/strict policies reject them. Identical display summaries alongside preserved original content do not cause a loss diagnostic. Complete empty Chat reasoning aliases do not conflict with a readable alias; incomplete aliases and non-empty conflicting values still report losses. Converting raw reasoning to Messages also reports a semantic loss because an authentic Anthropic signature is unavailable; safe/strict reject it even when `AllowUnsignedThinking` is enabled. The `unsigned_thinking` diagnostic is recorded both when the block is omitted and when emission is explicitly enabled. Native requests preserve all original fields.
 
@@ -151,12 +179,13 @@ Synthesized Responses non-streaming output, `response.output_item.done`, and ter
 | Finish reasons | `stop` ↔ `end_turn`, `length` ↔ `max_tokens`, `tool_calls` ↔ `tool_use`, `content_filter` ↔ `refusal`. Unknown reasons fall back to ordinary completion; the specific `stop_sequence` value is not copied |
 | Tools and truncation together | Actual tool calls take priority over truncation in Chat Completions / Messages. Responses still maps `length/max_tokens` to `incomplete`, with tool signals represented by output items |
 | Basic usage | Maps input/output tokens. Chat Completions/Responses totals are recalculated as input + output. Missing usage becomes zero counts |
-| Cache hints | Chat Completions / Responses → Messages preserves content-block and tool `cache_control`, including `ttl` and extension fields. System and assistant text retains block boundaries when hints are present. Message/input-item hints map to the last block generated for that item; existing block hints take precedence. Chat tool envelope hints take precedence over function hints. Native requests retain hints; other cross-protocol targets report hint loss. No cache breakpoints are added automatically. Only a hint on the original last tool-output part migrates to the parent `tool_result`, taking precedence over message/item hints. Earlier child hints and hints on reasoning/additional_tools items are unrepresentable: loss policy omits and reports them, or rejects in strict mode. Namespace deduplication keeps the first declaration and reports discarded cache hints at their original field paths. |
 | Cache usage | Messages input excludes cached tokens; conversion to Chat Completions/Responses adds cache read + creation. Conversion to Messages subtracts representable cache counts and clamps input to nonnegative. Cache reads are preserved; cache creation maps between cache_creation_input_tokens / cache_write_tokens. Absent details remain absent, explicit zeros remain explicit, and input totals do not double-count caches |
 | Reasoning token usage | Chat Completions ↔ Responses preserves `reasoning_tokens`. Messages has no separate detail but still includes them in output totals |
 | Identity and time | Response id/model are preserved. Synthesized message/reasoning item IDs derive from the response ID. Non-streaming cross-protocol Chat Completions uses the current time for created; Responses streams may supply upstream created_at. Other unmodeled identity/time fields are not copied |
 
-Responses failed/cancelled statuses or protocol error objects return classified errors; other nonterminal statuses fail ordinary cross-protocol conversion. Incomplete maps to truncation. Synthesized Responses expresses completed/incomplete without retaining the complete response configuration.
+These rows describe the usage object written into the converted response. The counts an exchange reports to the host through `apix.UsageReporter` are read from the upstream's own bytes instead; see [token usage](../../README.md#token-usage).
+
+Responses failed/cancelled statuses or protocol error objects return classified errors; other nonterminal statuses fail ordinary cross-protocol conversion. Incomplete maps to truncation. Synthesized Responses expresses completed/incomplete without retaining the complete response configuration. Unknown Responses items/parts are checked using original JSON, including unmodeled `result` / `action` payloads. Unrepresentable actual content fails rather than silently producing a successful empty response.
 
 ## Stream lifecycle
 
@@ -182,29 +211,12 @@ Page/document-location citations and encrypted citation metadata have no complet
 
 ## Losses and capability boundaries
 
-`Exchange.Diagnostics()` reports known field losses. See the README for allow/safe/strict configuration; safe/strict rejection applies only to requests. Rules inspect explicit protocol fields, never business data inside tool inputs, results, or JSON Schema.
-
-Responses function and custom tool outputs can contain mixed text and images. Responses → Messages preserves their order inside `tool_result.content`, retaining the string representation for text-only results. Responses → Chat keeps consecutive tool replies together, then emits mixed results in an additional user message labeled with each call ID; text appears both in the tool reply and alongside its images. Empty messages and reasoning items do not interrupt this grouping.
-
-User messages support file, audio, and video input conversion, following the [official CLIProxyAPI implementation](https://github.com/router-for-me/CLIProxyAPI/tree/091ff27/internal/translator).
-
-| Input | Chat Completions ↔ Responses | Messages conversion |
-| --- | --- | --- |
-| File | `file.file_id/file_data/filename` ↔ `input_file.file_id/file_data/filename` | PDF ↔ base64 document sources, plain text ↔ text document sources; filenames map to document `title` |
-| File URL | Responses preserves `file_url`; conversion to Chat fails | Responses `file_url` ↔ Messages URL documents |
-| Audio | `input_audio` preserves `data` and `format`; flat Responses `data/format` is also accepted | Unsupported: Messages has no audio input block |
-| Video | `video_url` ↔ `input_video`, accepting string or object URLs and preserving `processing` | Unsupported: Messages has no video input block |
-
-Mixed text, images, and media retain their order. Top-level video `processing` overrides the nested value. Messages text-source documents become base64 `text/plain` files; conversion back to Messages decodes and validates UTF-8 before emitting `source.type="text"` with `media_type="text/plain"`. Only `application/pdf` uses a base64 document source. Other or unknown MIME types, including raw base64 without MIME, fail when converting to Messages; filenames are not used to infer types. Document `context` and `citations` settings report semantic loss and fail under Safe/Strict. File IDs are preserved only between OpenAI protocols; conversion to Messages fails. Callers must ensure that IDs are valid for the target upstream.
-
-This support covers user input. Media in system or assistant messages and unrepresentable tool outputs fails. The library does not read local files, fetch URLs, or upload files: callers supply inline content, accessible URLs, or valid IDs. Missing media, invalid field types, and invalid document base64 fail. Same-protocol requests preserve native fields apart from model rewriting and explicitly configured overrides or normalization. A convertible input does not imply model support for its media or MIME. Audio and video output remain unsupported.
-
-Requests can map supported image URLs and base64 sources; system images and unrepresentable tool results fail. In responses, Chat → Messages maps supported image blocks, while Chat → Responses non-text output and unsupported Messages blocks fail. Image-generation results, audio, and further multimodal output remain unsupported. Unknown Responses items/parts are checked using original JSON, including unmodeled `result` / `action` payloads. Unrepresentable actual content fails rather than silently producing a successful empty response.
+`Exchange.Diagnostics()` reports known field losses. The allow, safe, and strict policies are described under [exchange options](../../README.md#exchange-options); safe/strict rejection applies only to requests. Rules inspect explicit protocol fields, never business data inside tool inputs, results, or JSON Schema.
 
 Logprobs, provider extensions, historical compaction, and signatures are not guaranteed across protocols. Preserving a field on a native path does not mean every upstream model accepts it; callers validate capabilities.
 
 ## Implementation and validation
 
-The vendor codecs delegate to the engine in `internal/llm/translate`, which owns dispatch, request policy, and stream framing. Protocol adapters under `internal/llm/adapter` own direct conversion, upstream event dispatch, and target stream output. Shared protocol types, event construction, tool identities, and field rules are organized by responsibility in `internal/llm/adapter/shared`; reasoning tables and override rendering live in `internal/llm/reasoning`, and the public `reasoning` package parses model suffixes. See [code structure and maintenance](../architecture.md) for module and state contracts.
+The vendor codecs delegate to the engine in `internal/llm/translate`, which owns dispatch, request policy, and stream framing. Protocol adapters under `internal/llm/adapter` own direct conversion, upstream event dispatch, and target stream output. Shared protocol types, event construction, tool identities, and field rules are organized by responsibility in `internal/llm/adapter/shared`; reasoning tables and override rendering live in `internal/llm/reasoning`, and the public `reasoning` package parses model suffixes. See [architecture](../architecture.md) for module and state contracts.
 
-Tests cover 48 request/response/stream snapshots, interleaved tools, late identity, citation fragments, search failure, termination consistency, and local shell restoration/error paths. Fuzz tests check network chunking invariance and irreversible errors; they do not replace real-upstream compatibility validation. Commands are in the README.
+Of the 48 conversion snapshots, 27 cover these three protocols' requests, responses, and streams; the other 21 cover GenerateContent. Tests also cover interleaved tools, late identity, citation fragments, search failure, termination consistency, and local shell restoration/error paths. Fuzz tests check network chunking invariance and irreversible errors; they do not replace real-upstream compatibility validation. Commands are in [CONTRIBUTING.md](../../CONTRIBUTING.md).

@@ -1,8 +1,8 @@
-# Routing and failover
+# Routing
 
 English | [简体中文](routing.zh-CN.md) · [Back to README](../README.md)
 
-Package `route` decides which endpoints a request tries, in order, and performs no I/O. Package `gateway` executes that order and reports every attempt back to the router.
+Package `route` decides which endpoints a request tries, in order, and performs no I/O. Package `gateway` executes that order and reports every attempt back to the router; its failover rules are in [gateway](gateway.md).
 
 ## Endpoints
 
@@ -78,48 +78,22 @@ Health is per process. To share it across instances, implement `route.Health`, a
 
 ## Updates
 
-`Router.Update(endpoints)`, or `Gateway.Update(upstreams)`, replaces the endpoint set atomically:
+`Router.Update(endpoints)` replaces the endpoint set atomically:
 
 - requests already routing keep the old set;
-- gateway requests keep the matching URLs, credentials, and protocols through failover;
 - invalid updates, including options a codec rejects, leave the active configuration unchanged;
 - health is kept per endpoint ID;
 - the router copies the maps and slices it receives, so later changes by the caller do not affect it.
 
-The gateway also copies upstream headers and authentication schemes. Use `Gateway.Update` to change gateway configuration; `Gateway.Router()` is for inspection, health reports, and `Remember`.
+`Gateway.Update` applies the same rules to gateway upstreams; see [gateway](gateway.md#updates).
 
-## Gateway execution
+## Executing candidates
 
-`gateway.Do` tries candidates in order. `MaxAttempts` of 0 tries them all.
+An executor tries the candidates in order:
 
-**Commit point**: `Do` returns only after an ordinary response converts successfully, or after a stream yields its first converted events. `Config.CommitTimeout` bounds how long one attempt may take to get there; on expiry the attempt is canceled and counts as a retryable network error. A committed stream is never cut off by it.
+1. call `Router.Begin(candidate)` right before sending, and skip the candidate when it returns false (a half-open trial is already in flight);
+2. convert the request to `Endpoint.Protocol` with `Candidate.UpstreamModel` and `Endpoint.Options`, then send it;
+3. call `Router.Report(endpointID, Outcome)` for every attempt that was sent, so health tracking sees it;
+4. call `Router.Remember(key, endpointID)` for state the upstream created.
 
-Before the commit point:
-
-| Situation | Handling |
-| --- | --- |
-| Request conversion failed (e.g. the loss policy rejected it) | Next candidate; nothing was sent, so health is not affected |
-| The endpoint is half-open with a trial in flight | Next candidate; nothing was sent |
-| Network error, commit timeout, 401, 402, 403, 404, 429, 5xx, or another `Retryable` error | Reported to health tracking; next candidate |
-| 400 or another non-retryable error | Stop and return it in the client's protocol |
-| 2xx, but the response or stream does not decode or convert, or exceeds `MaxResponseBytes` | Treated as a retryable upstream error; next candidate |
-| Request canceled | Stop immediately; health is not affected. The error matches `errors.Is(err, context.Canceled)` |
-
-A 404 is retryable because model catalogs and stored state differ between upstreams; it does not count against the endpoint's health.
-
-After the commit point nothing is retried, because the client may already have output. A failure surfaces from `Response.Body.Read` as an `*apix.Error`. A stream reports one health outcome when it ends, fails, or is closed: only full completion counts as success. Caller cancellation and early close are inconclusive, release any half-open trial, and do not clear prior failures or penalize the endpoint. Cancellation errors preserve both `context.Canceled` or `context.DeadlineExceeded` and a custom cancellation cause through `errors.Is`.
-
-`Config.MaxStreamFrameBytes` limits each upstream SSE frame to 64 MiB by default, including comments and wire line separators, without limiting the stream's total length. `route.EndpointOptions.MaxStreamFrameBytes` overrides it per endpoint; a negative value explicitly disables the limit for trusted upstreams. Direct codec users set `apix.ExchangeOptions.MaxStreamFrameBytes`. An oversized frame fails over before commit and becomes a terminal read error after commit, preserving valid earlier events. `sse.ErrFrameTooLarge` is available through `errors.Is`.
-
-The default HTTP client follows at most ten requests in a redirect chain and permits only the original scheme, hostname, and effective port. Cross-origin redirects, including HTTPS downgrades, fail before another host can receive credentials. A caller supplying `Config.Client` is responsible for its redirect policy, especially for custom authentication headers.
-
-Authentication follows the protocol's default scheme: `Authorization: Bearer <key>` for OpenAI, `x-api-key: <key>` plus `anthropic-version` for Anthropic, and `x-goog-api-key` for Gemini. `Upstream.Auth` overrides the scheme. `Upstream.Path` overrides the default path for protocols whose path is fixed; it is rejected for protocols whose path depends on the model or the streaming mode, such as GenerateContent, where a prefix belongs in `BaseURL`. The upstream path is built from the converted payload's metadata, so the model and mode in the URL always match what the exchange produced. Headers are layered in this order:
-
-1. protocol headers;
-2. `Request.Header`;
-3. `Upstream.Header`;
-4. the authentication header.
-
-Client credentials are never forwarded. Upstream response headers reach clients only when listed in `Config.ForwardHeaders` (a trailing `*` matches a prefix); framing headers such as `Content-Length` are never copied. `Response.UpstreamHeader` holds all of them for `Do` callers. An upstream `Retry-After` is relayed by `Handler` when the request fails.
-
-`Request.Output` converts the response to another protocol of the same Kind; empty means the request's protocol. Routing still prefers endpoints that speak the request's protocol, because that is what decides whether the request needs conversion. `Request.Reasoning` overrides the reasoning control for every upstream; with `Config.ReasoningSuffix`, `Do` sets it from a `model(high)` suffix and routes by the model without the suffix.
+Package `gateway` does all of this, and decides which failures move to the next candidate; see [gateway](gateway.md#commit-point-and-failover). Executors of your own follow the same steps.

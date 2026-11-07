@@ -1,19 +1,10 @@
-# LLM 协议转换说明
+# LLM 协议转换
 
 [English](llm.md) | 简体中文 · [返回 README](../../README.zh-CN.md)
 
-本文件说明当前实现的映射和限制。覆盖 `apix.KindLLM` 下的 `openai.chat-completions`、`openai.responses` 和 `anthropic.messages`，三者支持请求、普通响应及流式响应的全部六个跨协议方向；协议 ID 和接入示例见 README。
+本文说明 `apix.KindLLM` 下 `openai.chat-completions`、`openai.responses` 和 `anthropic.messages` 当前实现的映射和限制。三者之间的全部六个跨协议方向都支持请求、普通响应和流式响应。GenerateContent 与原生 Interactions 另见 [Gemini 协议](gemini.zh-CN.md)。协议 ID 和接入示例见 README。
 
-GenerateContent 与原生 Interactions 另见 [Gemini 协议](gemini.zh-CN.md)。
-
-## 配置
-
-LLM 协议实现支持媒体输入、本地 shell 适配、缓存提示保留和推理历史回传：
-
-- 原生 Responses 工具规范化使用 Exchange 选项 `openai.ResponsesOptions{NormalizeTools: true}`；
-- 无签名 thinking 回传使用 `anthropic.MessagesOptions{AllowUnsignedThinking: true}`；
-- 推理覆盖使用 `apix.ExchangeOptions.Reasoning`；
-- SSE 解码使用 `sse.Decoder`。
+影响这些路径的 Exchange 选项（如 `openai.ResponsesOptions`、`anthropic.MessagesOptions`、`ExchangeOptions.Reasoning`）列在 [Exchange 选项](../../README.zh-CN.md#exchange-选项)中，下文会在适用处说明。
 
 `Inspect` 还会报告请求引用的上游状态（`RequestInfo.Affinity`，如 `response:resp_1`、`file:file-1`），以及请求是否延续上游持有的上下文（`RequestInfo.Stateful`）。原生 Responses Exchange 通过 `apix.StateReporter` 报告已存储的 response ID。详见[路由](../routing.zh-CN.md#上游持有的状态)。
 
@@ -21,7 +12,7 @@ LLM 协议实现支持媒体输入、本地 shell 适配、缓存提示保留和
 
 默认情况下，同协议请求仅改写 `model`，保留历史 reasoning、compaction、角色、工具及未知字段。没有实际模型变更或显式覆盖时返回原始字节。显式推理控制和原生 Responses 工具规范化也会修改其配置涉及的字段。库不按模型名称自动清理字段；模型目录、路由和上游兼容规则由调用方负责。
 
-同协议响应通常原样透传。Responses 工具身份恢复，以及流式错误、终止校验和 SSE 包装是例外。原生工具恢复保留 namespace 与未建模的数字字段。
+同协议响应通常原样透传，包括推理签名和其他供应商字段。Responses 工具身份恢复，以及流式错误、终止校验和 SSE 分帧是例外。原生工具恢复保留 namespace 与未建模的数字字段。
 
 ## 请求映射
 
@@ -33,6 +24,32 @@ LLM 协议实现支持媒体输入、本地 shell 适配、缓存提示保留和
 | 空内容、内容类型 | 空文本块/无有效内容的消息通常被移除；跨协议未知输入类型、system 图片、无法表示的工具结果会明确报错，不会统一静默删除 |
 | tool choice / parallel | 转换 auto/none/required/指定工具；Messages 的并行开关映射为 disable_parallel_tool_use；无法表达的组合报错 |
 | 采样参数 | 跨协议映射 `temperature`、`top_p`；未映射的顶层字段（如 `n`、`seed`、penalties、`metadata`、`store`、`service_tier`、`previous_response_id`）会报告已知损耗 |
+
+### 媒体输入
+
+用户消息支持文件、音频和视频输入转换，映射参考了 [CLIProxyAPI 的实现](https://github.com/router-for-me/CLIProxyAPI/tree/091ff27/internal/translator)。
+
+| 输入 | Chat Completions ↔ Responses | 与 Messages 的转换 |
+| --- | --- | --- |
+| 文件 | `file.file_id/file_data/filename` ↔ `input_file.file_id/file_data/filename` | PDF ↔ base64 文档源，纯文本 ↔ text 文档源；文件名映射到文档 `title` |
+| 文件 URL | Responses 保留 `file_url`；转 Chat 时报错 | Responses `file_url` ↔ Messages URL 文档 |
+| 音频 | `input_audio` 保留 `data`、`format`，也接受 Responses 顶层的 `data/format` | Messages 无音频输入块，报错 |
+| 视频 | `video_url` ↔ `input_video`，支持 URL 字符串或对象，保留 `processing` | Messages 无视频输入块，报错 |
+
+混合文本、图片和媒体按原顺序保留。视频同时提供顶层和嵌套 `processing` 时，顶层值优先。Messages 文本来源文档会编码为 `text/plain` 的 base64 文件；转换回 Messages 时解码并验证 UTF-8，生成 `source.type="text"`、`media_type="text/plain"`。只有 `application/pdf` 使用 base64 文档源；其他或未知 MIME（包括无 MIME 的原始 base64）转 Messages 时明确拒绝，不根据文件名推断类型。文档 `context` 和 `citations` 配置无法跨协议保留，会记录语义损耗，Safe/Strict 拒绝。文件 ID 只在两种 OpenAI 协议之间保留，转 Messages 时报错；调用方须确保 ID 对目标上游有效。
+
+此支持针对用户输入；system、assistant 和无法表示的工具结果中的媒体会报错。转换器不读取本地文件、不下载 URL，也不上传文件；调用方负责提供文件内容、可访问的 URL 或有效 ID。空媒体、错误字段类型和无法解码的文档 base64 会报错。输入格式能转换不代表目标模型支持该媒体或 MIME。
+
+请求可转换支持的图片 URL 和 base64 来源；system 图片及无法表示的工具结果会报错。响应中 Chat → Messages 可转换支持的图片块，Chat → Responses 的非文本输出及未支持的 Messages 内容块会报错。图像生成结果、音频、视频和更多多模态输出尚不支持。
+
+### 缓存提示
+
+Chat Completions / Responses → Messages 保留内容块和工具上的 `cache_control`（包括 `ttl` 等扩展字段）；有提示时，系统与 assistant 文本保留块边界。不自动添加缓存断点；同协议原样保留，转向其他协议报告提示丢失。
+
+- 消息/输入项级提示映射到该项最后生成的块，已有块级提示优先。
+- Chat 工具外层提示优先于 function 内层。
+- 工具结果只将原末尾子块的提示迁移到父级 `tool_result`，且优先于消息/项级提示；非末尾子块、reasoning 和 additional_tools 项的提示不可表示，按损耗策略省略并报告，或在 strict 模式下拒绝。
+- namespace 工具去重保留首次声明，被删除声明上的缓存提示按原始字段路径报告丢失。
 
 ## 结构化输出
 
@@ -48,11 +65,13 @@ Chat 与 Responses 可转换 `json_object`；Messages 需要 `json_schema`，无
 
 Messages 的输出格式不携带 OpenAI 的 schema 名称、描述及可选 strictness：名称和描述的损耗会记录为展示信息，显式 `strict: false` 的映射会记录语义变化。函数工具的 `strict` 在转换中保留，包括显式 `false`。
 
-## 工具身份与搜索
+## 工具
 
 Responses 的 `additional_tools` 合并到工具声明；namespace 展平为函数名称，长名称通过截断和摘要控制长度。所有普通与展平名称统一检查碰撞，响应通过请求状态恢复原名称、namespace 和 custom 身份。
 
 Custom 工具（包括 `apply_patch`）可转换为使用字符串 `input` 的函数工具；缺省 schema 包含必需的 `input`。Responses 输出恢复 custom 调用，涵盖 item、input delta/done 和终止快照。custom grammar 等无法映射的约束会报告损耗。
+
+Responses 的函数和 custom 工具结果支持混合文本与图片。Responses → Messages 在 `tool_result.content` 中保留图文顺序，纯文本结果仍使用字符串。Responses → Chat 先输出连续的工具回复，再通过标注各 call ID 的额外用户消息承载混合结果；文本同时保留在工具回复及对应图片旁。空消息和 reasoning item 不会打断这组工具回复。
 
 ### 本地 shell 适配
 
@@ -80,7 +99,9 @@ Custom 工具（包括 `apply_patch`）可转换为使用字符串 `input` 的�
 
 Messages 查询缺少对应搜索结果时，普通与流式转换均将搜索 item 标为 `failed` 并报告缺失结果。失败搜索不发送成功的 `response.web_search_call.completed`；空数组结果可以正常完成。搜索 item 的失败不等于整条响应失败，外层完成状态仍按原协议终止原因转换。
 
-## 推理响应
+## 推理
+
+### 响应中的推理
 
 普通响应与流式响应均覆盖以下六个方向：
 
@@ -97,11 +118,9 @@ Chat Completions 按 `reasoning_content` → `reasoning` → `reasoning_details`
 
 Responses 的流式转换接收 `response.reasoning_summary_text.delta/done` 与 `response.reasoning_text.delta/done`。`output_item` 和终止响应中的 reasoning 快照补充未通过 delta 发送的文本；相同 part 已发送的前缀不会重复输出。合成 Responses 流包含 item/summary 的开始、增量和结束事件，终止 output 的顺序、索引与 item 公告一致。
 
-跨协议仍不传递 Anthropic `signature` / `signature_delta` / `redacted_thinking.data`，以及 Responses `encrypted_content`。这些是供应商专属的签名或不透明数据，没有可靠的跨协议映射；不会伪造签名，也不会当成可读推理。转换出的无签名 thinking 适合展示，不保证可直接回放到要求有效签名的 Anthropic 请求。
+跨协议不传递 Anthropic `signature` / `signature_delta` / `redacted_thinking.data`，以及 Responses `encrypted_content`。这些是供应商专属的签名或不透明数据，没有可靠的跨协议映射；不会伪造签名，也不会当成可读推理。转换出的无签名 thinking 适合展示，不保证可直接回放到要求有效签名的 Anthropic 请求。
 
-相同协议的响应通常原样透传，保留这些字段；Responses 的工具身份恢复和流式错误/终止处理是例外。
-
-## 推理控制与后缀
+### 推理控制与后缀
 
 `reasoning_effort` 与 `reasoning.effort` 相互映射。档位转向 Messages 时默认使用 adaptive：`thinking: {"type": "adaptive"}`，档位写入 `output_config.effort`，并与结构化输出格式合并。`none` 关闭 thinking，`auto` 不设置。不支持 adaptive 的旧 Claude 模型可传入 `anthropic.MessagesOptions{ThinkingMode: anthropic.ThinkingManual}`，改为发送 `{"type": "enabled", "budget_tokens": N}`。原生 Messages 推理控制原样透传。手动模式与反向转换使用固定 effort/budget 表：
 
@@ -133,19 +152,23 @@ out, err := ex.ConvertRequest(apix.Payload{Body: payload}, suffix.Model)
 
 Exchange 会在转换据此推导目标推理控制的路径上剥离客户端自己的控制，完成转换后，再用与本次 Exchange 相同的选项渲染覆盖值，因此后缀与上游推理模式不会互相矛盾。`gateway.Config{ReasoningSuffix: true}` 会对每个请求完成上述步骤，并按去掉后缀的模型名路由。自行构造上游请求体的宿主仍可在转换前调用 `reasoning.StripSupersededReasoning`、转换后调用 `reasoning.ApplySuffixWith(upstream, body, suffix, reasoning.Options{...})`，其中 `MessagesManual`、`GeminiMode` 应与 Exchange 的设置一致。
 
-识别到的后缀取代请求体中的推理控制；`none` / `0` 关闭，`auto` / `-1` 采用上游默认。Chat 与 Responses 得到 effort，数值后缀按上表阈值转换。Messages 遵循 Exchange 的推理模式：默认 adaptive 并写入 `output_config.effort`；使用 `anthropic.ThinkingManual` 时发送 enabled thinking，档位按表取预算，数值后缀保留精确预算。GenerateContent 遵循 `gemini.GenerateContentOptions.ThinkingMode`：budget 模式发送 `thinkingBudget`，level 模式发送 `thinkingLevel`，默认时数值后缀发送预算、档位发送档位。Gemini 没有高于 `high` 的档位，`xhigh` 与 `max` 会变为 `high`，并作为非语义请求损耗报告。
+识别到的后缀取代请求体中的推理控制；`none` / `0` 关闭，`auto` / `-1` 采用上游默认。Chat 与 Responses 得到 effort，数值后缀按上表阈值转换。Messages 遵循 Exchange 的推理模式：默认 adaptive 并写入 `output_config.effort`；使用 `anthropic.ThinkingManual` 时发送 enabled thinking，档位按表取预算，数值后缀保留精确预算。GenerateContent 遵循 `gemini.GenerateContentOptions.ThinkingMode`，见 [Gemini 推理选项](gemini.zh-CN.md#推理选项)。
 
 Messages 禁用时移除 `thinking.display`，并始终覆盖客户端的 `output_config.effort` 与 `budget_tokens`；启用时保留可用的 display。Responses 只覆盖 `reasoning.effort`，保留同级字段。
 
 未知后缀仍可被解析并剥离，但不改变请求体推理参数，`Suffix.Reasoning` 对其返回 nil。`StripSupersededReasoning` 只应在后缀已识别时调用。真实包含括号的模型 ID 是否按字面名称路由，由调用方决定。
 
-历史推理与推理控制分别映射。Chat assistant 的 `reasoning_content`（或可读的 `reasoning` / `reasoning_details` 别名）与 Messages assistant 的 `thinking` 保留为 Responses `content` 中的 `reasoning_text`。Responses 原始 content 映射回 Chat `reasoning_content`，思考、assistant 正文和随后并行工具调用归入同一消息；工具结果及 user/system 消息划分轮次。Messages thinking 转为原 assistant 消息的 Chat reasoning。Chat → Messages 和 Responses → Messages 默认省略无签名 thinking，nil 或零值状态也采用这一行为。仅在上游明确支持无签名 thinking 时，配合默认或 `LossPolicyAllow` 策略，显式传入 Exchange 选项 `anthropic.MessagesOptions{AllowUnsignedThinking: true}`。该选项只影响请求转换，不改变原生 Messages 历史或响应展示。
+### 推理历史回传
 
-请求回传不会用 Responses summary 替代原始 content。只有 summary 的历史、与原文不同的 summary、加密/不透明内容、未知推理格式及签名丢失均报告为语义损失，safe/strict 策略拒绝转换。与已保留原文完全相同的展示 summary 不报告损失。完整但为空的 Chat reasoning 别名不会与可读别名冲突；不完整别名及非空冲突值仍报告损失。转入 Messages 时无法生成真实 Anthropic 签名，也会报告语义损失；即使启用 `AllowUnsignedThinking`，safe/strict 仍拒绝转换。无论默认省略还是显式允许发送，都记录 `unsigned_thinking` 诊断。同协议仍保留原字段。
+历史推理与推理控制分别映射。Chat assistant 的 `reasoning_content`（或可读的 `reasoning` / `reasoning_details` 别名）与 Messages assistant 的 `thinking` 保留为 Responses `content` 中的 `reasoning_text`。Responses 原始 content 映射回 Chat `reasoning_content`，推理、assistant 正文和随后的并行工具调用归入同一消息；工具结果及 user/system 消息划分轮次。Messages thinking 转为原 assistant 消息上的 Chat reasoning。
+
+Chat → Messages 和 Responses → Messages 默认省略无签名 thinking，nil 或零值状态也采用这一行为。仅在上游明确支持无签名 thinking 时，配合默认或 `LossPolicyAllow` 策略，显式传入 Exchange 选项 `anthropic.MessagesOptions{AllowUnsignedThinking: true}`。该选项只影响请求转换，不改变原生 Messages 历史或响应展示。
+
+请求回传不会用 Responses summary 替代原始 content。只有 summary 的历史、与原文不同的 summary、加密/不透明内容、未知推理格式及签名丢失均报告为语义损耗，safe/strict 策略拒绝转换。与已保留原文完全相同的展示 summary 不报告损耗。完整但为空的 Chat reasoning 别名不会与可读别名冲突；不完整别名及非空冲突值仍报告损耗。转入 Messages 时无法生成真实 Anthropic 签名，也会报告语义损耗；即使启用 `AllowUnsignedThinking`，safe/strict 仍拒绝转换。无论默认省略还是显式允许发送，都记录 `unsigned_thinking` 诊断。同协议请求保留全部原字段。
 
 合成的 Responses 普通响应、`response.output_item.done` 和终止 `response.output` 都保留原始 reasoning content，供下一次请求回传；summary 事件继续用于展示。再次转换时，相同的 summary/content 快照不会重复输出。这无法恢复客户端历史中已经丢失的原文，调用方也不能在转换后再次删除 reasoning。参见 [DeepSeek 思考回传要求](https://api-docs.deepseek.com/zh-cn/guides/thinking_mode/)及 [Anthropic thinking 签名](https://platform.claude.com/docs/en/docs/build-with-claude/extended-thinking)。
 
-## 响应字段与 usage
+## 响应字段与用量
 
 | 内容 | 当前行为 |
 | --- | --- |
@@ -156,12 +179,13 @@ Messages 禁用时移除 `thinking.display`，并始终覆盖客户端的 `outpu
 | 结束原因 | `stop` ↔ `end_turn`、`length` ↔ `max_tokens`、`tool_calls` ↔ `tool_use`、`content_filter` ↔ `refusal`。未知原因回退到普通结束；`stop_sequence` 的具体值不复制 |
 | 工具调用与截断并存 | 转 Chat Completions / Messages 时实际工具调用优先于截断原因；转 Responses 时仍以 `length/max_tokens` 映射 `incomplete`，工具信号放在 output items 中 |
 | 基础 usage | 输入/输出 token 映射；Chat Completions/Responses 的 total 按输入+输出重算；缺省 usage 合成零值 |
-| 缓存提示 | Chat Completions / Responses → Messages 保留内容块和工具上的 `cache_control`（包括 `ttl` 等扩展字段）；系统与 assistant 文本有提示时保留块边界。消息/输入项级提示映射到该项最后生成的块，已有块级提示优先；Chat 工具外层提示优先于 function 内层。同协议原样保留，转向其他协议报告提示丢失，不自动添加缓存断点。工具结果只将原末尾子块的提示迁移到父级 `tool_result`，已有末尾提示优先于消息/项级提示；非末尾子块、reasoning 和 additional_tools 项的提示不可表示，按丢失策略省略或在 strict 模式拒绝。namespace 工具去重保留首次声明，被删除声明上的缓存提示按原始字段路径报告丢失。 |
 | 缓存 usage | Messages 的 input 不含缓存，转 Chat Completions/Responses 时加上 cache read+creation；反向转 Messages 时扣掉可表示的缓存量并限制为非负。cache read 保留；cache creation 在三个协议间映射为 cache_creation_input_tokens / cache_write_tokens，缺省细项保持缺省，显式零值保留，不额外重复计入输入总量 |
 | 推理 token usage | Chat Completions ↔ Responses 保留 `reasoning_tokens`；转 Messages 没有独立细项，仍计入输出总量 |
 | 身份与时间 | 响应 id/model 保留；合成 message/reasoning item 的 id 由响应 id 派生。普通跨协议 Chat Completions 的 created 使用当前时间；Responses 流转 Chat Completions 可使用上游 created_at；其他未建模身份/时间字段不复制 |
 
-Responses 的 `failed`、`cancelled` 或协议内 error 返回分类错误；普通跨协议响应的其他非终止状态也会报错。`incomplete` 映射为截断。合成 Responses 仅表达 completed/incomplete，不保留全部响应配置。
+上表描述的是写入转换后响应的 usage 对象。Exchange 通过 `apix.UsageReporter` 报告给宿主的用量则直接读取上游自己的字节，见 [Token 用量](../../README.zh-CN.md#token-用量)。
+
+Responses 的 `failed`、`cancelled` 或协议内 error 返回分类错误；普通跨协议响应的其他非终止状态也会报错。`incomplete` 映射为截断。合成 Responses 仅表达 completed/incomplete，不保留全部响应配置。未知 Responses item/part 用原始 JSON 检查实际载荷，包含 `result` / `action` 等未建模内容且无法表示时会报错，不静默生成成功的空结果。
 
 ## 流式生命周期
 
@@ -187,29 +211,12 @@ Chat 的引用偏移只计入正文，不包含独立 refusal；Messages 将 ref
 
 ## 损耗与能力边界
 
-`Exchange.Diagnostics()` 报告已知字段损耗。allow/safe/strict 的配置与行为见 README；safe/strict 只拒绝请求阶段的损耗。规则检查明确的协议字段，不递归分析工具参数、结果或 JSON Schema 中的业务数据。
-
-Responses 的函数和自定义工具结果支持混合文本与图片。Responses → Messages 在 `tool_result.content` 中保留图文顺序，纯文本结果仍使用字符串。Responses → Chat 先输出连续的工具回复，再通过标注各 call ID 的额外用户消息承载混合结果；文本同时保留在工具回复及对应图片旁。空消息和 reasoning item 不会打断这组工具回复。
-
-用户消息新增文件、音频和视频输入转换，参考 [CLIProxyAPI 官方实现](https://github.com/router-for-me/CLIProxyAPI/tree/091ff27/internal/translator)。
-
-| 输入 | Chat Completions ↔ Responses | 与 Messages 的转换 |
-| --- | --- | --- |
-| 文件 | `file.file_id/file_data/filename` ↔ `input_file.file_id/file_data/filename` | PDF ↔ base64 文档源，纯文本 ↔ text 文档源；文件名映射到文档 `title` |
-| 文件 URL | Responses 保留 `file_url`；转 Chat 时报错 | Responses `file_url` ↔ Messages URL 文档 |
-| 音频 | `input_audio` 保留 `data`、`format`，也接受 Responses 顶层的 `data/format` | Messages 无音频输入块，报错 |
-| 视频 | `video_url` ↔ `input_video`，支持 URL 字符串或对象，保留 `processing` | Messages 无视频输入块，报错 |
-
-混合文本、图片和媒体按原顺序保留。视频同时提供顶层和嵌套 `processing` 时，顶层值优先。Messages 文本来源文档会编码为 `text/plain` 的 base64 文件；转换回 Messages 时解码并验证 UTF-8，生成 `source.type="text"`、`media_type="text/plain"`。只有 `application/pdf` 使用 base64 文档源；其他或未知 MIME（包括无 MIME 的原始 base64）转 Messages 时明确拒绝，不根据文件名推断类型。文档 `context` 和 `citations` 配置无法跨协议保留，会记录语义损耗，Safe/Strict 拒绝。文件 ID 只在两种 OpenAI 协议之间保留，转 Messages 时报错；调用方须确保 ID 对目标上游有效。
-
-此支持针对用户输入；system、assistant 和无法表示的工具结果媒体会报错。转换器不读取本地文件、不下载 URL，也不上传文件；调用方负责提供文件内容、可访问的 URL 或有效 ID。空媒体、错误字段类型和无法解码的文档 base64 会报错。同协议请求保留原生字段，仅改写模型以及显式配置的覆盖或规范化字段。输入格式转换不代表目标模型支持该媒体或 MIME；音频、视频输出仍未支持。
-
-请求可转换支持的图片 URL 和 base64 来源；system 图片及无法表示的工具结果会报错。响应中 Chat → Messages 可转换支持的图片块，Chat → Responses 的非文本输出及未支持的 Messages 内容块会报错。图像生成结果、音频和更多多模态输出尚不支持。未知 Responses item/part 用原始 JSON 检查实际载荷，包含 `result` / `action` 等未建模内容且无法表示时会报错，不静默生成成功的空结果。
+`Exchange.Diagnostics()` 报告已知字段损耗。allow/safe/strict 三种策略见 [Exchange 选项](../../README.zh-CN.md#exchange-选项)；safe/strict 只拒绝请求阶段的损耗。规则检查明确的协议字段，不递归分析工具参数、结果或 JSON Schema 中的业务数据。
 
 logprobs、供应商扩展、历史 compaction 和签名不保证跨协议保留。原生保留字段也不意味着任何上游模型都接受这些内容；调用方负责能力验证。
 
 ## 实现与验证
 
-供应商 Codec 委托给 `internal/llm/translate` 中的引擎，由引擎负责分派、请求策略和流式分帧。`internal/llm/adapter` 下的各协议 adapter 负责直接转换、上游事件分派和目标流式输出。共享协议类型、事件构造、工具身份和字段规则按职责分文件，位于 `internal/llm/adapter/shared`；推理档位表与覆盖渲染位于 `internal/llm/reasoning`，公开的 `reasoning` 包负责解析模型后缀。模块与状态约定见[代码结构说明](../architecture.zh-CN.md)。
+供应商 Codec 委托给 `internal/llm/translate` 中的引擎，由引擎负责分派、请求策略和流式分帧。`internal/llm/adapter` 下的各协议 adapter 负责直接转换、上游事件分派和目标流式输出。共享协议类型、事件构造、工具身份和字段规则按职责分文件，位于 `internal/llm/adapter/shared`；推理档位表与覆盖渲染位于 `internal/llm/reasoning`，公开的 `reasoning` 包负责解析模型后缀。模块与状态约定见[架构](../architecture.zh-CN.md)。
 
-测试覆盖 48 份请求/响应/流式快照、交错工具、晚到身份、引用分片、搜索失败、终止一致性及本地 shell 恢复/错误路径。fuzz 验证网络分块一致性和失败状态不可恢复；这些测试不替代真实上游的兼容验证。命令见 README。
+48 份转换快照中，27 份覆盖这三种协议的请求、响应和流，另外 21 份覆盖 GenerateContent。测试还覆盖交错工具、晚到身份、引用分片、搜索失败、终止一致性及本地 shell 恢复/错误路径。fuzz 验证网络分块一致性和失败状态不可恢复；这些测试不替代真实上游的兼容验证。命令见 [CONTRIBUTING.md](../../CONTRIBUTING.md)。

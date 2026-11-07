@@ -1,31 +1,39 @@
-# 代码结构与维护约定
+# 架构
 
-[English](architecture.md) | 简体中文 · [路由](routing.zh-CN.md) · [扩展](extending.zh-CN.md) · [LLM 协议转换](protocols/llm.zh-CN.md)
+[English](architecture.md) | 简体中文 · [返回 README](../README.zh-CN.md)
 
 ## 分层
 
 ```mermaid
 flowchart TD
     GW[gateway：HTTP 执行、提交点、故障切换] --> RT[route：候选排序、健康统计、亲和性]
-    GW --> REG[apix.Registry：Codec 注册表]
-    GW --> TH[reasoning：模型后缀]
+    GW --> RP[reasoning：模型后缀]
+    GW --> SSE[sse：分帧与解码]
+    GW --> REG[apix：Codec、Exchange、Registry、Error]
     RT --> REG
-    REG --> VENDOR[protocol/openai、protocol/anthropic、protocol/gemini：协议 ID、构造函数、选项]
-    VENDOR --> CODEC[internal/llm/codec：apix.Codec、协议表、Interactions Codec]
-    TH --> RS
+    REG -. 注册的 Codec .-> VENDOR[protocol/openai、protocol/anthropic、protocol/gemini：协议 ID、构造函数、选项]
+    VENDOR --> CODEC[internal/llm/codec：LLM Codec、协议表、Interactions Codec]
+    VENDOR --> IMAGE[internal/image：图像 Codec 与直接转换]
+    VENDOR --> TOKENS[internal/tokens：计数 Codec、请求整形]
+    TOKENS --> CODEC
+    TOKENS --> ENGINE
     CODEC --> ENGINE[internal/llm/translate：LLM 转换引擎]
     ENGINE --> ADAPTERS[internal/llm/adapter：按协议的直接转换]
     ADAPTERS --> RS[internal/llm/reasoning：档位、预算、推理覆盖]
-    CODEC --> IDS[internal/llm/ids：协议 ID 与内部格式名]
-    RS --> IDS
-    VENDOR --> IMAGE[internal/image：图像 Codec 与直接转换]
+    RP --> RS
+    RS --> IDS[internal/llm/ids：协议 ID 与内部格式名]
+    CODEC --> USAGE[internal/usage：从上游字节读取用量]
+    IMAGE --> USAGE
     CODEC --> VE[internal/vendorerr：错误信封、上游错误体]
     IMAGE --> VE
+    TOKENS --> VE
 ```
+
+实线箭头表示 import，虚线箭头表示调用方完成的注册。大多数包还 import 根包 `apix` 和 `internal/jsonedit`，为便于阅读未画出。
 
 - 根包 `apix` 与协议无关，定义 `Kind`、`Protocol`、`Payload`、`ProtocolSpec`、`Codec`、`Exchange`、`StreamConverter`、`Registry`、可选扩展 `OptionsValidator`、`StateReporter` 与 `UsageReporter`、`Usage`、`Error` 类型和诊断类型。根包不 import 本模块的任何其他包；内部包通过 `internal/errclass` 的别名使用它的错误类型。
 - 公开函数返回 `error`，其值为 `*apix.Error`，用 `apix.AsError` 或 `errors.As` 读取。内部包仍返回 `*apix.Error`，每个公开边界都显式地把 nil 指针转换为 nil 接口。
-- 供应商包按厂商组织，重新导出协议 ID，放构造函数和厂商专属选项，实际转换委托给 `internal/llm`（LLM）或 `internal/image`（图像生成与编辑）。
+- 协议包按供应商组织，重新导出协议 ID，放构造函数和供应商专属选项，实际转换委托给 `internal/llm`（LLM）、`internal/image`（图像生成与编辑）或 `internal/tokens`（Token 计数）。
 - `route` 只做决策，不做 I/O；`gateway` 是唯一执行网络请求的包，可以不用。
 - 依赖仅限标准库和 `github.com/MoeForge/moego`（SIMD Base64 与保序 JSON），CI 用 `scripts/check-dependencies.sh` 检查。
 
@@ -51,7 +59,7 @@ GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/gemini` �
 | --- | --- |
 | `apix.go`、`codec.go`、`registry.go` | 核心类型、接口、可选扩展与注册表 |
 | `errors.go`、`diagnostic.go` | `Error`、错误分类与构造函数、脱敏、`HTTPStatus`、损耗策略与诊断 |
-| `protocol/<vendor>` | 重新导出的协议 ID、Codec 构造函数、厂商选项（`ResponsesOptions`、`MessagesOptions`、`GenerateContentOptions`）；图像协议在 `images.go` |
+| `protocol/<vendor>` | 重新导出的协议 ID、Codec 构造函数、供应商选项（`ResponsesOptions`、`MessagesOptions`、`GenerateContentOptions`）；图像协议在 `images.go` |
 | `internal/llm/ids` | 公开协议 ID、内部格式名及两者的映射 |
 | `internal/llm/codec` | `codec.go`：协议表、生成协议 Codec 及其 Exchange；`inspect.go`、`scan.go`：路由字段、能力、亲和键；`state.go`：新建状态的捕获与流式错误边界；`interactions.go`：Interactions Codec |
 | `internal/llm/translate` | LLM 请求、响应、流式入口，推理覆盖，错误状态锁定，SSE 包装，Responses 序号；48 份转换快照 |
@@ -64,7 +72,7 @@ GenerateContent 是分派规则的唯一例外：`internal/llm/adapter/gemini` �
 | `internal/tokens` | `KindTokens` 的 Codec：Messages count_tokens、Responses input_tokens、Gemini countTokens；请求经 `internal/llm/translate` 转换后按计数端点整形 |
 | `internal/usage` | 按方言从上游响应体和 SSE 字节读取 usage 对象，并归一化为 `apix.Usage` |
 | `internal/jsonedit` | 基于 moego/ojson 保序读取和编辑 JSON 字段；无法走快路径时由调用方回退到 `encoding/json` |
-| `internal/vendorerr` | 各厂商错误信封与上游错误体分类，所有 Kind 共用 |
+| `internal/vendorerr` | 各供应商错误信封与上游错误体分类，所有 Kind 共用 |
 | `internal/errclass` | 供内部包使用的 `apix.Error` 及构造函数短别名 |
 | `route` | `Router`、`NativeFirst`、带半开试探的 `Breaker`、`Affinity`、热更新 |
 | `gateway` | `Gateway.Do`、`Handler`、鉴权注入、提交点与超时、Retry-After、响应头透传、状态记录 |
@@ -102,27 +110,21 @@ SSE 事件在添加 `sequence_number` 或恢复工具名后，若 JSON 跨行，
 
 `Feed` / `Finish` 可以同时返回事件和错误，错误不能丢弃本次调用已经生成的事件。转换器锁定首个错误，之后不再产生正常事件，也不会报告成功结束。
 
-## 网关提交点
+## 网关
 
-`gateway.Do` 只在提交点返回：
+提交点与故障切换规则面向使用者的说明见[网关](gateway.zh-CN.md#提交点与故障切换)。实现上保持以下不变式：
 
-- 普通响应：转换成功之后；
-- 流式响应：拿到第一批转换后的事件之后。
-
-提交点之前，以下失败会切换到下一个候选：
-
-- 请求转换失败，例如被损耗策略拒绝（请求尚未发出）；
-- 端点处于半开状态，`Router.Begin` 拒绝了第二个试探请求（请求尚未发出）；
-- `Retryable` 的上游错误（包括 404），或单次尝试超过 `CommitTimeout`；
-- 上游返回了 2xx，但内容无法解码或转换，或超过 `MaxResponseBytes`。这类失败会被重新归类为可重试的 `ClassUpstream`。
-
-提交点之后的失败不重试，通过 `Body.Read` 返回，并回报给健康统计。请求被取消时立即停止，也不计入端点失败。上游路径由转换后 Payload 的元信息生成；新建的状态在提交点和流结束时交给 `Router.Remember`。`Config.OnUsage` 对普通响应在提交点调用；对流式响应在 EOF、失败或 `Body.Close` 中最先发生的时刻调用一次。`Close` 可以中止并发的 `Read`，报告读取的转换器状态由互斥锁保证顺序。
+- 提交点是第一份转换后的输出：转换成功的普通响应，或流的第一批转换后事件。故障切换只发生在提交点之前，之后不再重试。
+- 无法解码或转换的 2xx 响应会重新归类为可重试的 `ClassUpstream` 错误，使损坏的上游像 5xx 一样触发切换。
+- 上游路径由转换后 Payload 的元信息生成，从不取自客户端 URL。
+- 新建的状态在提交点和流结束时各交给 `Router.Remember` 一次。
+- 流在 EOF、失败或 `Body.Close` 中最先发生的时刻，恰好上报一次健康结果并调用一次 `Config.OnUsage`。`Close` 可能中止并发的 `Read`，因此由互斥锁保证报告所读取的转换器状态的顺序。
 
 ## 验证约定
 
-- 新的协议行为优先通过公开入口测试，内部测试只覆盖解析器和状态组件。
+- 转换行为通过入口测试，而不是适配器内部：LLM 转换用 `internal/llm/translate` 的引擎入口，其他 Kind 用 Codec 的 `Exchange`。只有解析器、收集器等状态组件才直接测试适配器。
 - `internal/llm/codec` 的测试保证每个 Exchange 方向的输出与引擎逐字节一致，因此公开 API 继承 48 份快照的约束。结构重构不应更新快照。
 - 流式测试覆盖以下输入：完整输入、逐字节输入、缺少最终分隔符、EOF 前没有终止事件。
 - gateway 用 `httptest` 模拟上游，覆盖同协议优先、各类切换条件、提交点前后的流式失败、熔断、提交超时、亲和性和取消。
 
-验证命令见 [CONTRIBUTING.md](../CONTRIBUTING.md)。GenerateContent 与 Interactions 的细节见 [Gemini](protocols/gemini.zh-CN.md)，`KindImage` 见[图像协议转换](protocols/image.zh-CN.md)，`KindTokens` 见 [Token 计数](protocols/tokens.zh-CN.md)。
+验证命令见 [CONTRIBUTING.md](../CONTRIBUTING.md)。执行层见[路由](routing.zh-CN.md)与[网关](gateway.zh-CN.md)，GenerateContent 与 Interactions 的细节见 [Gemini](protocols/gemini.zh-CN.md)，`KindImage` 见[图像协议转换](protocols/image.zh-CN.md)，`KindTokens` 见 [Token 计数](protocols/tokens.zh-CN.md)。
