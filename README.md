@@ -45,10 +45,15 @@ The library is layered. The core converts and decides routes without any network
 | `image` | `openai.images.edits` | `openai.ImagesEdits` | `POST /v1/images/edits` (multipart or JSON) |
 | `image` | `gemini.generate-content.image` | `gemini.GenerateContentImage` | `POST /v1beta/models/{model}:generateContent` to an image model |
 | `image` | `gemini.imagen` | `gemini.Imagen` | `POST /v1beta/models/{model}:predict` |
+| `tokens` | `anthropic.messages.count-tokens` | `anthropic.MessagesCountTokens` | `POST /v1/messages/count_tokens` |
+| `tokens` | `openai.responses.input-tokens` | `openai.ResponsesInputTokens` | `POST /v1/responses/input_tokens` |
+| `tokens` | `gemini.count-tokens` | `gemini.CountTokens` | `POST /v1beta/models/{model}:countTokens` |
 
 Chat Completions, Responses, Messages, and Gemini GenerateContent convert directly in all twelve directions. Interactions is native-only. Same-protocol requests preserve provider fields; GenerateContent carries model/stream in request metadata. See [Gemini protocols](docs/protocols/gemini.md) for URL handling, thinking options and signed replay. Conversion covers text, image/file/audio/video input, function and custom tools, local shell adaptation, reasoning and its replay history, usage, structured output, cache hints, and representable citations. See [LLM protocol conversion](docs/protocols/llm.md) for mappings and limits.
 
-Image generation and editing convert between OpenAI Images, GenerateContent with image models (such as `gemini-2.5-flash-image`), and Imagen: prompts, input images, counts, sizes and aspect ratios, output formats, and usage. Generations and Imagen take no input image, so edits route only to edits and GenerateContent endpoints. Cross-protocol streams are emulated as one complete event stream. See [image protocol conversion](docs/protocols/image.md). Speech and other kinds plug in through the same interfaces; see [adding protocols and kinds](docs/extending.md).
+Image generation and editing convert between OpenAI Images, GenerateContent with image models (such as `gemini-2.5-flash-image`), and Imagen: prompts, input images, counts, sizes and aspect ratios, output formats, and usage. Generations and Imagen take no input image, so edits route only to edits and GenerateContent endpoints. Cross-protocol streams are emulated as one complete event stream. See [image protocol conversion](docs/protocols/image.md).
+
+Token counting converts directly between Anthropic `count_tokens`, OpenAI Responses `input_tokens` and Gemini `countTokens` in all six directions. The request content converts as it would for generation, and the count comes from the upstream's own tokenizer. Chat Completions has no count endpoint. See [token counting](docs/protocols/tokens.md). Speech and other kinds plug in through the same interfaces; see [adding protocols and kinds](docs/extending.md).
 
 ## Installation
 
@@ -203,6 +208,7 @@ Check `decoder.Err()` after consuming events and after `Finish`; `sse.ErrFrameTo
 - [Gemini and native Interactions](docs/protocols/gemini.md)
 - [LLM protocol conversion](docs/protocols/llm.md): field mappings, tools, reasoning, streams, and limits
 - [Image protocol conversion](docs/protocols/image.md): generation and editing paths, sizes, losses, and emulated streams
+- [Token counting](docs/protocols/tokens.md): count endpoints, request shaping, and gateway setup
 - [CONTRIBUTING.md](CONTRIBUTING.md): checks, design rules, and releases
 
 ## Development

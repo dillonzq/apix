@@ -2,6 +2,7 @@
 // GenerateContent belongs to apix.KindLLM and converts directly to and from
 // the other generation protocols in this module. Interactions is native only.
 // GenerateContentImage and Imagen belong to apix.KindImage; see images.go.
+// CountTokens belongs to apix.KindTokens; see tokens.go.
 package gemini
 
 import (
@@ -76,5 +77,5 @@ func InteractionsCodec() apix.Codec { return codec.NewInteractions() }
 
 // Codecs returns every Gemini codec, for apix.NewRegistry.
 func Codecs() []apix.Codec {
-	return []apix.Codec{GenerateContentCodec(), InteractionsCodec(), GenerateContentImageCodec(), ImagenCodec()}
+	return []apix.Codec{GenerateContentCodec(), InteractionsCodec(), GenerateContentImageCodec(), ImagenCodec(), CountTokensCodec()}
 }

@@ -9,7 +9,7 @@
 | `GenerateContentCodec()` | `gemini.generate-content` | 原生，以及与 Chat Completions、Responses、Messages 的请求、普通响应和 SSE 双向直接转换 |
 | `InteractionsCodec()` | `gemini.interactions` | 仅原生；与 GenerateContent 和其他协议之间的转换会明确拒绝 |
 
-`gemini.Codecs()` 返回这两个 LLM Codec，以及 `KindImage` 的 `GenerateContentImageCodec()` 和 `ImagenCodec()`；见[图像协议](image.zh-CN.md)。跨协议时还需注册对应供应商的 Codec。GenerateContent 支持独立的 `ExchangeOptions.Output`；路由继续优先选择客户端的原生协议。
+`gemini.Codecs()` 返回这两个 LLM Codec，以及 `KindImage` 的 `GenerateContentImageCodec()` 和 `ImagenCodec()`（见[图像协议](image.zh-CN.md)），以及 `KindTokens` 的 `CountTokensCodec()`（见 [Token 计数](tokens.zh-CN.md)）。跨协议时还需注册对应供应商的 Codec。GenerateContent 支持独立的 `ExchangeOptions.Output`；路由继续优先选择客户端的原生协议。
 
 ## 请求元信息与 HTTP
 
@@ -26,7 +26,7 @@ info, err := reg.Inspect(gemini.GenerateContent, payload)
 
 非空 Model 和非 nil Stream 优先于请求体中的路由值。元信息只用于请求，不会序列化到请求体中。`Registry.Inspect` 在 Codec 读取请求体之后把它叠加到路由信息上；自定义 Codec 的 Exchange 在转换时也应读取元信息。
 
-Gemini 的 `ProtocolSpec.ParsePath` 解析 `/v1beta/models/{model}:generateContent` 或 `:streamGenerateContent`，也接受 `/v1/models/` 前缀。将 `gateway.Handler(gemini.GenerateContent)` 注册到 `/v1beta/models/` 即可自动提取元信息；`countTokens` 等其他操作会明确拒绝。
+Gemini 的 `ProtocolSpec.ParsePath` 解析 `/v1beta/models/{model}:generateContent` 或 `:streamGenerateContent`，也接受 `/v1/models/` 前缀。将 `gateway.Handler(gemini.GenerateContent)` 注册到 `/v1beta/models/` 即可自动提取元信息。其他操作会明确拒绝，`countTokens` 由 `gemini.CountTokens` 处理，同一前缀下的分发方式见 [Token 计数](tokens.zh-CN.md)。
 
 上游路径由 `ProtocolSpec.Path` 按模型和模式生成，流式使用 `:streamGenerateContent?alt=sse`，认证头为 `x-goog-api-key`。转换后的 Gemini Payload 在 Metadata 中返回有效模型和模式，网关据此生成上游路径；`Upstream.Path` 不能替换这个随模型变化的路径，前缀应放进 `BaseURL`。未显式修改推理选项时，原生请求体逐字节保留。Gemini 客户端转向其他协议时，会将流式标记写入目标 JSON。
 
